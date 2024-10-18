@@ -1,0 +1,11 @@
+defaults:
+  - base_train
+  - hydra/logging
+  - model: main
+  - wandb: train
+
+###############
+#    CONF     #
+###############
+cache_path: data/cache
+allow_multiple_instances: true

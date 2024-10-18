@@ -1,0 +1,13 @@
+_target_: src.pipeline.ModelPipeline
+_convert_: partial
+
+env_sys:
+  _target_: src.pipeline.TransformationPipeline
+
+train_sys:
+  _target_: src.pipeline.TrainingPipeline
+
+pred_sys:
+  _target_: src.pipeline.TransformationPipeline
+  title: "Postprocessing pipeline"
+

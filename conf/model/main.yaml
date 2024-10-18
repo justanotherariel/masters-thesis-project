@@ -1,0 +1,20 @@
+defaults:
+  - pipeline/default@_here_
+  - _self_
+
+env_sys:
+  steps:
+    - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
+      environment: MiniGrid-Empty-5x5-v0
+    - _target_: src.modules.environment.gymnasium.GymnasiumSampler
+      num_samples: 1_000_000
+      num_samples_per_env: 20
+      perc_train: 0.8
+
+train_sys:
+  steps:
+    - _target_: src.modules.training.example_training_block.ExampleTrainingBlock
+
+pred_sys:
+  steps:
+    - _target_: src.modules.transformation.example_transformation_block.ExampleTransformationBlock
