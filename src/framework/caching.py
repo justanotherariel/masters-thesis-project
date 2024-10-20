@@ -28,6 +28,7 @@ except ImportError:
 
 logger = Logger()
 
+
 class CacheArgs(TypedDict):
     """The cache arguments.
 
@@ -123,7 +124,10 @@ class Cacher:
             path_exists = os.path.exists(storage_path + name + ".parquet")
         elif storage_type == ".csv":
             # Check if the file exists or if there are any parts inside the folder
-            path_exists = os.path.exists(storage_path + name + ".csv") or glob.glob(storage_path + name + "/*.part") != []
+            path_exists = (
+                os.path.exists(storage_path + name + ".csv")
+                or glob.glob(storage_path + name + "/*.part") != []
+            )
         elif storage_type == ".npy_stack":
             path_exists = os.path.exists(storage_path + name)
         elif storage_type == ".pkl":
@@ -152,7 +156,11 @@ class Cacher:
             if key not in cache_args:
                 raise ValueError(f"cache_args must contain {', '.join(required_keys)}")
 
-        if "storage_type" not in cache_args or "storage_path" not in cache_args or "output_data_type" not in cache_args:
+        if (
+            "storage_type" not in cache_args
+            or "storage_path" not in cache_args
+            or "output_data_type" not in cache_args
+        ):
             raise ValueError(
                 "cache_args must contain storage_type, storage_path and output_data_type",
             )
@@ -171,14 +179,18 @@ class Cacher:
         }
 
         if storage_type in load_functions:
-            return load_functions[storage_type](name, storage_path, output_data_type, read_args)
+            return load_functions[storage_type](
+                name, storage_path, output_data_type, read_args
+            )
 
         logger.critical(f"Invalid storage type: {storage_type}")
         raise ValueError(
             "storage_type must be .npy, .parquet, .csv, or .npy_stack, other types not supported yet",
         )
 
-    def _load_npy(self, name: str, storage_path: Path, output_data_type: str, read_args: Any) -> Any:  # noqa: ANN401
+    def _load_npy(
+        self, name: str, storage_path: Path, output_data_type: str, read_args: Any
+    ) -> Any:  # noqa: ANN401
         # Check if output_data_type is supported and load cache to output_data_type
         logger.info(f"Loading .npy file from {storage_path / name}")
         if output_data_type == "numpy_array":
@@ -193,7 +205,9 @@ class Cacher:
             "output_data_type must be numpy_array or dask_array, other types not supported yet",
         )
 
-    def _load_parquet(self, name: str, storage_path: Path, output_data_type: str, read_args: Any) -> Any:  # noqa: ANN401
+    def _load_parquet(
+        self, name: str, storage_path: Path, output_data_type: str, read_args: Any
+    ) -> Any:  # noqa: ANN401
         # Check if output_data_type is supported and load cache to output_data_type
         logger.info(f"Loading .parquet file from {storage_path}/{name}")
         if output_data_type == "pandas_dataframe":
@@ -220,7 +234,9 @@ class Cacher:
             "output_data_type must be pandas_dataframe, dask_dataframe, numpy_array, dask_array, or polars_dataframe, other types not supported yet",
         )
 
-    def _load_csv(self, name: str, storage_path: Path, output_data_type: str, read_args: Any) -> Any:  # noqa: ANN401
+    def _load_csv(
+        self, name: str, storage_path: Path, output_data_type: str, read_args: Any
+    ) -> Any:  # noqa: ANN401
         # Check if output_data_type is supported and load cache to output_data_type
         logger.info(f"Loading .csv file from {storage_path / name}")
         if output_data_type == "pandas_dataframe":
@@ -237,7 +253,9 @@ class Cacher:
             "output_data_type must be pandas_dataframe, dask_dataframe, or polars_dataframe, other types not supported yet",
         )
 
-    def _load_npy_stack(self, name: str, storage_path: Path, output_data_type: str, read_args: Any) -> Any:  # noqa: ANN401
+    def _load_npy_stack(
+        self, name: str, storage_path: Path, output_data_type: str, read_args: Any
+    ) -> Any:  # noqa: ANN401
         # Check if output_data_type is supported and load cache to output_data_type
         logger.info(f"Loading .npy_stack file from {storage_path / name}")
         if output_data_type == "dask_array":
@@ -250,7 +268,9 @@ class Cacher:
             "output_data_type must be dask_array, other types not supported yet",
         )
 
-    def _load_pkl(self, name: str, storage_path: Path, _output_data_type: str, read_args: Any) -> Any:  # noqa: ANN401
+    def _load_pkl(
+        self, name: str, storage_path: Path, _output_data_type: str, read_args: Any
+    ) -> Any:  # noqa: ANN401
         # Load the pickle file
         logger.info(
             f"Loading pickle file from {storage_path}/{name}.pkl",
@@ -258,7 +278,9 @@ class Cacher:
         with open(storage_path / f"{name}.pkl", "rb") as file:
             return pickle.load(file, **read_args)  # noqa: S301
 
-    def _store_cache(self, name: str, data: Any, cache_args: CacheArgs | None = None) -> None:  # noqa: ANN401
+    def _store_cache(
+        self, name: str, data: Any, cache_args: CacheArgs | None = None
+    ) -> None:  # noqa: ANN401
         """Store one set of data.
 
         :param name: The name of the cache.
@@ -287,12 +309,23 @@ class Cacher:
         }
 
         if storage_type in store_functions:
-            return store_functions[storage_type](name, storage_path, data, output_data_type, store_args)
+            return store_functions[storage_type](
+                name, storage_path, data, output_data_type, store_args
+            )
 
         logger.critical(f"Invalid storage type: {storage_type}")
-        raise ValueError(f"storage_type is {storage_type} must be .npy, .parquet, .csv, .npy_stack, or .pkl, other types not supported yet")
+        raise ValueError(
+            f"storage_type is {storage_type} must be .npy, .parquet, .csv, .npy_stack, or .pkl, other types not supported yet"
+        )
 
-    def _store_npy(self, name: str, storage_path: Path, data: Any, output_data_type: str, store_args: Any) -> None:  # noqa: ANN401
+    def _store_npy(
+        self,
+        name: str,
+        storage_path: Path,
+        data: Any,
+        output_data_type: str,
+        store_args: Any,
+    ) -> None:  # noqa: ANN401
         file_path = storage_path / f"{name}.npy"
         logger.info(f"Storing .npy file to {file_path}")
         if output_data_type == "numpy_array":
@@ -302,7 +335,14 @@ class Cacher:
         else:
             raise ValueError("output_data_type must be numpy_array or dask_array")
 
-    def _store_parquet(self, name: str, storage_path: Path, data: Any, output_data_type: str, store_args: Any) -> None:  # noqa: ANN401
+    def _store_parquet(
+        self,
+        name: str,
+        storage_path: Path,
+        data: Any,
+        output_data_type: str,
+        store_args: Any,
+    ) -> None:  # noqa: ANN401
         # Check if output_data_type is supported and store cache to output_data_type
         logger.info(f"Storing .parquet file to {storage_path / name}")
         if output_data_type in {"pandas_dataframe", "dask_dataframe"}:
@@ -328,7 +368,14 @@ class Cacher:
                 "output_data_type must be pandas_dataframe, dask_dataframe, numpy_array, dask_array, or polars_dataframe, other types not supported yet",
             )
 
-    def _store_csv(self, name: str, storage_path: Path, data: Any, output_data_type: str, store_args: Any) -> None:  # noqa: ANN401
+    def _store_csv(
+        self,
+        name: str,
+        storage_path: Path,
+        data: Any,
+        output_data_type: str,
+        store_args: Any,
+    ) -> None:  # noqa: ANN401
         if output_data_type == "pandas_dataframe":
             data.to_csv(storage_path / f"{name}.csv", index=False, **store_args)
             logger.info(f"Storing .csv file to {storage_path}/{name}.csv")
@@ -339,9 +386,18 @@ class Cacher:
             data.write_csv(storage_path / f"{name}.csv", **store_args)
             logger.info(f"Storing .csv file to {storage_path}/{name}.csv")
         else:
-            raise ValueError("output_data_type must be pandas_dataframe, dask_dataframe, or polars_dataframe")
+            raise ValueError(
+                "output_data_type must be pandas_dataframe, dask_dataframe, or polars_dataframe"
+            )
 
-    def _store_npy_stack(self, name: str, storage_path: Path, data: Any, output_data_type: str, store_args: Any) -> None:  # noqa: ANN401
+    def _store_npy_stack(
+        self,
+        name: str,
+        storage_path: Path,
+        data: Any,
+        output_data_type: str,
+        store_args: Any,
+    ) -> None:  # noqa: ANN401
         # Handling npy_stack case differently as it might need a different path structure
         storage_path /= name  # Treat name as a directory here
         logger.info(f"Storing .npy_stack file to {storage_path}")
@@ -350,7 +406,14 @@ class Cacher:
         else:
             raise ValueError("output_data_type must be dask_array")
 
-    def _store_pkl(self, name: str, storage_path: Path, data: Any, _output_data_type: str, store_args: Any) -> None:  # noqa: ANN401
+    def _store_pkl(
+        self,
+        name: str,
+        storage_path: Path,
+        data: Any,
+        _output_data_type: str,
+        store_args: Any,
+    ) -> None:  # noqa: ANN401
         file_path = storage_path / f"{name}.pkl"
         logger.info(f"Storing pickle file to {file_path}")
         with open(file_path, "wb") as f:

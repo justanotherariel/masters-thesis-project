@@ -18,7 +18,7 @@ from annotated_types import Ge, Gt, Interval
 from torch import Tensor, nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader, Dataset, TensorDataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from src.framework.trainers._custom_data_parallel import _CustomDataParallel
@@ -137,23 +137,37 @@ class TorchTrainer(TransformationBlock):
     epochs: Annotated[int, Gt(0)] = 10
     patience: Annotated[int, Gt(0)] = -1  # Early stopping
     batch_size: Annotated[int, Gt(0)] = 32
-    collate_fn: Callable[[list[Tensor]], tuple[Tensor, Tensor]] = field(default=custom_collate, init=True, repr=False, compare=False)
+    collate_fn: Callable[[list[Tensor]], tuple[Tensor, Tensor]] = field(
+        default=custom_collate, init=True, repr=False, compare=False
+    )
 
     # Checkpointing
-    checkpointing_enabled: bool = field(default=True, init=True, repr=False, compare=False)
-    checkpointing_keep_every: Annotated[int, Gt(0)] = field(default=0, init=True, repr=False, compare=False)
-    checkpointing_resume_if_exists: bool = field(default=True, init=True, repr=False, compare=False)
+    checkpointing_enabled: bool = field(
+        default=True, init=True, repr=False, compare=False
+    )
+    checkpointing_keep_every: Annotated[int, Gt(0)] = field(
+        default=0, init=True, repr=False, compare=False
+    )
+    checkpointing_resume_if_exists: bool = field(
+        default=True, init=True, repr=False, compare=False
+    )
 
     # Precision
     use_mixed_precision: bool = field(default=False)
 
     # Misc
     model_name: str | None = None  # No spaces allowed
-    trained_models_directory: PathLike[str] = field(default=Path("tm/"), repr=False, compare=False)
-    to_predict: Literal["validation", "all", "none"] = field(default="validation", repr=False, compare=False)
+    trained_models_directory: PathLike[str] = field(
+        default=Path("tm/"), repr=False, compare=False
+    )
+    to_predict: Literal["validation", "all", "none"] = field(
+        default="validation", repr=False, compare=False
+    )
 
     # Parameters relevant for Hashing
-    n_folds: Annotated[int, Ge(0)] = field(default=-1, init=True, repr=False, compare=False)
+    n_folds: Annotated[int, Ge(0)] = field(
+        default=-1, init=True, repr=False, compare=False
+    )
     _fold: int = field(default=-1, init=False, repr=False, compare=False)
     validation_size: Annotated[float, Interval(ge=0, le=1)] = 0.2
 
@@ -169,7 +183,9 @@ class TorchTrainer(TransformationBlock):
         """Post init method for the TorchTrainer class."""
         # Make sure to_predict is either "validation" or "all" or "none"
         if self.to_predict not in ["validation", "all", "none"]:
-            raise ValueError("to_predict should be either 'validation', 'all' or 'none'")
+            raise ValueError(
+                "to_predict should be either 'validation', 'all' or 'none'"
+            )
 
         if self.n_folds == -1:
             raise ValueError(
@@ -264,7 +280,9 @@ class TorchTrainer(TransformationBlock):
             loader.dataset,
             batch_size=loader.batch_size,
             shuffle=False,
-            collate_fn=(self.collate_fn if hasattr(loader.dataset, "__getitems__") else None),
+            collate_fn=(
+                self.collate_fn if hasattr(loader.dataset, "__getitems__") else None
+            ),
             **self.dataloader_args,
         )
         if compile_method is None:
@@ -277,18 +295,31 @@ class TorchTrainer(TransformationBlock):
 
         elif compile_method == "ONNX":
             if self.device != torch.device("cpu"):
-                raise ValueError("ONNX compilation only works on CPU. To disable CUDA use the environment variable CUDA_VISIBLE_DEVICES=-1")
+                raise ValueError(
+                    "ONNX compilation only works on CPU. To disable CUDA use the environment variable CUDA_VISIBLE_DEVICES=-1"
+                )
             input_tensor = next(iter(loader))[0].to(self.device).float()
             input_names = ["actual_input"]
             output_names = ["output"]
             logger.info("Compiling model to ONNX")
-            torch.onnx.export(self.model, input_tensor, f"{self.get_hash()}.onnx", verbose=False, input_names=input_names, output_names=output_names)
+            torch.onnx.export(
+                self.model,
+                input_tensor,
+                f"{self.get_hash()}.onnx",
+                verbose=False,
+                input_names=input_names,
+                output_names=output_names,
+            )
             onnx_model = _get_onnxrt().InferenceSession(f"{self.get_hash()}.onnx")
             logger.info("Done compiling model to ONNX")
-            with torch.no_grad(), tqdm(loader, desc="Predicting", unit="batch", disable=False) as tepoch:
+            with torch.no_grad(), tqdm(
+                loader, desc="Predicting", unit="batch", disable=False
+            ) as tepoch:
                 for data in tepoch:
                     X_batch = batch_to_device(data[0], self.x_tensor_type, self.device)
-                    y_pred = onnx_model.run(output_names, {input_names[0]: X_batch.numpy()})[0]
+                    y_pred = onnx_model.run(
+                        output_names, {input_names[0]: X_batch.numpy()}
+                    )[0]
                     predictions.extend(y_pred)
 
             # Remove the onnx file
@@ -296,13 +327,19 @@ class TorchTrainer(TransformationBlock):
 
         elif compile_method == "Openvino":
             if self.device != torch.device("cpu"):
-                raise ValueError("Openvino compilation only works on CPU. To disable CUDA use the environment variable CUDA_VISIBLE_DEVICES=-1")
+                raise ValueError(
+                    "Openvino compilation only works on CPU. To disable CUDA use the environment variable CUDA_VISIBLE_DEVICES=-1"
+                )
             input_tensor = next(iter(loader))[0].to(self.device).float()
             logger.info("Compiling model to Openvino")
             ov = _get_openvino()
-            openvino_model = ov.compile_model(ov.convert_model(self.model, example_input=input_tensor))
+            openvino_model = ov.compile_model(
+                ov.convert_model(self.model, example_input=input_tensor)
+            )
             logger.info("Done compiling model to Openvino")
-            with torch.no_grad(), tqdm(loader, desc="Predicting", unit="batch", disable=False) as tepoch:
+            with torch.no_grad(), tqdm(
+                loader, desc="Predicting", unit="batch", disable=False
+            ) as tepoch:
                 for data in tepoch:
                     X_batch = batch_to_device(data[0], self.x_tensor_type, self.device)
                     y_pred = openvino_model(X_batch)[0]
@@ -322,7 +359,7 @@ class TorchTrainer(TransformationBlock):
         if self._fold != -1:
             result += f"_f{self._fold}"
         return result
-    
+
     def create_dataloader(
         self,
         data: XData,
@@ -336,7 +373,7 @@ class TorchTrainer(TransformationBlock):
         """
         # Create datasets
         dataset = TorchDataset(data, "train_indices")
-        
+
         # Create dataloaders
         loader = DataLoader(
             dataset,
@@ -351,7 +388,9 @@ class TorchTrainer(TransformationBlock):
         """Save the model to external storage."""
         if wandb.run:
             model_artifact = wandb.Artifact(self.model_name, type="model")
-            model_artifact.add_file(f"{self.trained_models_directory}/{self.get_hash()}.pt")
+            model_artifact.add_file(
+                f"{self.trained_models_directory}/{self.get_hash()}.pt"
+            )
             wandb.log_artifact(model_artifact)
 
     def _model_train(
@@ -360,7 +399,7 @@ class TorchTrainer(TransformationBlock):
     ):
         # Log the model being trained
         logger.info(f"Training model: {self.model.__class__.__name__}")
-        
+
         # Create dataloaders
         train_loader = self.create_dataloader(data, "train_indices")
         validation_loader = self.create_dataloader(data, "validation_indices")
@@ -368,15 +407,24 @@ class TorchTrainer(TransformationBlock):
         # Resume from checkpoint if enabled and checkpoint exists
         start_epoch = 0
         if self.checkpointing_resume_if_exists:
-            saved_checkpoints = list(Path(self.trained_models_directory).glob(f"{self.get_hash()}_checkpoint_*.pt"))
+            saved_checkpoints = list(
+                Path(self.trained_models_directory).glob(
+                    f"{self.get_hash()}_checkpoint_*.pt"
+                )
+            )
             if len(saved_checkpoints) > 0:
                 logger.info("Resuming training from checkpoint")
-                epochs = [int(checkpoint.stem.split("_")[-1]) for checkpoint in saved_checkpoints]
+                epochs = [
+                    int(checkpoint.stem.split("_")[-1])
+                    for checkpoint in saved_checkpoints
+                ]
                 self._load_model(saved_checkpoints[np.argmax(epochs)])
                 start_epoch = max(epochs) + 1
 
         # Train the model
-        logger.info(f"Training model for {self.epochs} epochs{', starting at epoch ' + str(start_epoch) if start_epoch > 0 else ''}")
+        logger.info(
+            f"Training model for {self.epochs} epochs{', starting at epoch ' + str(start_epoch) if start_epoch > 0 else ''}"
+        )
         self._lowest_val_loss = np.inf
         self._model_training_loop(
             train_loader,
@@ -387,14 +435,14 @@ class TorchTrainer(TransformationBlock):
         logger.info(
             f"Done training the model: {self.model.__class__.__name__}",
         )
-        
+
         # Revert to the best model
         if self.best_model_state_dict:
             logger.info(
                 f"Reverting to model with best validation loss {self._lowest_val_loss}",
             )
             self.model.load_state_dict(self.best_model_state_dict)
-            
+
         # Save the model
         if self.save_model_to_disk:
             self._save_model()
@@ -416,8 +464,13 @@ class TorchTrainer(TransformationBlock):
         if fold > -1:
             fold_no = f"_{fold}"
 
-        logger.external_define_metric(self.wrap_log(f"Training/Train Loss{fold_no}"), self.wrap_log("epoch"))
-        logger.external_define_metric(self.wrap_log(f"Validation/Validation Loss{fold_no}"), self.wrap_log("epoch"))
+        logger.external_define_metric(
+            self.wrap_log(f"Training/Train Loss{fold_no}"), self.wrap_log("epoch")
+        )
+        logger.external_define_metric(
+            self.wrap_log(f"Validation/Validation Loss{fold_no}"),
+            self.wrap_log("epoch"),
+        )
 
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
@@ -447,10 +500,17 @@ class TorchTrainer(TransformationBlock):
             # Checkpointing
             if self.checkpointing_enabled:
                 # Save checkpoint
-                self._save_model(self.get_model_checkpoint_path(epoch), save_to_external=False, quiet=True)
+                self._save_model(
+                    self.get_model_checkpoint_path(epoch),
+                    save_to_external=False,
+                    quiet=True,
+                )
 
                 # Remove old checkpoints
-                if (self.checkpointing_keep_every == 0 or epoch % self.checkpointing_keep_every != 0) and self.get_model_checkpoint_path(epoch - 1).exists():
+                if (
+                    self.checkpointing_keep_every == 0
+                    or epoch % self.checkpointing_keep_every != 0
+                ) and self.get_model_checkpoint_path(epoch - 1).exists():
                     self.get_model_checkpoint_path(epoch - 1).unlink()
 
             # Compute validation loss
@@ -465,7 +525,9 @@ class TorchTrainer(TransformationBlock):
                 # Log validation loss and plot train/val loss against each other
                 logger.log_to_external(
                     message={
-                        self.wrap_log(f"Validation/Validation Loss{fold_no}"): val_losses[-1],
+                        self.wrap_log(
+                            f"Validation/Validation Loss{fold_no}"
+                        ): val_losses[-1],
                         self.wrap_log("epoch"): epoch,
                     },
                 )
@@ -488,11 +550,18 @@ class TorchTrainer(TransformationBlock):
 
                 # Early stopping
                 if self._early_stopping():
-                    logger.log_to_external(message={self.wrap_log(f"Epochs{fold_no}"): (epoch + 1) - self.patience})
+                    logger.log_to_external(
+                        message={
+                            self.wrap_log(f"Epochs{fold_no}"): (epoch + 1)
+                            - self.patience
+                        }
+                    )
                     break
 
             # Log the trained epochs to wandb if we finished training
-            logger.log_to_external(message={self.wrap_log(f"Epochs{fold_no}"): epoch + 1})
+            logger.log_to_external(
+                message={self.wrap_log(f"Epochs{fold_no}"): epoch + 1}
+            )
 
     def train_one_epoch(
         self,
@@ -519,7 +588,9 @@ class TorchTrainer(TransformationBlock):
             y_batch = batch_to_device(y_batch, self.y_tensor_type, self.device)
 
             # Forward pass
-            with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
+            with torch.autocast(
+                self.device.type
+            ) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model(X_batch).squeeze(1)
                 loss = self.criterion(y_pred, y_batch)
 
@@ -574,7 +645,13 @@ class TorchTrainer(TransformationBlock):
                 pbar.set_postfix(loss=sum(losses) / len(losses))
         return sum(losses) / len(losses)
 
-    def _save_model(self, model_path: Path | None = None, *, save_to_external: bool = True, quiet: bool = False) -> None:
+    def _save_model(
+        self,
+        model_path: Path | None = None,
+        *,
+        save_to_external: bool = True,
+        quiet: bool = False,
+    ) -> None:
         """Save the model in the model_directory folder."""
         model_path = model_path if model_path is not None else self.get_model_path()
 
@@ -676,7 +753,10 @@ class TorchTrainer(TransformationBlock):
         :param epoch: The epoch number.
         :return: The checkpoint path.
         """
-        return Path(self.trained_models_directory) / f"{self.get_hash()}_checkpoint_{epoch}.pt"
+        return (
+            Path(self.trained_models_directory)
+            / f"{self.get_hash()}_checkpoint_{epoch}.pt"
+        )
 
     def wrap_log(self, text: str) -> str:
         """Add logging prefix and postfix to the message."""
@@ -717,7 +797,9 @@ class TrainValidationDataset(Dataset[T_co]):
         if len(train_dataset) != len(train_indices):  # type: ignore[arg-type]
             raise ValueError("Train_dataset should be the same length as train_indices")
         if len(validation_dataset) != len(validation_indices):  # type: ignore[arg-type]
-            raise ValueError("Validation_dataset should be the same length as validation_indices")
+            raise ValueError(
+                "Validation_dataset should be the same length as validation_indices"
+            )
         self.train_dataset = train_dataset
         self.validation_dataset = validation_dataset
         self.train_indices = train_indices

@@ -11,6 +11,7 @@ from src.typing.pipeline_objects import XData
 
 logger = Logger()
 
+
 @dataclass
 class ModelPipeline(TransformType):
     """ModelPipeline is the class used to create the pipeline for the model.
@@ -19,7 +20,7 @@ class ModelPipeline(TransformType):
     :param train_sys: The system to train the model.
     :param pred_sys: The system to predict the output.
     """
-    
+
     env_sys: TransformingSystem | None = None
     train_sys: Transformer | TransformingSystem | None = None
     pred_sys: TransformingSystem | None = None
@@ -53,7 +54,9 @@ class ModelPipeline(TransformType):
         if self.env_sys is not None:
             data = self.env_sys.transform(data, **transform_args.get("env_sys", {}))
         if self.train_sys is not None:
-            data, y = self.train_sys.transform(data, **transform_args.get("train_sys", {}))
+            data, y = self.train_sys.transform(
+                data, **transform_args.get("train_sys", {})
+            )
         if self.pred_sys is not None:
             data = self.pred_sys.transform(data, **transform_args.get("pred_sys", {}))
 
@@ -84,7 +87,6 @@ class ModelPipeline(TransformType):
             if pred_hash != "":
                 self._hash = hash(self._hash + pred_hash)
 
-
     def get_env_cache_exists(self, cache_args: CacheArgs) -> bool:
         """Get status of env.
 
@@ -94,6 +96,7 @@ class ModelPipeline(TransformType):
         if self.env_sys is None:
             return False
         return self.env_sys.cache_exists(self.env_sys.get_hash(), cache_args)
+
 
 @dataclass
 class TransformationPipeline(TransformingSystem, Cacher):
@@ -126,7 +129,9 @@ class TransformationPipeline(TransformingSystem, Cacher):
 
     title: str = "Transformation Pipeline"  # The title of the pipeline since transformation pipeline can be used for multiple purposes. (Feature, Label, etc.)
 
-    def transform(self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any) -> Any:  # noqa: ANN401
+    def transform(
+        self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any
+    ) -> Any:  # noqa: ANN401
         """Transform the input data.
 
         :param data: The input data.

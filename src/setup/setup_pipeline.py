@@ -1,4 +1,5 @@
 """File containing functions related to setting up the pipeline."""
+
 from enum import Enum
 from typing import Any
 
@@ -8,6 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 logger = Logger()
+
 
 def setup_pipeline(cfg: DictConfig) -> ModelPipeline:
     """Instantiate the pipeline.
@@ -26,6 +28,7 @@ def setup_pipeline(cfg: DictConfig) -> ModelPipeline:
     logger.debug(f"Pipeline: \n{model_pipeline}")
 
     return model_pipeline
+
 
 def update_model_cfg_test_size(
     cfg: dict[str | bytes | int | Enum | float | bool, Any] | list[Any] | str | None,

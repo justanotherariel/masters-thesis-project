@@ -1,6 +1,5 @@
 """A logger that logs to the terminal and to W&B."""
-import json
-import pathlib
+
 from typing import Any, Optional
 import wandb
 import logging
@@ -9,11 +8,12 @@ import sys
 from types import TracebackType
 from pathlib import Path
 
-_LOGGER: Optional['Logger'] = None
+_LOGGER: Optional["Logger"] = None
+
 
 class Logger:
     """A logger that logs to the terminal and to W&B."""
-    
+
     def __new__(cls, log_path: Optional[Path] = None):
         global _LOGGER
         if _LOGGER is None:
@@ -22,23 +22,32 @@ class Logger:
         return _LOGGER
 
     def _init(self, log_path: Optional[Path]) -> None:
-        """Initialize the logger."""        
+        """Initialize the logger."""
         # Setup Logger Class
         self.logger = logging.getLogger("main")
         self.logger.setLevel(logging.DEBUG)
 
         # Handle KeyboardInterrupts
-        def handler(exc_type: type[BaseException], exc_value: BaseException, exc_traceback: TracebackType | None) -> None:
+        def handler(
+            exc_type: type[BaseException],
+            exc_value: BaseException,
+            exc_traceback: TracebackType | None,
+        ) -> None:
             if issubclass(exc_type, KeyboardInterrupt):
                 sys.__excepthook__(exc_type, exc_value, exc_traceback)
                 return
-            self.logger.error("A wild %s appeared!", exc_type.__name__, exc_info=(exc_type, exc_value, exc_traceback))
+            self.logger.error(
+                "A wild %s appeared!",
+                exc_type.__name__,
+                exc_info=(exc_type, exc_value, exc_traceback),
+            )
+
         sys.excepthook = handler
 
     def __getattr__(self, name: str) -> Any:
         """Pass the attribute request to the logger."""
         return getattr(self.logger, name)
-    
+
     def log_section_separator(self, message: str) -> None:
         """Print a section separator.
 
@@ -59,7 +68,7 @@ class Logger:
         )
 
         self.info("\n%s\n%s\n%s\n", separator, centered_title, separator)
-    
+
     def log_to_external(self, message: dict[str, Any], **kwargs: Any) -> None:
         """Log a message to an external service.
 
@@ -67,7 +76,10 @@ class Logger:
         :param kwargs: Any additional arguments
         """
         if wandb.run:
-            if message.get("type") == "wandb_plot" and message["plot_type"] == "line_series":
+            if (
+                message.get("type") == "wandb_plot"
+                and message["plot_type"] == "line_series"
+            ):
                 plot_data = message["data"]
                 # Construct the plot here using the provided data
                 plot = wandb.plot.line_series(

@@ -1,4 +1,5 @@
 """Lock that makes sure only one instance of the script is running at a time."""
+
 import os
 import sys
 import time
@@ -14,6 +15,7 @@ else:
 
 logger = Logger()
 
+
 class Lock:
     """OS-wide lock based on a file created in the cwd."""
 
@@ -23,7 +25,9 @@ class Lock:
         """Initialize the lock."""
         self.acquired = False
         if "CUDA_VISIBLE_DEVICES" in os.environ:
-            self.lock_file = f".lock_{os.environ['CUDA_VISIBLE_DEVICES'].replace(',', '_')}"
+            self.lock_file = (
+                f".lock_{os.environ['CUDA_VISIBLE_DEVICES'].replace(',', '_')}"
+            )
 
     def __enter__(self) -> Self:
         """Create the lock file."""
@@ -42,7 +46,12 @@ class Lock:
 
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> Literal[False]:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Remove the lock file. Always returns false, as it does not handle exceptions.
 
         :param exc_type: Exception type

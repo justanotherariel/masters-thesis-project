@@ -1,9 +1,11 @@
 """Set seed for reproducibility."""
+
 import torch
 
 from src.framework.logging import Logger
 
 logger = Logger()
+
 
 def set_torch_seed(seed: int = 42) -> None:
     """Set torch seed for reproducibility.

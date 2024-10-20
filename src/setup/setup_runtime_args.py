@@ -1,4 +1,5 @@
 """File containing functions related to setting up runtime arguments for pipelines."""
+
 from typing import Any
 
 from src.framework.pipeline import ModelPipeline
@@ -48,5 +49,5 @@ def setup_transform_args(
         "train_sys": train_sys,
         "pred_sys": pred_sys,
     }
-        
+
     return train_args

@@ -1,4 +1,5 @@
 """File containing functions related to setting up Weights and Biases."""
+
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -43,7 +44,9 @@ def setup_wandb(
         reinit=True,
     )
 
-    if isinstance(run, wandb.sdk.lib.RunDisabled) or run is None:  # Can't be True after wandb.init, but this casts wandb.run to be non-None, which is necessary for MyPy
+    if (
+        isinstance(run, wandb.sdk.lib.RunDisabled) or run is None
+    ):  # Can't be True after wandb.init, but this casts wandb.run to be non-None, which is necessary for MyPy
         raise RuntimeError("Failed to initialize Weights & Biases")
 
     if cfg.wandb.log_config:
@@ -78,7 +81,14 @@ def setup_wandb(
 
         run.log_code(
             root=".",
-            exclude_fn=cast(Callable[[str, str], bool], lambda abs_path, root: re.match(cfg.wandb.log_code.exclude, Path(abs_path).relative_to(root).as_posix()) is not None),
+            exclude_fn=cast(
+                Callable[[str, str], bool],
+                lambda abs_path, root: re.match(
+                    cfg.wandb.log_code.exclude,
+                    Path(abs_path).relative_to(root).as_posix(),
+                )
+                is not None,
+            ),
         )
 
     logger.info("Done initializing Weights & Biases")

@@ -1,4 +1,5 @@
 """Schema for the train configuration."""
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,8 +23,8 @@ class TrainConfig:
     """
 
     wandb: WandBConfig
-    
+
     model: Any
-        
+
     cache_path: str
     allow_multiple_instances: bool = False

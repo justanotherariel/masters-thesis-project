@@ -1,4 +1,3 @@
-import copy
 from abc import abstractmethod
 from typing import Any
 
@@ -9,6 +8,7 @@ from src.framework.caching import Cacher, CacheArgs
 from .core import _Block, _SequentialSystem, _Base
 
 logger = Logger()
+
 
 class TransformType(_Base):
     """Abstract transform type describing a class that implements the transform function"""
@@ -59,6 +59,7 @@ class Transformer(TransformType, _Block):
         transformed_data = my_transformer.transform(data)
     """
 
+
 class TransformationBlock(Transformer, Cacher):
     """The transformation block is a flexible block that allows for transformation of any data.
 
@@ -91,7 +92,9 @@ class TransformationBlock(Transformer, Cacher):
         data = custom_transformation_block.transform(data, cache=cache_args)
     """
 
-    def transform(self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any) -> Any:  # noqa: ANN401
+    def transform(
+        self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any
+    ) -> Any:  # noqa: ANN401
         """Transform the input data using a custom method.
 
         :param data: The input data.
@@ -123,6 +126,7 @@ class TransformationBlock(Transformer, Cacher):
         raise NotImplementedError(
             f"Custom transform method not implemented for {self.__class__}",
         )
+
 
 class TransformingSystem(TransformType, _SequentialSystem):
     """A system that transforms the input data.

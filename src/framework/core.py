@@ -1,5 +1,5 @@
 """This module contains the core classes for all classes within the framework."""
-from abc import abstractmethod
+
 from dataclasses import field, dataclass
 from pathlib import Path
 from typing import Any
@@ -122,6 +122,7 @@ class _Block(_Base):
         def save_to_html(self, file_path: Path) -> None:
             # Save html format to file_path
     """
+
 
 @dataclass
 class _SequentialSystem(_Base):
