@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
 from typing import Annotated, Any, Literal, Tuple, TypeVar
+import wandb
 
 import numpy as np
 import numpy.typing as npt
@@ -20,10 +21,12 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from tqdm import tqdm
 
-from ._custom_data_parallel import _CustomDataParallel
-from ..training_block import TrainingBlock
-from .utils import _get_onnxrt, _get_openvino, batch_to_device
-from ..logging import Logger
+from src.framework.trainers._custom_data_parallel import _CustomDataParallel
+from src.framework.transforming import TransformationBlock
+from src.framework.trainers.utils import _get_onnxrt, _get_openvino, batch_to_device
+from src.framework.logging import Logger
+from src.typing.pipeline_objects import XData
+from src.modules.training.main_dataset import TorchDataset
 
 logger = Logger()
 
@@ -42,7 +45,7 @@ def custom_collate(batch: list[Tensor]) -> tuple[Tensor, Tensor]:
 
 
 @dataclass
-class TorchTrainer(TrainingBlock):
+class TorchTrainer(TransformationBlock):
     """Abstract class for torch trainers, override necessary functions for custom implementation.
 
     Parameters Modules
@@ -82,36 +85,18 @@ class TorchTrainer(TrainingBlock):
     Methods
     -------
     .. code-block:: python
-        def train(self, x: Any, y: Any, cache_args: dict[str, Any] = {}, **train_args: Any) -> tuple[Any, Any]:
-            # Applies caching and calls custom_train, overridding removes caching
-
-        def predict(self, x: Any, cache_args: dict[str, Any] = {}, **pred_args: Any) -> Any:
-            # Applies caching and calls custom_predict, overridding removes caching
-
-        def custom_train(self, x: Any, y: Any, **train_args: Any) -> tuple[Any, Any]:
-            # Implements torch training. If you are going to override this method and not use any other functionality, inherit from TrainingBlock.
-
-        def custom_predict(self, x: Any, **pred_args: Any) -> Any:
-            # Implements torch prediction. If you are going to override this method and not use any other functionality, inherit from TrainingBlock.
+        def custom_transform(self, x: Any, **transform_args: Any) -> tuple[Any, Any]:
+            # Implements torch training.
 
         def predict_on_loader(loader: DataLoader[tuple[Tensor, ...]]) -> npt.NDArray[np.float32]:
             # Predict using a dataloader.
 
-        def create_datasets(
-            x: npt.NDArray[np.float32], y: npt.NDArray[np.float32], train_indices: list[int], validation_indices: list[int], cache_size: int = -1
-        ) -> tuple[Dataset[tuple[Tensor, ...]], Dataset[tuple[Tensor, ...]]]:
-            # Create the datasets for training and validation.
-
-        def create_prediction_dataset(x: npt.NDArray[np.float32]) -> Dataset[tuple[Tensor, ...]]:
-            # Create the prediction dataset.
-
-        def create_dataloaders(
-            train_dataset: Dataset[tuple[Tensor, ...]], validation_dataset: Dataset[tuple[Tensor, ...]]
+        def create_dataloader(
+            self,
+            data: XData,
+            indices: str,
         ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
             # Create the dataloaders for training and validation.
-
-        def update_model_directory(model_directory: str) -> None:
-            # Update the model directory for caching (default: tm).
 
     Usage:
     .. code-block:: python
@@ -194,6 +179,10 @@ class TorchTrainer(TrainingBlock):
         if self.model_name is None:
             raise ValueError("self.model_name is None, please specify a model_name")
 
+        # Check validity of model_name
+        if " " in self.model_name:
+            raise ValueError("Spaces in model_name not allowed")
+
         self.save_model_to_disk = True
         self.best_model_state_dict: dict[Any, Any] = {}
 
@@ -220,7 +209,7 @@ class TorchTrainer(TrainingBlock):
 
         # Early stopping
         self.last_val_loss = np.inf
-        self.lowest_val_loss = np.inf
+        self._lowest_val_loss = np.inf
 
         # Mixed precision
         if self.use_mixed_precision:
@@ -228,13 +217,9 @@ class TorchTrainer(TrainingBlock):
             self.scaler = torch.GradScaler(device=self.device.type)
             torch.set_float32_matmul_precision("high")
 
-        # Check validity of model_name
-        if " " in self.model_name:
-            raise ValueError("Spaces in model_name not allowed")
-
         super().__post_init__()
 
-    def custom_train(self, x: npt.NDArray[np.float32], y: npt.NDArray[np.float32], **train_args: Any) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    def custom_transform(self, data: XData, **train_args: Any) -> XData:
         """Train the model.
 
         :param x: The input to the system.
@@ -246,192 +231,20 @@ class TorchTrainer(TrainingBlock):
             - fold: Fold number if running cv.
         :return: The input and output of the system.
         """
-        train_indices = train_args.get("train_indices")
-        if train_indices is None:
-            raise ValueError("train_indices not provided")
-        validation_indices = train_args.get("validation_indices")
-        if validation_indices is None:
-            raise ValueError("validation_indices not provided")
-        save_model = train_args.get("save_model", True)
         self._fold = train_args.get("fold", -1)
 
-        self.save_model_to_disk = save_model
-
-        # Create datasets
-        train_dataset, validation_dataset = self.create_datasets(
-            x,
-            y,
-            train_indices,
-            validation_indices,
-        )
-
-        # Create dataloaders
-        train_loader, validation_loader = self.create_dataloaders(train_dataset, validation_dataset)
-
-        # Check if a trained model exists
+        # Train or load model from disk
         if self._model_exists():
             logger.info(
                 f"Model exists in {self.get_model_path()}. Loading model...",
             )
             self._load_model()
+        else:
+            self._model_train(data)
 
-            # Return the predictions
-            return self.predict_after_train(
-                x,
-                y,
-                train_dataset,
-                validation_dataset,
-                train_indices,
-                validation_indices,
-            )
-
-        # Log the model being trained
-        logger.info(f"Training model: {self.model.__class__.__name__}")
-
-        # Resume from checkpoint if enabled and checkpoint exists
-        start_epoch = 0
-        if self.checkpointing_resume_if_exists:
-            saved_checkpoints = list(Path(self.trained_models_directory).glob(f"{self.get_hash()}_checkpoint_*.pt"))
-            if len(saved_checkpoints) > 0:
-                logger.info("Resuming training from checkpoint")
-                epochs = [int(checkpoint.stem.split("_")[-1]) for checkpoint in saved_checkpoints]
-                self._load_model(saved_checkpoints[np.argmax(epochs)])
-                start_epoch = max(epochs) + 1
-
-        # Train the model
-        logger.info(f"Training model for {self.epochs} epochs{', starting at epoch ' + str(start_epoch) if start_epoch > 0 else ''}")
-
-        train_losses: list[float] = []
-        val_losses: list[float] = []
-
-        self.lowest_val_loss = np.inf
-        if len(validation_loader) == 0:
-            logger.warning(
-                f"Doing train full, model will be trained for {self.epochs} epochs",
-            )
-
-        self._training_loop(
-            train_loader,
-            validation_loader,
-            train_losses,
-            val_losses,
-            self._fold,
-            start_epoch,
-        )
-        logger.info(
-            f"Done training the model: {self.model.__class__.__name__}",
-        )
-
-        # Revert to the best model
-        if self.best_model_state_dict:
-            logger.info(
-                f"Reverting to model with best validation loss {self.lowest_val_loss}",
-            )
-            self.model.load_state_dict(self.best_model_state_dict)
-
-        if save_model:
-            self._save_model()
-
-        return self.predict_after_train(
-            x,
-            y,
-            train_dataset,
-            validation_dataset,
-            train_indices,
-            validation_indices,
-        )
-
-    def predict_after_train(
-        self,
-        x: npt.NDArray[np.float32],
-        y: npt.NDArray[np.float32],
-        train_dataset: Dataset[Any],
-        validation_dataset: Dataset[Any],
-        train_indices: list[int],
-        validation_indices: list[int],
-    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
-        """Predict after training the model.
-
-        :param x: The input to the system.
-        :param y: The expected output of the system.
-        :param train_dataset: The training dataset.
-        :param validation_dataset: The validation dataset.
-        :param train_indices: The indices to train on.
-        :param validation_indices: The indices to validate on.
-
-        :return: The predictions and the expected output.
-        """
-        match self.to_predict:
-            case "all":
-                concat_dataset: Dataset[Any] = self._concat_datasets(
-                    train_dataset,
-                    validation_dataset,
-                    train_indices,
-                    validation_indices,
-                )
-                pred_dataloader = DataLoader(
-                    concat_dataset,
-                    batch_size=self.batch_size,
-                    shuffle=False,
-                    collate_fn=(self.collate_fn if hasattr(concat_dataset, "__getitems__") else None),
-                )
-                return self.predict_on_loader(pred_dataloader), y
-            case "validation":
-                train_loader, validation_loader = self.create_dataloaders(
-                    train_dataset,
-                    validation_dataset,
-                )
-                return self.predict_on_loader(validation_loader), y[validation_indices]
-            case "none":
-                return x, y
-            case _:
-                raise ValueError("to_predict should be either 'validation', 'all' or 'none")
-
-    def custom_predict(self, x: Any, **pred_args: Any) -> npt.NDArray[np.float32]:  # noqa: ANN401
-        """Predict on the validation data.
-
-        :param x: The input to the system.
-        :return: The output of the system.
-        """
-        logger.log_section_separator(f"Predicting model: {self.model.__class__.__name__}")
-        logger.debug(f"Predicting model: {self.model.__class__.__name__}")
-
-        # Parse pred_args
-        curr_batch_size = pred_args.get("batch_size", self.batch_size)
-
-        # Create dataset
-        pred_dataset = self.create_prediction_dataset(x)
-        pred_dataloader = DataLoader(
-            pred_dataset,
-            batch_size=curr_batch_size,
-            shuffle=False,
-            collate_fn=(self.collate_fn if hasattr(pred_dataset, "__getitems__") else None),
-        )
-
-        # Predict with a single model
-        if self.n_folds < 1 or pred_args.get("use_single_model", False):
-            self._load_model()
-            return self.predict_on_loader(pred_dataloader, pred_args.get("compile_method", None))
-
-        predictions = []
-        # Predict with multiple models
-        for i in range(int(self.n_folds)):
-            self._fold = i  # set the fold, which updates the hash
-            # Try to load the next fold if it exists
-            try:
-                self._load_model()
-            except FileNotFoundError as e:
-                if i == 0:
-                    raise FileNotFoundError(f"First model of {self.n_folds} folds not found...") from e
-                logger.warning(f"Model for fold {self._fold} not found, skipping the rest of the folds...")
-                break
-            logger.info(f"Predicting with model fold {i + 1}/{self.n_folds}")
-            predictions.append(self.predict_on_loader(pred_dataloader, pred_args.get("compile_method", None)))
-
-        # Average the predictions using numpy
-        validation_predictions = np.array(predictions)
-
-        return np.mean(validation_predictions, axis=0)
+        # Evaluate the model
+        loader = self.create_dataloader(data, f"{self.to_predict}_indices")
+        return self.predict_on_loader(loader)
 
     def predict_on_loader(
         self,
@@ -509,52 +322,11 @@ class TorchTrainer(TrainingBlock):
         if self._fold != -1:
             result += f"_f{self._fold}"
         return result
-
-    def create_datasets(
+    
+    def create_dataloader(
         self,
-        x: npt.NDArray[np.float32],
-        y: npt.NDArray[np.float32],
-        train_indices: list[int],
-        validation_indices: list[int],
-    ) -> tuple[Dataset[tuple[Tensor, ...]], Dataset[tuple[Tensor, ...]]]:
-        """Create the datasets for training and validation.
-
-        :param x: The input data.
-        :param y: The target variable.
-        :param train_indices: The indices to train on.
-        :param validation_indices: The indices to validate on.
-        :return: The training and validation datasets.
-        """
-        if self.dataset is None:
-            train_dataset = TensorDataset(
-                torch.from_numpy(x[train_indices]),
-                torch.from_numpy(y[train_indices]),
-            )
-            validation_dataset = TensorDataset(
-                torch.from_numpy(x[validation_indices]),
-                torch.from_numpy(y[validation_indices]),
-            )
-            return train_dataset, validation_dataset
-
-        return self.dataset(x[train_indices], y[train_indices]), self.dataset(x[validation_indices], y[validation_indices])
-
-    def create_prediction_dataset(
-        self,
-        x: npt.NDArray[np.float32],
-    ) -> Dataset[tuple[Tensor, ...]]:
-        """Create the prediction dataset.
-
-        :param x: The input data.
-        :return: The prediction dataset.
-        """
-        if self.dataset is None:
-            return TensorDataset(torch.from_numpy(x))
-        return self.dataset(x)
-
-    def create_dataloaders(
-        self,
-        train_dataset: Dataset[tuple[Tensor, ...]],
-        validation_dataset: Dataset[tuple[Tensor, ...]],
+        data: XData,
+        indices: str,
     ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
         """Create the dataloaders for training and validation.
 
@@ -562,34 +334,75 @@ class TorchTrainer(TrainingBlock):
         :param validation_dataset: The validation dataset.
         :return: The training and validation dataloaders.
         """
-        train_loader = DataLoader(
-            train_dataset,
+        # Create datasets
+        dataset = TorchDataset(data, "train_indices")
+        
+        # Create dataloaders
+        loader = DataLoader(
+            dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            collate_fn=(self.collate_fn if hasattr(train_dataset, "__getitems__") else None),
+            collate_fn=(self.collate_fn if hasattr(dataset, "__getitems__") else None),
             **self.dataloader_args,
         )
-        validation_loader = DataLoader(
-            validation_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            collate_fn=(self.collate_fn if hasattr(validation_dataset, "__getitems__") else None),
-            **self.dataloader_args,
-        )
-        return train_loader, validation_loader
+        return loader
 
     def save_model_to_external(self) -> None:
-        """Save model to external database."""
-        logger.warning(
-            "Saving model to external is not implemented for TorchTrainer, if you want uploaded models. Please overwrite",
-        )
+        """Save the model to external storage."""
+        if wandb.run:
+            model_artifact = wandb.Artifact(self.model_name, type="model")
+            model_artifact.add_file(f"{self.trained_models_directory}/{self.get_hash()}.pt")
+            wandb.log_artifact(model_artifact)
 
-    def _training_loop(
+    def _model_train(
+        self,
+        data: XData,
+    ):
+        # Log the model being trained
+        logger.info(f"Training model: {self.model.__class__.__name__}")
+        
+        # Create dataloaders
+        train_loader = self.create_dataloader(data, "train_indices")
+        validation_loader = self.create_dataloader(data, "validation_indices")
+
+        # Resume from checkpoint if enabled and checkpoint exists
+        start_epoch = 0
+        if self.checkpointing_resume_if_exists:
+            saved_checkpoints = list(Path(self.trained_models_directory).glob(f"{self.get_hash()}_checkpoint_*.pt"))
+            if len(saved_checkpoints) > 0:
+                logger.info("Resuming training from checkpoint")
+                epochs = [int(checkpoint.stem.split("_")[-1]) for checkpoint in saved_checkpoints]
+                self._load_model(saved_checkpoints[np.argmax(epochs)])
+                start_epoch = max(epochs) + 1
+
+        # Train the model
+        logger.info(f"Training model for {self.epochs} epochs{', starting at epoch ' + str(start_epoch) if start_epoch > 0 else ''}")
+        self._lowest_val_loss = np.inf
+        self._model_training_loop(
+            train_loader,
+            validation_loader,
+            self._fold,
+            start_epoch,
+        )
+        logger.info(
+            f"Done training the model: {self.model.__class__.__name__}",
+        )
+        
+        # Revert to the best model
+        if self.best_model_state_dict:
+            logger.info(
+                f"Reverting to model with best validation loss {self._lowest_val_loss}",
+            )
+            self.model.load_state_dict(self.best_model_state_dict)
+            
+        # Save the model
+        if self.save_model_to_disk:
+            self._save_model()
+
+    def _model_training_loop(
         self,
         train_loader: DataLoader[tuple[Tensor, ...]],
         validation_loader: DataLoader[tuple[Tensor, ...]],
-        train_losses: list[float],
-        val_losses: list[float],
         fold: int = -1,
         start_epoch: int = 0,
     ) -> None:
@@ -597,20 +410,21 @@ class TorchTrainer(TrainingBlock):
 
         :param train_loader: Dataloader for the validation data.
         :param validation_loader: Dataloader for the training data. (can be empty)
-        :param train_losses: List of train losses.
-        :param val_losses: List of validation losses.
         """
         fold_no = ""
 
         if fold > -1:
             fold_no = f"_{fold}"
 
-        self.external_define_metric(self.wrap_log(f"Training/Train Loss{fold_no}"), self.wrap_log("epoch"))
-        self.external_define_metric(self.wrap_log(f"Validation/Validation Loss{fold_no}"), self.wrap_log("epoch"))
+        logger.external_define_metric(self.wrap_log(f"Training/Train Loss{fold_no}"), self.wrap_log("epoch"))
+        logger.external_define_metric(self.wrap_log(f"Validation/Validation Loss{fold_no}"), self.wrap_log("epoch"))
 
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
+
+        train_losses: list[float] = []
+        val_losses: list[float] = []
 
         for epoch in range(start_epoch, self.epochs):
             # Train using train_loader
@@ -789,7 +603,7 @@ class TorchTrainer(TrainingBlock):
         logger.info(
             f"Loading model from {model_path}",
         )
-        checkpoint = torch.load(model_path)
+        checkpoint = torch.load(model_path, weights_only=False)
 
         # Load the weights from the checkpoint
         if isinstance(checkpoint, nn.DataParallel):
@@ -814,8 +628,8 @@ class TorchTrainer(TrainingBlock):
         """
         # Store the best model so far based on validation loss
         if self.patience != -1:
-            if self.last_val_loss < self.lowest_val_loss:
-                self.lowest_val_loss = self.last_val_loss
+            if self.last_val_loss < self._lowest_val_loss:
+                self._lowest_val_loss = self.last_val_loss
                 self.best_model_state_dict = copy.deepcopy(self.model.state_dict())
                 self.early_stopping_counter = 0
             else:

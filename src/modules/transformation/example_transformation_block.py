@@ -2,7 +2,7 @@
 import numpy as np
 import numpy.typing as npt
 
-from src.framework.transformation_block import TransformationBlock
+from src.framework.transforming import TransformationBlock
 
 
 class ExampleTransformationBlock(TransformationBlock):

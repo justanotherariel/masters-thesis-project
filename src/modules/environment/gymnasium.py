@@ -9,7 +9,7 @@ import gymnasium as gym
 import minigrid
 
 from src.typing.pipeline_objects import XData
-from src.framework.transformation_block import TransformationBlock
+from src.framework.transforming import TransformationBlock
 from src.framework.logging import Logger
 
 logger = Logger()
@@ -121,6 +121,6 @@ class GymnasiumSampler(TransformationBlock):
         # that are not allowed to be in the training data. These
         # should only be in the testing data.
         data.train_indices = np.random.choice(len(x_states), int(self.perc_train * len(x_states)), replace=False)
-        data.test_indices = np.setdiff1d(np.arange(len(x_states)), data.train_indices)
+        data.validation_indices = np.setdiff1d(np.arange(len(x_states)), data.train_indices)
 
         return data

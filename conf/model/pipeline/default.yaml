@@ -1,13 +1,15 @@
-_target_: src.pipeline.ModelPipeline
+_target_: src.framework.pipeline.ModelPipeline
 _convert_: partial
 
 env_sys:
-  _target_: src.pipeline.TransformationPipeline
+  _target_: src.framework.pipeline.TransformationPipeline
+  title: "Environment pipeline"
 
 train_sys:
-  _target_: src.pipeline.TrainingPipeline
+  _target_: src.framework.pipeline.TransformationPipeline
+  title: "Training pipeline"
 
 pred_sys:
-  _target_: src.pipeline.TransformationPipeline
+  _target_: src.framework.pipeline.TransformationPipeline
   title: "Postprocessing pipeline"
 

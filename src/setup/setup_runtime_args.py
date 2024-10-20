@@ -1,10 +1,10 @@
 """File containing functions related to setting up runtime arguments for pipelines."""
 from typing import Any
 
-from src.pipeline import ModelPipeline
+from src.framework.pipeline import ModelPipeline
 
 
-def setup_train_args(
+def setup_transform_args(
     pipeline: ModelPipeline,
     cache_args: dict[str, Any],
     fold: int = -1,

@@ -7,14 +7,52 @@ env_sys:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
       environment: MiniGrid-Empty-5x5-v0
     - _target_: src.modules.environment.gymnasium.GymnasiumSampler
-      num_samples: 1_000_000
+      num_samples: 1_000
       num_samples_per_env: 20
       perc_train: 0.8
 
 train_sys:
   steps:
-    - _target_: src.modules.training.example_training_block.ExampleTrainingBlock
+    - _target_: src.modules.training.torch_trainer.TorchTrainer
+      model_name: "Transformer"
+      model:
+        _target_: src.modules.training.models.transformer.SparseTransformer
+        num_actions: 7
+        input_dim: 3
+        d_model: 128
+        num_heads: 4
+        num_layers: 2
+        d_ff: 1024
+        dropout: 0.1
+        # sparsity: 0.9
+      criterion:
+        _target_: torch.nn.CrossEntropyLoss
+      optimizer:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: torch.optim.AdamW
+        lr: 0.001
+      epochs: 10
+      batch_size: 4096
+      patience: 10
+      scheduler:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: timm.scheduler.cosine_lr.CosineLRScheduler
+        t_initial: 100
+        cycle_mul: 1
+        cycle_decay: 1
+        cycle_limit: 1
+        warmup_t: 1
+        warmup_lr_init: 1e-5
+      n_folds: 5
+      dataloader_args:
+        num_workers: 24
+        prefetch_factor: 4
+        persistent_workers: false
 
-pred_sys:
-  steps:
-    - _target_: src.modules.transformation.example_transformation_block.ExampleTransformationBlock
+# pred_sys:
+#   steps:
+#     - _target_: src.modules.transformation.example_transformation_block.ExampleTransformationBlock
