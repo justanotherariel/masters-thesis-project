@@ -50,22 +50,3 @@ def setup_transform_args(
     }
         
     return train_args
-
-
-def setup_pred_args(pipeline: ModelPipeline) -> dict[str, Any]:
-    """Set train arguments for pipeline.
-
-    :param pipeline: Pipeline to receive arguments
-    :return: Dictionary containing arguments
-    """
-    # pred_args = {
-    #     "train_sys": {
-    #         "MainTrainer": {
-    #             # "batch_size": 16,
-    #             # "model_folds": cfg.model_folds,
-    #         },
-    #     },
-    # }
-    pred_args: dict[str, Any] = {}
-
-    return pred_args
