@@ -1,6 +1,6 @@
 """This module contains the core classes for all classes within the framework."""
 
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 

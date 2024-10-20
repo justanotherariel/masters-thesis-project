@@ -1,6 +1,6 @@
+import gymnasium as gym
 import numpy as np
 from numpy.typing import NDArray
-import gymnasium as gym
 
 
 class XData:

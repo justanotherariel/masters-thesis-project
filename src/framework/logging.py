@@ -1,12 +1,13 @@
 """A logger that logs to the terminal and to W&B."""
 
-from typing import Any, Optional
-import wandb
 import logging
 import os
 import sys
-from types import TracebackType
 from pathlib import Path
+from types import TracebackType
+from typing import Any, Optional
+
+import wandb
 
 _LOGGER: Optional["Logger"] = None
 
@@ -76,10 +77,7 @@ class Logger:
         :param kwargs: Any additional arguments
         """
         if wandb.run:
-            if (
-                message.get("type") == "wandb_plot"
-                and message["plot_type"] == "line_series"
-            ):
+            if message.get("type") == "wandb_plot" and message["plot_type"] == "line_series":
                 plot_data = message["data"]
                 # Construct the plot here using the provided data
                 plot = wandb.plot.line_series(

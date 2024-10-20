@@ -3,10 +3,11 @@
 from enum import Enum
 from typing import Any
 
-from src.framework.pipeline import ModelPipeline
-from src.framework.logging import Logger
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
+
+from src.framework.logging import Logger
+from src.framework.pipeline import ModelPipeline
 
 logger = Logger()
 

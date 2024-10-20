@@ -1,13 +1,15 @@
 """Model module. Contains the ModelPipeline class."""
 
-from typing import Any
-from joblib import hash
 from dataclasses import dataclass
+from typing import Any
 
-from .transforming import TransformType, Transformer, TransformingSystem
-from .caching import Cacher, CacheArgs
+from joblib import hash
+
 from src.framework.logging import Logger
 from src.typing.pipeline_objects import XData
+
+from .caching import CacheArgs, Cacher
+from .transforming import Transformer, TransformingSystem, TransformType
 
 logger = Logger()
 
@@ -54,9 +56,7 @@ class ModelPipeline(TransformType):
         if self.env_sys is not None:
             data = self.env_sys.transform(data, **transform_args.get("env_sys", {}))
         if self.train_sys is not None:
-            data, y = self.train_sys.transform(
-                data, **transform_args.get("train_sys", {})
-            )
+            data, y = self.train_sys.transform(data, **transform_args.get("train_sys", {}))
         if self.pred_sys is not None:
             data = self.pred_sys.transform(data, **transform_args.get("pred_sys", {}))
 
@@ -103,13 +103,15 @@ class TransformationPipeline(TransformingSystem, Cacher):
     """TransformationPipeline is the class used to create the pipeline for the transformation of the data.
 
     ### Parameters:
-    - `steps` (List[Union[Transformer, TransformationPipeline]]): The steps to transform the data. Can be a list of any Transformer type.
+    - `steps` (List[Union[Transformer, TransformationPipeline]]): The steps to transform the data.
+      Can be a list of any Transformer type.
     - `title` (str): The title of the pipeline. (Default: "Transformation Pipeline")
 
     Methods
     -------
     .. code-block:: python
-        def transform(self, data: Any, cache_args: dict[str, Any] = {}, **transform_args: Any) -> Any: # Transform the input data.
+        def transform(self, data: Any, cache_args: dict[str, Any] = {}, **transform_args: Any) -> Any:
+        # Transform the input data.
 
         def get_hash(self) -> str: # Get the hash of the pipeline.
 
@@ -127,11 +129,9 @@ class TransformationPipeline(TransformingSystem, Cacher):
         data = pipeline.transform(data)
     """
 
-    title: str = "Transformation Pipeline"  # The title of the pipeline since transformation pipeline can be used for multiple purposes. (Feature, Label, etc.)
+    title: str = "Transformation Pipeline"
 
-    def transform(
-        self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any
-    ) -> Any:  # noqa: ANN401
+    def transform(self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any) -> Any:  # noqa: ANN401
         """Transform the input data.
 
         :param data: The input data.

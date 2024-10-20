@@ -1,10 +1,11 @@
 """Transformer model with sparse attention mechanism."""
 
+import math
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from dataclasses import dataclass
 
 # Special tokens
 SOS_TOKEN = torch.tensor([100, 0, 1], dtype=torch.int8)  # Start of sequence
@@ -31,19 +32,9 @@ class SparseMultiHeadAttention(nn.Module):
     def forward(self, query, key, value, mask=None):
         batch_size = query.size(0)
 
-        query = (
-            self.W_q(query)
-            .view(batch_size, -1, self.num_heads, self.d_k)
-            .transpose(1, 2)
-        )
-        key = (
-            self.W_k(key).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
-        )
-        value = (
-            self.W_v(value)
-            .view(batch_size, -1, self.num_heads, self.d_k)
-            .transpose(1, 2)
-        )
+        query = self.W_q(query).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
+        key = self.W_k(key).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
+        value = self.W_v(value).view(batch_size, -1, self.num_heads, self.d_k).transpose(1, 2)
 
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.d_k)
 
@@ -59,12 +50,7 @@ class SparseMultiHeadAttention(nn.Module):
         attn = F.softmax(sparse_scores, dim=-1)
         attn = F.dropout(attn, p=self.dropout, training=self.training)
 
-        output = (
-            torch.matmul(attn, value)
-            .transpose(1, 2)
-            .contiguous()
-            .view(batch_size, -1, self.d_model)
-        )
+        output = torch.matmul(attn, value).transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
         return self.W_o(output)
 
 
@@ -72,9 +58,7 @@ class SparseTransformerBlock(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout=0.1, sparsity=0.9):
         super().__init__()
         self.attn = SparseMultiHeadAttention(d_model, num_heads, dropout, sparsity)
-        self.ff = nn.Sequential(
-            nn.Linear(d_model, d_ff), nn.ReLU(), nn.Linear(d_ff, d_model)
-        )
+        self.ff = nn.Sequential(nn.Linear(d_model, d_ff), nn.ReLU(), nn.Linear(d_ff, d_model))
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
@@ -110,9 +94,7 @@ class SparseTransformer(nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                SparseTransformerBlock(
-                    self.d_model, self.num_heads, self.d_ff, self.dropout, self.sparsity
-                )
+                SparseTransformerBlock(self.d_model, self.num_heads, self.d_ff, self.dropout, self.sparsity)
                 for _ in range(self.num_layers)
             ]
         )

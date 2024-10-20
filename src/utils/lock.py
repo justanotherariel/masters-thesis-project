@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from types import TracebackType
+
 from src.framework.logging import Logger
 
 if sys.version_info < (3, 11):  # Self was added in Python 3.11
@@ -25,9 +26,7 @@ class Lock:
         """Initialize the lock."""
         self.acquired = False
         if "CUDA_VISIBLE_DEVICES" in os.environ:
-            self.lock_file = (
-                f".lock_{os.environ['CUDA_VISIBLE_DEVICES'].replace(',', '_')}"
-            )
+            self.lock_file = f".lock_{os.environ['CUDA_VISIBLE_DEVICES'].replace(',', '_')}"
 
     def __enter__(self) -> Self:
         """Create the lock file."""

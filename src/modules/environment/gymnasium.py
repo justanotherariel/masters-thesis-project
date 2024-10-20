@@ -1,16 +1,16 @@
 """Block to instatiate a Gymnasium Minigrid Environment."""
 
-import numpy as np
-import numpy.typing as npt
 from dataclasses import dataclass
-import tqdm
 
 import gymnasium as gym
 import minigrid
+import numpy as np
+import numpy.typing as npt
+import tqdm
 
-from src.typing.pipeline_objects import XData
-from src.framework.transforming import TransformationBlock
 from src.framework.logging import Logger
+from src.framework.transforming import TransformationBlock
+from src.typing.pipeline_objects import XData
 
 logger = Logger()
 
@@ -84,9 +84,7 @@ class GymnasiumSampler(TransformationBlock):
         y_rewards = np.empty((self.num_samples, 1), dtype=np.float32)
         samples_collected = 0
 
-        progress_bar = tqdm.tqdm(
-            total=self.num_samples, desc="Sampling Environment", unit="samples"
-        )
+        progress_bar = tqdm.tqdm(total=self.num_samples, desc="Sampling Environment", unit="samples")
         while samples_collected < self.num_samples:
             _observation, _info = env.reset()
             for _ in range(self.num_samples_per_env):
@@ -124,11 +122,7 @@ class GymnasiumSampler(TransformationBlock):
         # TODO: Take into consideration 'reserved' states, which are states
         # that are not allowed to be in the training data. These
         # should only be in the testing data.
-        data.train_indices = np.random.choice(
-            len(x_states), int(self.perc_train * len(x_states)), replace=False
-        )
-        data.validation_indices = np.setdiff1d(
-            np.arange(len(x_states)), data.train_indices
-        )
+        data.train_indices = np.random.choice(len(x_states), int(self.perc_train * len(x_states)), replace=False)
+        data.validation_indices = np.setdiff1d(np.arange(len(x_states)), data.train_indices)
 
         return data

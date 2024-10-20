@@ -5,8 +5,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-import wandb
 from omegaconf import DictConfig, OmegaConf
+
+import wandb
 from src.framework.logging import Logger
 
 logger = Logger()

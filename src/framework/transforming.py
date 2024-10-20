@@ -1,11 +1,10 @@
 from abc import abstractmethod
 from typing import Any
 
-import warnings
-
+from src.framework.caching import CacheArgs, Cacher
 from src.framework.logging import Logger
-from src.framework.caching import Cacher, CacheArgs
-from .core import _Block, _SequentialSystem, _Base
+
+from .core import _Base, _Block, _SequentialSystem
 
 logger = Logger()
 
@@ -20,9 +19,7 @@ class TransformType(_Base):
         :param data: The input data.
         :param transform_args: Keyword arguments.
         :return: The transformed data."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement transform method."
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} does not implement transform method.")
 
 
 class Transformer(TransformType, _Block):
@@ -69,7 +66,8 @@ class TransformationBlock(Transformer, Cacher):
         @abstractmethod
         def custom_transform(self, data: Any, **transform_args) -> Any: # Custom transformation implementation
 
-        def transform(self, data: Any, cache_args: dict[str, Any] = {}, **transform_args: Any) -> Any: # Applies caching and calls custom_transform
+        def transform(self, data: Any, cache_args: dict[str, Any] = {}, **transform_args: Any) -> Any:
+        # Applies caching and calls custom_transform
 
     Usage:
     .. code-block:: python
@@ -92,9 +90,7 @@ class TransformationBlock(Transformer, Cacher):
         data = custom_transformation_block.transform(data, cache=cache_args)
     """
 
-    def transform(
-        self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any
-    ) -> Any:  # noqa: ANN401
+    def transform(self, data: Any, cache_args: CacheArgs | None = None, **transform_args: Any) -> Any:  # noqa: ANN401
         """Transform the input data using a custom method.
 
         :param data: The input data.
@@ -187,8 +183,9 @@ class TransformingSystem(TransformType, _SequentialSystem):
             set_of_steps.add(step_name)
         if set_of_steps != set(transform_args.keys()):
             # Raise a warning and print all the keys that do not match
-            warnings.warn(
-                f"The following steps do not exist but were given in the kwargs: {set(transform_args.keys()) - set_of_steps}"
+            logger.warning(
+                "The following steps do not exist but were given in the kwargs: "
+                f"{set(transform_args.keys()) - set_of_steps}"
             )
 
         # Loop through each step and call the transform method
