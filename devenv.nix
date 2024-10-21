@@ -27,8 +27,8 @@
 
       # Run Linting
       if [ "$1" = "ruff" ]; then
-        ruff check src/ --fix
-        ruff format src/
+        ruff check src/ tests/ --fix
+        ruff format src/ tests/
       fi
 
       # Run Tests

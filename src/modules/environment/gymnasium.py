@@ -7,15 +7,16 @@ import minigrid
 import numpy as np
 import numpy.typing as npt
 import tqdm
-from enum import Enum
 from minigrid.wrappers import ImgObsWrapper
 
-from .minigrid_wrappers import FullyObsWrapper
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.typing.pipeline_objects import XData
 
+from .minigrid_wrappers import FullyObsWrapper
+
 logger = Logger()
+
 
 @dataclass
 class GymnasiumBuilder(TransformationBlock):
@@ -31,14 +32,14 @@ class GymnasiumBuilder(TransformationBlock):
         if "MiniGrid-BlockedUnlockPickup-v0" not in gym.envs.registry:
             minigrid.register_minigrid_envs()
         self.env = gym.make(self.environment)
-        
+
         # Check if the environment is a minigrid environment
         if not issubclass(type(self.env.unwrapped), minigrid.minigrid_env.MiniGridEnv):
             raise ValueError("Currently only MiniGrid environments are supported.")
-        
-        self.env = FullyObsWrapper(self.env)    # Output fully observable grid
-        self.env = ImgObsWrapper(self.env)      # Output only numpy array
-        self.env.reset(seed=42)                 # Seed the environment
+
+        self.env = FullyObsWrapper(self.env)  # Output fully observable grid
+        self.env = ImgObsWrapper(self.env)  # Output only numpy array
+        self.env.reset(seed=42)  # Seed the environment
 
     def custom_transform(self, data: XData) -> npt.NDArray[np.float32]:
         """Apply a custom transformation to the data.
@@ -121,7 +122,7 @@ class GymnasiumSampler(TransformationBlock):
                     break
                 if terminated or truncated:
                     break
-                
+
                 # If enough train samples collected, reset env
                 # and collect validation samples
                 if collecting_train_samples and samples_collected >= train_samples:
@@ -131,6 +132,6 @@ class GymnasiumSampler(TransformationBlock):
 
         # Save validation indices
         data.validation_indices = np.arange(train_samples, self.num_samples)
-                
-        env.close()        
+
+        env.close()
         return data

@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-import math
-import operator
-from functools import reduce
-from typing import Any
-
-import gymnasium as gym
 import numpy as np
-from gymnasium import logger, spaces
-from gymnasium.core import ActionWrapper, ObservationWrapper, ObsType, Wrapper
-
-from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, STATE_TO_IDX
-from minigrid.core.world_object import Goal
+from gymnasium import spaces
+from gymnasium.core import ObservationWrapper
+from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX
 
 
 class FullyObsWrapper(ObservationWrapper):
@@ -42,9 +34,7 @@ class FullyObsWrapper(ObservationWrapper):
             dtype="uint8",
         )
 
-        self.observation_space = spaces.Dict(
-            {**self.observation_space.spaces, "image": new_image_space}
-        )
+        self.observation_space = spaces.Dict({**self.observation_space.spaces, "image": new_image_space})
 
     def observation(self, obs):
         env = self.unwrapped
