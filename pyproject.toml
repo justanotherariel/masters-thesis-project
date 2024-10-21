@@ -22,6 +22,7 @@ timm = "^1.0.11"
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
 pytest = "^8.3.3"
+jupyter = "^1.1.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -44,4 +45,10 @@ select = [
     "SIM",
     # isort
     "I",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:wandb.*",
+    "ignore::DeprecationWarning:pygame.*"
 ]
