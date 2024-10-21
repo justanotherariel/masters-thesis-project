@@ -17,8 +17,9 @@ def test_gymnsasium_sampler():
     
     num_samples = 10
     num_samples_per_env = 5
+    perc_train = 0.8
     
-    sampler = GymnasiumSampler(num_samples=num_samples, num_samples_per_env=num_samples_per_env, perc_train=0.8)
+    sampler = GymnasiumSampler(num_samples=num_samples, num_samples_per_env=num_samples_per_env, perc_train=perc_train)
     data = sampler.transform(data)
     
     # Check all arrays have the correct length
@@ -42,3 +43,7 @@ def test_gymnsasium_sampler():
     directions = data.x_states[mask][:, -1]
     assert np.all(directions >= 0)
     assert np.all(directions < 4)
+    
+    # Check length of train/validation indices
+    assert len(data.train_indices) == num_samples * perc_train
+    assert len(data.validation_indices) == num_samples - len(data.train_indices)

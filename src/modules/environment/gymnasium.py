@@ -85,6 +85,7 @@ class GymnasiumSampler(TransformationBlock):
         logger.info("Sampling Environment")
 
         # Identify the important parameters
+        train_samples = self.num_samples * self.perc_train
         grid_size = (env.unwrapped.width, env.unwrapped.height)
 
         # Sample the Environment
@@ -93,6 +94,7 @@ class GymnasiumSampler(TransformationBlock):
         data.y_states = np.empty((self.num_samples, *grid_size, 3), dtype=np.int8)
         data.y_rewards = np.empty((self.num_samples, 1), dtype=np.float32)
         samples_collected = 0
+        collecting_train_samples = True
 
         progress_bar = tqdm.tqdm(total=self.num_samples, desc="Sampling Environment", unit="samples")
         while samples_collected < self.num_samples:
@@ -119,14 +121,16 @@ class GymnasiumSampler(TransformationBlock):
                     break
                 if terminated or truncated:
                     break
+                
+                # If enough train samples collected, reset env
+                # and collect validation samples
+                if collecting_train_samples and samples_collected >= train_samples:
+                    data.train_indices = np.arange(train_samples)
+                    collecting_train_samples = False
+                    break
 
-        env.close()
-
-        # Split the data into training and testing data
-        # TODO: Take into consideration 'reserved' states, which are states
-        # that are not allowed to be in the training data. These
-        # should only be in the testing data.
-        data.train_indices = np.random.choice(self.num_samples, int(self.perc_train * self.num_samples), replace=False)
-        data.validation_indices = np.setdiff1d(np.arange(self.num_samples), data.train_indices)
-
+        # Save validation indices
+        data.validation_indices = np.arange(train_samples, self.num_samples)
+                
+        env.close()        
         return data
