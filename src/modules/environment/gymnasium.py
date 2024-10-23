@@ -87,51 +87,61 @@ class GymnasiumSampler(TransformationBlock):
 
         # Identify the important parameters
         train_samples = self.num_samples * self.perc_train
-        grid_size = (env.unwrapped.width, env.unwrapped.height)
 
         # Sample the Environment
-        data.x_states = np.empty((self.num_samples, *grid_size, 3), dtype=np.int8)
-        data.x_actions = np.empty((self.num_samples, 1), dtype=np.int8)
-        data.y_states = np.empty((self.num_samples, *grid_size, 3), dtype=np.int8)
-        data.y_rewards = np.empty((self.num_samples, 1), dtype=np.float32)
-        samples_collected = 0
-        collecting_train_samples = True
+        observations: list[npt.NDArray] = []
+        data.actions = np.empty((self.num_samples, 1), dtype=np.int8)
+        data.rewards = np.empty((self.num_samples, 1), dtype=np.float16)
+        
+        # [trajectory_id, [state_x, state_y, action/reward_idx]]
+        train_indices: list[list[int]] = []
+        validation_indices: list[list[int]] = []
+        
+        samples_idx = 0
+        state_idx = 0
 
         progress_bar = tqdm.tqdm(total=self.num_samples, desc="Sampling Environment", unit="samples")
-        while samples_collected < self.num_samples:
+        while samples_idx < self.num_samples:
+            trajectory: list[int] = []
             observation, _info = env.reset()
-            for _ in range(self.num_samples_per_env):
-                # Random Action
-                action = env.action_space.sample()
-
-                # Save State and Action Chosen
-                data.x_states[samples_collected] = observation
-                data.x_actions[samples_collected] = action
+            
+            for i in range(self.num_samples_per_env):
+                # Save current State
+                observations.append(observation)
 
                 # Take a step
+                action = env.action_space.sample()
                 observation, reward, terminated, truncated, _info = env.step(action)
 
-                # Record the next state and reward
-                data.y_states[samples_collected] = observation
-                data.y_rewards[samples_collected] = reward
-                samples_collected += 1
+                # Save Action and Reward
+                data.actions[samples_idx] = action
+                data.rewards[samples_idx] = reward
+                
+                # Save the indices
+                trajectory.append((len(observations) - 1, len(observations), samples_idx))
 
                 # Misc
                 progress_bar.update(1)
-                if samples_collected >= self.num_samples:
+                samples_idx += 1
+                if samples_idx >= train_samples or samples_idx >= self.num_samples:
                     break
                 if terminated or truncated:
                     break
+                
+            # Record the final state of the trajectory
+            observations.append(observation)
 
-                # If enough train samples collected, reset env
-                # and collect validation samples
-                if collecting_train_samples and samples_collected >= train_samples:
-                    data.train_indices = np.arange(train_samples)
-                    collecting_train_samples = False
-                    break
+            # Append the indices to the correct list
+            indices_collected = np.full((self.num_samples_per_env, 3), -1)
+            indices_collected[:len(trajectory)] = np.array(trajectory)
+            if samples_idx <= train_samples:
+                train_indices.append(indices_collected)
+            else:
+                validation_indices.append(indices_collected)
 
-        # Save validation indices
-        data.validation_indices = np.arange(train_samples, self.num_samples)
+        data.observations = np.stack(observations, axis=0)
+        data.train_indices = np.stack(train_indices, axis=0)
+        data.validation_indices = np.stack(validation_indices, axis=0)
 
         env.close()
         return data
