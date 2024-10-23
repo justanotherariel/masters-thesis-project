@@ -17,6 +17,10 @@ from .minigrid_wrappers import FullyObsWrapper
 
 logger = Logger()
 
+def flatten_indices(indices: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+    """Flatten the indices for the dataset (remove the trajectory idx dimension) and remove padding."""
+    indices_flat = indices.reshape(-1,3)
+    return indices_flat[indices_flat[:, 0] != -1]   
 
 @dataclass
 class GymnasiumBuilder(TransformationBlock):

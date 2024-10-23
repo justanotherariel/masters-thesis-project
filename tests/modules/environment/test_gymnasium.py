@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSampler
+from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSampler, flatten_indices
 from src.typing.pipeline_objects import XData
 
 
@@ -47,16 +47,16 @@ def test_gymnsasium_sampler():
     assert np.all(directions < 4)
 
     # Check len of train/validation indices and pointers
-    indices_flat = data.train_indices.reshape(-1,3)
-    indices_without_padding = indices_flat[indices_flat[:, 0] != -1]
-    assert len(indices_without_padding) == round(num_samples * perc_train)
-    for idx in indices_without_padding:
+    train_indices = flatten_indices(data.train_indices)
+    assert len(train_indices) == round(num_samples * perc_train)
+    for idx in train_indices:
         assert idx[0] in range(len(data.observations))
         assert idx[1] in range(len(data.observations))
+        assert idx[2] in range(len(data.actions))
     
-    indices_flat = data.validation_indices.reshape(-1,3)
-    indices_without_padding = indices_flat[indices_flat[:, 0] != -1]
-    assert len(indices_without_padding) == round(num_samples * (1 - perc_train))
-    for idx in indices_without_padding:
+    val_indices = flatten_indices(data.validation_indices)
+    assert len(val_indices) == round(num_samples * (1 - perc_train))
+    for idx in val_indices:
         assert idx[0] in range(len(data.observations))
         assert idx[1] in range(len(data.observations))
+        assert idx[2] in range(len(data.actions))
