@@ -26,10 +26,9 @@ class XData:
             raise ValueError("y_rewards is None.")
 
         # Check if all lengths are the same
-        length = len(self.observations)
-        if len(self.actions) != length:
-            raise ValueError("x_actions length does not match x_states length.")
+        length = len(self.actions)
         if len(self.rewards) != length:
-            raise ValueError("y_rewards length does not match x_states length.")
-
+            raise ValueError("rewards[] length does not match rewards[] length.")
+        if len(self.observations) < length:
+            raise ValueError("observations[] length is less than actions[] length.")
         return True
