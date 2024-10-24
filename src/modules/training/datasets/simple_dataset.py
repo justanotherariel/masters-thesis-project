@@ -51,12 +51,12 @@ class SimpleMinigridDataset(Dataset):
         # Grab the correct index / [state_x, state_y, action/reward_idx]
         idx = self._indices[idx]
 
-        # Create input tokens
+        # Create input token sequence
         x = torch.empty((self._data_len_of_input, 3), dtype=torch.uint8)
         x[:self._data_len_of_state] = torch.tensor(self._data.observations[idx[0]].reshape(-1, 3))
         x[-1] = torch.tensor(self._data.actions[idx[2]])
 
-        # Create output tokens
+        # Create target token sequence
         y = torch.empty((self._data_len_of_output, 3), dtype=torch.uint8)
         y[:self._data_len_of_state] = torch.tensor(self._data.observations[idx[1]].reshape(-1, 3))
         y[-1] = torch.tensor(self._data.rewards[idx[2]])

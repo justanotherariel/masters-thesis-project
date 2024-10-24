@@ -18,14 +18,11 @@ def test_simple_minigrid_dataset():
     
     # Check the length of the dataset
     assert len(dataset) == 80
-    
-    # Check the first item
-    x, y = dataset[0]
-    
-    # Check the shape of the input and output
-    assert x.shape == (5*5 + 1, 3)
-    assert y.shape == (5*5 + 1, 3)
-
+        
     # Access all items once to check for errors
     for i in range(len(dataset)):
         x, y = dataset[i]
+        
+        # Check the shape of the input and output
+        assert x.shape == (5*5 + 1, 3)
+        assert y.shape == (5*5 + 1, 3)
