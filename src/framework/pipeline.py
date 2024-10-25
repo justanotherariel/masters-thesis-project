@@ -56,7 +56,7 @@ class ModelPipeline(TransformType):
         if self.env_sys is not None:
             data = self.env_sys.transform(data, **transform_args.get("env_sys", {}))
         if self.train_sys is not None:
-            data, y = self.train_sys.transform(data, **transform_args.get("train_sys", {}))
+            data = self.train_sys.transform(data, **transform_args.get("train_sys", {}))
         if self.pred_sys is not None:
             data = self.pred_sys.transform(data, **transform_args.get("pred_sys", {}))
 

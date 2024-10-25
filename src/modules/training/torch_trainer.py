@@ -23,9 +23,8 @@ from tqdm import tqdm
 import wandb
 from src.framework.logging import Logger
 from src.framework.trainers._custom_data_parallel import _CustomDataParallel
-from src.framework.trainers.utils import _get_onnxrt, _get_openvino, batch_to_device
+from src.framework.trainers.utils import _get_onnxrt, _get_openvino
 from src.framework.transforming import TransformationBlock
-from src.modules.training.main_dataset import TorchDataset
 from src.typing.pipeline_objects import XData
 
 logger = Logger()
@@ -81,49 +80,6 @@ class TorchTrainer(TransformationBlock):
     - `validation_size` (float): Relative size of the validation set
     - `x_tensor_type` (str): Type of x tensor for data
     - `y_tensor_type` (str): Type of y tensor for labels
-
-    Methods
-    -------
-    .. code-block:: python
-        def custom_transform(self, x: Any, **transform_args: Any) -> tuple[Any, Any]:
-            # Implements torch training.
-
-        def predict_on_loader(loader: DataLoader[tuple[Tensor, ...]]) -> npt.NDArray[np.float32]:
-            # Predict using a dataloader.
-
-        def create_dataloader(
-            self,
-            data: XData,
-            indices: str,
-        ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
-            # Create the dataloaders for training and validation.
-
-    Usage:
-    .. code-block:: python
-        from src.framework.training.torch_trainer import TorchTrainer
-        from torch import nn
-        from torch.optim import Adam
-        from torch.optim.lr_scheduler import StepLR
-        from torch.nn import MSELoss
-
-        class MyTorchTrainer(TorchTrainer):
-            ...
-
-        model = nn.Sequential(nn.Linear(1, 1))
-        optimizer = functools.partial(Adam, lr=0.01)
-        criterion = MSELoss()
-        scheduler = functools.partial(StepLR, step_size=1, gamma=0.1)
-        epochs = 10
-        batch_size = 32
-        patience = 5
-        validation_size = 0.2
-
-        trainer = MyTorchTrainer(model=model, optimizer=optimizer, criterion=criterion,
-                                 scheduler=scheduler, epochs=epochs, batch_size=batch_size,
-                                 patience=patience, validation_size=validation_size)
-
-        x, y = trainer.train(x, y)
-        x = trainer.predict(x)
     """
 
     # Modules
@@ -159,10 +115,6 @@ class TorchTrainer(TransformationBlock):
     n_folds: Annotated[int, Ge(0)] = field(default=-1, init=True, repr=False, compare=False)
     _fold: int = field(default=-1, init=False, repr=False, compare=False)
     validation_size: Annotated[float, Interval(ge=0, le=1)] = 0.2
-
-    # Types for tensors
-    x_tensor_type: str = "float"
-    y_tensor_type: str = "float"
 
     # Prefix and postfix for logging to external
     logging_prefix: str = field(default="", init=True, repr=False, compare=False)
@@ -273,8 +225,7 @@ class TorchTrainer(TransformationBlock):
         if compile_method is None:
             with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
                 for data in tepoch:
-                    X_batch = batch_to_device(data[0], self.x_tensor_type, self.device)
-
+                    X_batch = data[0].to(self.device)
                     y_pred = self.model(X_batch).squeeze(1).cpu().numpy()
                     predictions.extend(y_pred)
 
@@ -300,7 +251,7 @@ class TorchTrainer(TransformationBlock):
             logger.info("Done compiling model to ONNX")
             with torch.no_grad(), tqdm(loader, desc="Predicting", unit="batch", disable=False) as tepoch:
                 for data in tepoch:
-                    X_batch = batch_to_device(data[0], self.x_tensor_type, self.device)
+                    X_batch = data[0].to(self.device)
                     y_pred = onnx_model.run(output_names, {input_names[0]: X_batch.numpy()})[0]
                     predictions.extend(y_pred)
 
@@ -320,7 +271,7 @@ class TorchTrainer(TransformationBlock):
             logger.info("Done compiling model to Openvino")
             with torch.no_grad(), tqdm(loader, desc="Predicting", unit="batch", disable=False) as tepoch:
                 for data in tepoch:
-                    X_batch = batch_to_device(data[0], self.x_tensor_type, self.device)
+                    X_batch = data[0].to(self.device)
                     y_pred = openvino_model(X_batch)[0]
                     predictions.extend(y_pred)
 
@@ -351,7 +302,7 @@ class TorchTrainer(TransformationBlock):
         :return: The training and validation dataloaders.
         """
         # Create datasets
-        dataset = TorchDataset(data, "train_indices")
+        dataset = self.model.get_dataset_cls()(data, indices)
 
         # Create dataloaders
         loader = DataLoader(
@@ -541,14 +492,14 @@ class TorchTrainer(TransformationBlock):
             desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
         )
         for batch in pbar:
-            X_batch, y_batch = batch
+            x_batch, y_batch = batch
 
-            X_batch = batch_to_device(X_batch, self.x_tensor_type, self.device)
-            y_batch = batch_to_device(y_batch, self.y_tensor_type, self.device)
+            x_batch = x_batch.to(self.device)
+            y_batch = y_batch.to(self.device)
 
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
-                y_pred = self.model(X_batch).squeeze(1)
+                y_pred = self.model(x_batch).squeeze(1)
                 loss = self.criterion(y_pred, y_batch)
 
             # Backward pass
@@ -587,13 +538,13 @@ class TorchTrainer(TransformationBlock):
         pbar = tqdm(dataloader, unit="batch")
         with torch.no_grad():
             for batch in pbar:
-                X_batch, y_batch = batch
+                x_batch, y_batch = batch
 
-                X_batch = batch_to_device(X_batch, self.x_tensor_type, self.device)
-                y_batch = batch_to_device(y_batch, self.y_tensor_type, self.device)
+                x_batch = x_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
 
                 # Forward pass
-                y_pred = self.model(X_batch).squeeze(1)
+                y_pred = self.model(x_batch).squeeze(1)
                 loss = self.criterion(y_pred, y_batch)
 
                 # Print losses

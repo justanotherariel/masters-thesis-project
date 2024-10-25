@@ -8,10 +8,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Special tokens
-SOS_TOKEN = torch.tensor([100, 0, 1], dtype=torch.int8)  # Start of sequence
-SEP_TOKEN = torch.tensor([100, 0, 2], dtype=torch.int8)  # Separator
-PAD_TOKEN = torch.tensor([100, 0, 0], dtype=torch.int8)  # Padding
-
+PAD_TOKEN = torch.tensor([100, 0, 0], dtype=torch.uint8)  # Padding
+SOS_TOKEN = torch.tensor([100, 0, 1], dtype=torch.uint8)  # Start of sequence
+SEP_TOKEN = torch.tensor([100, 0, 2], dtype=torch.uint8)  # Separator
+ACTION_TOKEN = torch.tensor([100, 1, 0], dtype=torch.uint8)  # Action - last idx
+REWARD_TOKEN = torch.tensor([100, 2, 0], dtype=torch.uint8)  # Reward - last idx
 
 class SparseMultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads, dropout=0.1, sparsity=0.9):
@@ -90,7 +91,7 @@ class SparseTransformer(nn.Module):
             self.output_projection = nn.Linear(self.d_model, self.input_dim)
 
         # self.norm = nn.BatchNorm1d(self.d_model if self.d_model is not None else self.input_dim)
-        self.norm = nn.BatchNorm1d(52)
+        self.norm = nn.BatchNorm1d(53)
 
         self.layers = nn.ModuleList(
             [
@@ -102,28 +103,39 @@ class SparseTransformer(nn.Module):
         self.action_embedding = nn.Embedding(self.num_actions, self.d_model)
         self.sos_token = nn.Parameter(torch.randn(self.d_model))
         self.sep_token = nn.Parameter(torch.randn(self.d_model))
+        
+        # Hardcode Special Token Indices
+        self.sos_idx = 0      # sos_mask = (x == SOS_TOKEN).all(dim=-1)
+        self.action_idx = 26  # sep_mask = (x == SEP_TOKEN).all(dim=-1)
+        self.sep_idx = 27     # action_indices = torch.nonzero(sep_mask)[:,1]-1
 
     def forward(self, x):
         # Calculate mask based on padding tokens in x sequence
         mask = (x == PAD_TOKEN).all(dim=-1).unsqueeze(1).unsqueeze(1)
-
-        # Get SOS and SEP tokens
-        sos_mask = (x == SOS_TOKEN).all(dim=-1)
-        sep_mask = (x == SEP_TOKEN).all(dim=-1)
-
-        # Get action
-        action = x[~sep_mask][:, -1].values
-
+        
         # Project input to d_model dimensions
         if hasattr(self, "input_projection"):
+            # Get SOS and SEP tokens
+            sos_mask = (x == SOS_TOKEN).all(dim=-1)
+            sep_mask = (x == SEP_TOKEN).all(dim=-1)
+            action_indices = torch.nonzero(sep_mask)[:,1] - torch.ones(x.shape[0], dtype=torch.uint8)
+            actions = x[torch.arange(x.shape[0], device=x.device), action_indices][:,2].to(dtype=torch.int)
+            
+            # Convert from uint8 to float
+            x = x.to(dtype=torch.float)
+            
+            # Expand X
             x = self.input_projection(x)
-
+            
             # Replace SOS and SEP tokens
             x[sos_mask] = self.sos_token
             x[sep_mask] = self.sep_token
 
             # Embed action
-            x[~sep_mask] = self.action_embedding(action)
+            x[torch.arange(x.shape[0], device=x.device), action_indices] = self.action_embedding(actions)
+        else:
+            # Convert from uint8 to float
+            x = x.to(dtype=torch.float)
 
         # Normalize x
         x = self.norm(x)
@@ -150,3 +162,27 @@ class SparseTransformer(nn.Module):
 
     def __hash__(self):
         return hash(repr(self))
+
+    def get_dataset_cls(self):
+        from ..datasets.token_dataset import TokenMinigridDataset
+        return TokenMinigridDataset
+    
+    def predict_next_state(self, x) -> torch.Tensor:
+        """Predict the next state from a given state."""
+        output_size = x.shape[0]
+        output_size -= 1 # Remove ACTION token
+        output_size += 1 # Add REWARD token
+        
+        output_sequence = []
+        
+        x_new = torch.full((x.shape[0] +2 + output_size, 3), PAD_TOKEN, dtype=torch.uint8)
+        x_new[0] = SOS_TOKEN
+        x_new[1 : x.shape[0]+1] = x
+        x_new[x.shape[0]+2] = SEP_TOKEN
+        
+        while len(output_sequence) < output_size:
+            x = self(x_new)
+            x_new[x.shape[0]+2+len(output_sequence)] = x
+            output_sequence.append(x)
+        
+        return torch.stack(output_sequence)

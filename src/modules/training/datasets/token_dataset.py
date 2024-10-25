@@ -61,12 +61,11 @@ class TokenMinigridDataset(Dataset):
         position_idx = idx % self._token_combinations
 
         # Create input token sequence
-        x = torch.empty((self._data_len_of_input + self._data_len_of_output -1, 3), dtype=torch.int8)
+        x = torch.empty((self._data_len_of_input + self._data_len_of_output -1, 3), dtype=torch.uint8)
         x[0] = SOS_TOKEN    # Start of sequence
         x[1 : self._data_len_of_state + 1] = torch.tensor(self._data.observations[sample_idx[0]].reshape(-1, 3))    # State
-        x[self._data_len_of_input - 2] = torch.tensor(self._data.actions[sample_idx[2]])    # Action
+        x[self._data_len_of_input - 2] = torch.tensor([100, 1, self._data.actions[sample_idx[2]].item()])    # Action
         x[self._data_len_of_input - 1] = SEP_TOKEN  # End of sequence
-
 
         # Add the rest of the output tokens
         x[self._data_len_of_input : self._data_len_of_input + position_idx] = torch.tensor(self._data.observations[sample_idx[1]].reshape(-1, 3)[:position_idx])
@@ -79,6 +78,6 @@ class TokenMinigridDataset(Dataset):
         if position_idx < self._data_len_of_state:
             y = torch.tensor(self._data.observations[sample_idx[1]].reshape(-1, 3)[position_idx])
         else:
-            y = torch.full((3,), self._data.rewards[sample_idx[2]].item())
+            y = torch.tensor([100, 2, self._data.rewards[sample_idx[2]].item()])
 
         return x, y
