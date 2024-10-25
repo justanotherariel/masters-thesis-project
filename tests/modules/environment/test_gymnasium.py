@@ -53,7 +53,7 @@ def test_gymnsasium_sampler():
         assert idx[0] in range(len(data.observations))
         assert idx[1] in range(len(data.observations))
         assert idx[2] in range(len(data.actions))
-    
+
     val_indices = flatten_indices(data.validation_indices)
     assert len(val_indices) == round(num_samples * (1 - perc_train))
     for idx in val_indices:

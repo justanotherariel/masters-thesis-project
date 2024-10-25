@@ -14,6 +14,7 @@ SEP_TOKEN = torch.tensor([100, 0, 2], dtype=torch.uint8)  # Separator
 ACTION_TOKEN = torch.tensor([100, 1, 0], dtype=torch.uint8)  # Action - last idx
 REWARD_TOKEN = torch.tensor([100, 2, 0], dtype=torch.uint8)  # Reward - last idx
 
+
 class SparseMultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads, dropout=0.1, sparsity=0.9):
         super().__init__()
@@ -103,30 +104,30 @@ class SparseTransformer(nn.Module):
         self.action_embedding = nn.Embedding(self.num_actions, self.d_model)
         self.sos_token = nn.Parameter(torch.randn(self.d_model))
         self.sep_token = nn.Parameter(torch.randn(self.d_model))
-        
+
         # Hardcode Special Token Indices
-        self.sos_idx = 0      # sos_mask = (x == SOS_TOKEN).all(dim=-1)
+        self.sos_idx = 0  # sos_mask = (x == SOS_TOKEN).all(dim=-1)
         self.action_idx = 26  # sep_mask = (x == SEP_TOKEN).all(dim=-1)
-        self.sep_idx = 27     # action_indices = torch.nonzero(sep_mask)[:,1]-1
+        self.sep_idx = 27  # action_indices = torch.nonzero(sep_mask)[:,1]-1
 
     def forward(self, x):
         # Calculate mask based on padding tokens in x sequence
         mask = (x == PAD_TOKEN).all(dim=-1).unsqueeze(1).unsqueeze(1)
-        
+
         # Project input to d_model dimensions
         if hasattr(self, "input_projection"):
             # Get SOS and SEP tokens
             sos_mask = (x == SOS_TOKEN).all(dim=-1)
             sep_mask = (x == SEP_TOKEN).all(dim=-1)
-            action_indices = torch.nonzero(sep_mask)[:,1] - torch.ones(x.shape[0], dtype=torch.uint8)
-            actions = x[torch.arange(x.shape[0], device=x.device), action_indices][:,2].to(dtype=torch.int)
-            
+            action_indices = torch.nonzero(sep_mask)[:, 1] - torch.ones(x.shape[0], dtype=torch.uint8)
+            actions = x[torch.arange(x.shape[0], device=x.device), action_indices][:, 2].to(dtype=torch.int)
+
             # Convert from uint8 to float
             x = x.to(dtype=torch.float)
-            
+
             # Expand X
             x = self.input_projection(x)
-            
+
             # Replace SOS and SEP tokens
             x[sos_mask] = self.sos_token
             x[sep_mask] = self.sep_token
@@ -165,24 +166,25 @@ class SparseTransformer(nn.Module):
 
     def get_dataset_cls(self):
         from ..datasets.token_dataset import TokenMinigridDataset
+
         return TokenMinigridDataset
-    
+
     def predict_next_state(self, x) -> torch.Tensor:
         """Predict the next state from a given state."""
         output_size = x.shape[0]
-        output_size -= 1 # Remove ACTION token
-        output_size += 1 # Add REWARD token
-        
+        output_size -= 1  # Remove ACTION token
+        output_size += 1  # Add REWARD token
+
         output_sequence = []
-        
-        x_new = torch.full((x.shape[0] +2 + output_size, 3), PAD_TOKEN, dtype=torch.uint8)
+
+        x_new = torch.full((x.shape[0] + 2 + output_size, 3), PAD_TOKEN, dtype=torch.uint8)
         x_new[0] = SOS_TOKEN
-        x_new[1 : x.shape[0]+1] = x
-        x_new[x.shape[0]+2] = SEP_TOKEN
-        
+        x_new[1 : x.shape[0] + 1] = x
+        x_new[x.shape[0] + 2] = SEP_TOKEN
+
         while len(output_sequence) < output_size:
             x = self(x_new)
-            x_new[x.shape[0]+2+len(output_sequence)] = x
+            x_new[x.shape[0] + 2 + len(output_sequence)] = x
             output_sequence.append(x)
-        
+
         return torch.stack(output_sequence)

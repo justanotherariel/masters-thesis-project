@@ -17,10 +17,12 @@ from .minigrid_wrappers import FullyObsWrapper
 
 logger = Logger()
 
+
 def flatten_indices(indices: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
     """Flatten the indices for the dataset (remove the trajectory idx dimension) and remove padding."""
-    indices_flat = indices.reshape(-1,3)
-    return indices_flat[indices_flat[:, 0] != -1]   
+    indices_flat = indices.reshape(-1, 3)
+    return indices_flat[indices_flat[:, 0] != -1]
+
 
 @dataclass
 class GymnasiumBuilder(TransformationBlock):
@@ -96,20 +98,19 @@ class GymnasiumSampler(TransformationBlock):
         observations: list[npt.NDArray] = []
         data.actions = np.empty((self.num_samples, 1), dtype=np.int8)
         data.rewards = np.empty((self.num_samples, 1), dtype=np.float16)
-        
+
         # [trajectory_id, [state_x, state_y, action/reward_idx]]
         train_indices: list[list[int]] = []
         validation_indices: list[list[int]] = []
-        
+
         samples_idx = 0
-        state_idx = 0
 
         progress_bar = tqdm.tqdm(total=self.num_samples, desc="Sampling Environment", unit="samples")
         while samples_idx < self.num_samples:
             trajectory: list[int] = []
             observation, _info = env.reset()
-            
-            for i in range(self.num_samples_per_env):
+
+            for _ in range(self.num_samples_per_env):
                 # Save current State
                 observations.append(observation)
 
@@ -120,7 +121,7 @@ class GymnasiumSampler(TransformationBlock):
                 # Save Action and Reward
                 data.actions[samples_idx] = action
                 data.rewards[samples_idx] = reward
-                
+
                 # Save the indices
                 trajectory.append((len(observations) - 1, len(observations), samples_idx))
 
@@ -131,13 +132,13 @@ class GymnasiumSampler(TransformationBlock):
                     break
                 if terminated or truncated:
                     break
-                
+
             # Record the final state of the trajectory
             observations.append(observation)
 
             # Append the indices to the correct list
             indices_collected = np.full((self.num_samples_per_env, 3), -1)
-            indices_collected[:len(trajectory)] = np.array(trajectory)
+            indices_collected[: len(trajectory)] = np.array(trajectory)
             if samples_idx <= train_samples:
                 train_indices.append(indices_collected)
             else:
