@@ -2,28 +2,22 @@
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-# Special tokens
-PAD_TOKEN = torch.tensor([100, 0, 0], dtype=torch.uint8)  # Padding
-SOS_TOKEN = torch.tensor([100, 0, 1], dtype=torch.uint8)  # Start of sequence
-SEP_TOKEN = torch.tensor([100, 0, 2], dtype=torch.uint8)  # Separator
-ACTION_TOKEN = torch.tensor([100, 1, 0], dtype=torch.uint8)  # Action - last idx
-REWARD_TOKEN = torch.tensor([100, 2, 0], dtype=torch.uint8)  # Reward - last idx
-
-
+import functools
+    
 class SparseMultiHeadAttention(nn.Module):
-    def __init__(self, d_model, num_heads, dropout=0.1, sparsity=0.9):
+    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1, sparsity: float = 0.9):
         super().__init__()
+        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
+        
         self.d_model = d_model
         self.num_heads = num_heads
         self.dropout = dropout
         self.sparsity = sparsity
-
-        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
         self.d_k = d_model // num_heads
 
         self.W_q = nn.Linear(d_model, d_model)
@@ -75,79 +69,105 @@ class SparseTransformerBlock(nn.Module):
 
 @dataclass
 class SparseTransformer(nn.Module):
-    num_actions: int
     d_model: int
     num_heads: int
     num_layers: int
     d_ff: int
-    input_dim: int = None
     dropout: float = 0.1
     sparsity: float = 0.9
+    max_seq_length: int = 512
 
     def __post_init__(self):
         super().__init__()
+        
+        # Layer normalization
+        self.norm = nn.LayerNorm(self.d_model)
+        
+        # Positional encoding
+        self.pos_encoding = nn.Parameter(
+            torch.zeros(1, self.max_seq_length, self.d_model)
+        )
+        self._init_pos_encoding()
 
-        if self.input_dim is not None:
-            self.input_projection = nn.Linear(self.input_dim, self.d_model)
-            self.output_projection = nn.Linear(self.d_model, self.input_dim)
-
-        # self.norm = nn.BatchNorm1d(self.d_model if self.d_model is not None else self.input_dim)
-        self.norm = nn.BatchNorm1d(53)
-
+        # Transformer layers
         self.layers = nn.ModuleList(
             [
                 SparseTransformerBlock(self.d_model, self.num_heads, self.d_ff, self.dropout, self.sparsity)
                 for _ in range(self.num_layers)
             ]
         )
+        
+    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+        """Setup the transformation block.
 
-        self.action_embedding = nn.Embedding(self.num_actions, self.d_model)
-        self.sos_token = nn.Parameter(torch.randn(self.d_model))
-        self.sep_token = nn.Parameter(torch.randn(self.d_model))
-
-        # Hardcode Special Token Indices
-        self.sos_idx = 0  # sos_mask = (x == SOS_TOKEN).all(dim=-1)
-        self.action_idx = 26  # sep_mask = (x == SEP_TOKEN).all(dim=-1)
-        self.sep_idx = 27  # action_indices = torch.nonzero(sep_mask)[:,1]-1
-
-    def forward(self, x):
+        :param info: The input data.
+        :return: The transformed data.
+        """
+        self.info = info
+        ti = info['token_index']
+        ti.discrete = True
+        self.softmax_ranges = [
+            ti.type_,
+            ti.observation[0],
+            ti.observation[1],
+            ti.observation[2],
+            ti.action_,
+        ]
+        
+        return info
+        
+    # def _init_pos_encoding(self):
+    #     position = torch.arange(self.max_seq_length).unsqueeze(1)
+    #     div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-math.log(10000.0) / self.d_model))
+    #     pe = torch.zeros(1, self.max_seq_length, self.d_model)
+    #     pe[0, :, 0::2] = torch.sin(position * div_term)
+    #     pe[0, :, 1::2] = torch.cos(position * div_term)
+    #     self.pos_encoding.data.copy_(pe)
+    
+    def _init_pos_encoding(self):
+        position = torch.arange(self.max_seq_length).unsqueeze(1)  # [seq_len, 1]
+        
+        # Calculate dimensions for even indices and odd indices
+        even_dim = (self.d_model + 1) // 2  # Number of sin terms (ceiling division)
+        odd_dim = self.d_model // 2         # Number of cos terms (floor division)
+        
+        # Create div_term for the maximum number of terms needed
+        div_term = torch.exp(
+            torch.arange(0, even_dim) * (-math.log(10000.0) / self.d_model)
+        )
+        
+        # Initialize positional encoding tensor
+        pe = torch.zeros(1, self.max_seq_length, self.d_model)
+        
+        # Generate indices for sin and cos terms
+        even_indices = torch.arange(0, self.d_model, 2)  # [0, 2, 4, ...]
+        odd_indices = torch.arange(1, self.d_model, 2)   # [1, 3, 5, ...]
+        
+        # Fill in sin terms (even indices)
+        pe[0, :, even_indices] = torch.sin(position * div_term[:len(even_indices)])
+        
+        # Fill in cos terms (odd indices)
+        if len(odd_indices) > 0:
+            pe[0, :, odd_indices] = torch.cos(position * div_term[:len(odd_indices)])
+        
+        self.pos_encoding.data.copy_(pe)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Calculate mask based on padding tokens in x sequence
-        mask = (x == PAD_TOKEN).all(dim=-1).unsqueeze(1).unsqueeze(1)
+        mask = (x[:, :, 0] == 0).unsqueeze(1).unsqueeze(1)
 
-        # Project input to d_model dimensions
-        if hasattr(self, "input_projection"):
-            # Get SOS and SEP tokens
-            sos_mask = (x == SOS_TOKEN).all(dim=-1)
-            sep_mask = (x == SEP_TOKEN).all(dim=-1)
-            action_indices = torch.nonzero(sep_mask)[:, 1] - torch.ones(x.shape[0], dtype=torch.uint8)
-            actions = x[torch.arange(x.shape[0], device=x.device), action_indices][:, 2].to(dtype=torch.int)
-
-            # Convert from uint8 to float
-            x = x.to(dtype=torch.float)
-
-            # Expand X
-            x = self.input_projection(x)
-
-            # Replace SOS and SEP tokens
-            x[sos_mask] = self.sos_token
-            x[sep_mask] = self.sep_token
-
-            # Embed action
-            x[torch.arange(x.shape[0], device=x.device), action_indices] = self.action_embedding(actions)
-        else:
-            # Convert from uint8 to float
-            x = x.to(dtype=torch.float)
-
-        # Normalize x
-        x = self.norm(x)
+        # Modify input
+        x = x.float() # Convert to float
+        x = x + self.pos_encoding[:, :x.size(1)] # Positional encoding
+        x = self.norm(x) # Normalize
 
         # Apply layers
         for layer in self.layers:
             x = layer(x, mask)
-
-        # Project back to input dimensions
-        if hasattr(self, "output_projection"):
-            x = self.output_projection(x)
+            
+        # Apply softmax
+        for range in self.softmax_ranges:
+            x[:, :, range] = F.softmax(x[:, :, range], dim=-1)
 
         # Return last token
         return x[:, -1]
@@ -167,24 +187,4 @@ class SparseTransformer(nn.Module):
     def get_dataset_cls(self):
         from ..datasets.token_dataset import TokenMinigridDataset
 
-        return TokenMinigridDataset
-
-    def predict_next_state(self, x) -> torch.Tensor:
-        """Predict the next state from a given state."""
-        output_size = x.shape[0]
-        output_size -= 1  # Remove ACTION token
-        output_size += 1  # Add REWARD token
-
-        output_sequence = []
-
-        x_new = torch.full((x.shape[0] + 2 + output_size, 3), PAD_TOKEN, dtype=torch.uint8)
-        x_new[0] = SOS_TOKEN
-        x_new[1 : x.shape[0] + 1] = x
-        x_new[x.shape[0] + 2] = SEP_TOKEN
-
-        while len(output_sequence) < output_size:
-            x = self(x_new)
-            x_new[x.shape[0] + 2 + len(output_sequence)] = x
-            output_sequence.append(x)
-
-        return torch.stack(output_sequence)
+        return functools.partial(TokenMinigridDataset, discretize = True)

@@ -45,14 +45,27 @@ class ModelPipeline(TransformType):
                 children.append(sys)
 
         self._set_children(children)
+        
+    def setup(self, data: Any = None) -> Any:
+        """Setup the pipeline.
 
-    def transform(self, **transform_args: Any) -> XData:
+        :param data: The input data.
+        """
+        if self.env_sys is not None:
+            data = self.env_sys.setup(data)
+        if self.train_sys is not None:
+            data = self.train_sys.setup(data)
+        if self.pred_sys is not None:
+            data = self.pred_sys.setup(data)
+
+        return
+
+    def transform(self, data: Any = None, **transform_args: Any) -> XData:
         """Train the system.
 
         :param train_args: The arguments to pass to the training system. (Default is {})
         :return: The output of the system.
         """
-        data = None
         if self.env_sys is not None:
             data = self.env_sys.transform(data, **transform_args.get("env_sys", {}))
         if self.train_sys is not None:

@@ -12,6 +12,13 @@ logger = Logger()
 class TransformType(_Base):
     """Abstract transform type describing a class that implements the transform function"""
 
+    def setup(self, data: Any) -> Any:
+        """Setup the transformation block.
+
+        :param data: The input data.
+        """
+        return data
+
     @abstractmethod
     def transform(self, data: Any, **transform_args: Any) -> Any:
         """Transform the input data.
@@ -169,6 +176,16 @@ class TransformingSystem(TransformType, _SequentialSystem):
                 raise TypeError(f"{step} is not an instance of TransformType")
 
         super().__post_init__()
+        
+    def setup(self, data: Any = None) -> Any:
+        """Setup the transformation block.
+
+        :param data: The input data.
+        """
+        
+        for step in self.steps:
+            data = step.setup(data)
+        return data
 
     def transform(self, data: Any, **transform_args: Any) -> Any:
         """Transform the input data.

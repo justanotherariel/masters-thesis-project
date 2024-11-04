@@ -78,8 +78,6 @@ class TorchTrainer(TransformationBlock):
     - `n_folds` (float): Number of folds for cross validation (0 for train full,
     - `_fold` (int): Fold number
     - `validation_size` (float): Relative size of the validation set
-    - `x_tensor_type` (str): Type of x tensor for data
-    - `y_tensor_type` (str): Type of y tensor for labels
     """
 
     # Modules
@@ -110,6 +108,7 @@ class TorchTrainer(TransformationBlock):
     model_name: str | None = None  # No spaces allowed
     trained_models_directory: PathLike[str] = field(default=Path("tm/"), repr=False, compare=False)
     to_predict: Literal["validation", "all", "none"] = field(default="validation", repr=False, compare=False)
+    setup_info: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     # Parameters relevant for Hashing
     n_folds: Annotated[int, Ge(0)] = field(default=-1, init=True, repr=False, compare=False)
@@ -173,6 +172,23 @@ class TorchTrainer(TransformationBlock):
             torch.set_float32_matmul_precision("high")
 
         super().__post_init__()
+        
+    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+        """Setup the transformation block.
+
+        :param data: The input data.
+        :return: The transformed data.
+        """
+        self.setup_info = info
+        
+        if isinstance(self.model.get_dataset_cls(), functools.partial):
+            info['token_index'] = self.model.get_dataset_cls().func.create_ti(info)
+        else:
+            info['token_index'] = self.model.get_dataset_cls().create_ti(info)
+        
+        self.model.setup(info)
+        
+        return info
 
     def custom_transform(self, data: XData, **train_args: Any) -> XData:
         """Train the model.
@@ -198,8 +214,10 @@ class TorchTrainer(TransformationBlock):
             self._model_train(data)
 
         # Evaluate the model
-        loader = self.create_dataloader(data, f"{self.to_predict}_indices")
-        return self.predict_on_loader(loader)
+        loader = self.create_dataloader(data, f"{self.to_predict}_indices", shuffle=False)
+        data.validation_labels = loader.dataset
+        data.validation_predictions, data.validation_labels = self.predict_on_loader(loader)
+        return data
 
     def predict_on_loader(
         self,
@@ -213,21 +231,15 @@ class TorchTrainer(TransformationBlock):
         """
         logger.info("Running inference on the given dataloader")
         self.model.eval()
+        labels = []
         predictions = []
-        # Create a new dataloader from the dataset of the input dataloader with collate_fn
-        loader = DataLoader(
-            loader.dataset,
-            batch_size=loader.batch_size,
-            shuffle=False,
-            collate_fn=(self.collate_fn if hasattr(loader.dataset, "__getitems__") else None),
-            **self.dataloader_args,
-        )
         if compile_method is None:
             with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
                 for data in tepoch:
                     X_batch = data[0].to(self.device)
                     y_pred = self.model(X_batch).squeeze(1).cpu().numpy()
                     predictions.extend(y_pred)
+                    labels.extend(data[1])
 
         elif compile_method == "ONNX":
             if self.device != torch.device("cpu"):
@@ -254,6 +266,7 @@ class TorchTrainer(TransformationBlock):
                     X_batch = data[0].to(self.device)
                     y_pred = onnx_model.run(output_names, {input_names[0]: X_batch.numpy()})[0]
                     predictions.extend(y_pred)
+                    labels.extend(data[1])
 
             # Remove the onnx file
             Path(f"{self.get_hash()}.onnx").unlink()
@@ -274,9 +287,10 @@ class TorchTrainer(TransformationBlock):
                     X_batch = data[0].to(self.device)
                     y_pred = openvino_model(X_batch)[0]
                     predictions.extend(y_pred)
+                    labels.extend(data[1])
 
         logger.info("Done predicting!")
-        return np.array(predictions)
+        return np.array(predictions), np.array(labels)
 
     def get_hash(self) -> str:
         """Get the hash of the block.
@@ -294,6 +308,7 @@ class TorchTrainer(TransformationBlock):
         self,
         data: XData,
         indices: str,
+        shuffle: bool = True,
     ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
         """Create the dataloaders for training and validation.
 
@@ -303,12 +318,13 @@ class TorchTrainer(TransformationBlock):
         """
         # Create datasets
         dataset = self.model.get_dataset_cls()(data, indices)
+        dataset.setup(self.setup_info)
 
         # Create dataloaders
         loader = DataLoader(
             dataset,
             batch_size=self.batch_size,
-            shuffle=True,
+            shuffle=shuffle,
             collate_fn=(self.collate_fn if hasattr(dataset, "__getitems__") else None),
             **self.dataloader_args,
         )
@@ -500,7 +516,7 @@ class TorchTrainer(TransformationBlock):
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model(x_batch).squeeze(1)
-                loss = self.criterion(y_pred, y_batch)
+                loss = self.criterion(y_pred, y_batch.float())
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -517,8 +533,8 @@ class TorchTrainer(TransformationBlock):
             pbar.set_postfix(loss=sum(losses) / len(losses))
 
         # Remove the cuda cache
-        torch.cuda.empty_cache()
-        gc.collect()
+        # torch.cuda.empty_cache()
+        # gc.collect()
 
         return sum(losses) / len(losses)
 
@@ -545,7 +561,7 @@ class TorchTrainer(TransformationBlock):
 
                 # Forward pass
                 y_pred = self.model(x_batch).squeeze(1)
-                loss = self.criterion(y_pred, y_batch)
+                loss = self.criterion(y_pred, y_batch.float())
 
                 # Print losses
                 losses.append(loss.item())

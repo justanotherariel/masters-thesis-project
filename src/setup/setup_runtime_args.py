@@ -11,7 +11,6 @@ def setup_transform_args(
     fold: int = -1,
     *,
     save_model: bool = False,
-    save_model_preds: bool = False,
 ) -> dict[str, Any]:
     """Set train arguments for pipeline.
 
@@ -24,30 +23,31 @@ def setup_transform_args(
     :param save_model_preds: Whether to save the model predictions
     :return: Dictionary containing arguments
     """
+    
+    # Environment system
     env_sys = {
         "cache_args": cache_args,
     }
 
-    main_trainer = {
+    # Training system
+    torch_trainer = {
         "save_model": save_model,
     }
 
     if fold > -1:
-        main_trainer["fold"] = fold
+        torch_trainer["fold"] = fold
 
     train_sys = {
-        "MainTrainer": main_trainer,
+        "TorchTrainer": torch_trainer,
     }
 
-    if save_model_preds:
-        train_sys["cache_args"] = cache_args
-
+    # Prediction system / Scoring
     pred_sys: dict[str, Any] = {}
 
+    # Result
     train_args = {
         "env_sys": env_sys,
         "train_sys": train_sys,
         "pred_sys": pred_sys,
     }
-
     return train_args

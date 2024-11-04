@@ -27,8 +27,8 @@ cs = ConfigStore.instance()
 cs.store(name="base_train", node=TrainConfig)
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
-def run_train(cfg: DictConfig) -> None:
-    """Train a model pipeline with a train-test split. Entry point for Hydra which loads the config file."""
+def main(cfg: DictConfig) -> None:
+    """Run the model pipeline. Entry point for Hydra which loads the config file."""
     
     # Install coloredlogs
     coloredlogs.install()
@@ -36,11 +36,11 @@ def run_train(cfg: DictConfig) -> None:
     # Run the train config with an optional lock
     optional_lock = Lock if not cfg.allow_multiple_instances else nullcontext
     with optional_lock():
-        run_train_cfg(cfg)
+        run_train(cfg)
 
 
-def run_train_cfg(cfg: DictConfig) -> None:
-    """Train a model pipeline with a train-test split."""
+def run_train(cfg: DictConfig) -> None:
+    """Run the model pipeline."""
     # Get output directory
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
@@ -57,6 +57,7 @@ def run_train_cfg(cfg: DictConfig) -> None:
     # Preload the pipeline
     logger.info("Setting up the pipeline")
     model_pipeline = setup_pipeline(cfg)
+    _ = model_pipeline.setup()
 
     # Cache arguments for x_sys
     cache_data_path = Path(cfg.cache_path)
@@ -69,7 +70,7 @@ def run_train_cfg(cfg: DictConfig) -> None:
 
     logger.log_section_separator("Train model pipeline")
     transform_args = setup_transform_args(model_pipeline, cache_args)
-    data = model_pipeline.transform(**transform_args)
+    _ = model_pipeline.transform(**transform_args)
 
     # if y is None:
     #     y = y_new
@@ -87,4 +88,4 @@ def run_train_cfg(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    run_train()
+    main()

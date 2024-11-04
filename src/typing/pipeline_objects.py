@@ -12,6 +12,7 @@ class XData:
     train_indices: NDArray[np.int32] | None
     validation_indices: NDArray[np.int32] | None
 
+    validation_labels: NDArray[np.number] | None
     validation_predictions: NDArray[np.number] | None
 
     def check_data(self) -> bool:
