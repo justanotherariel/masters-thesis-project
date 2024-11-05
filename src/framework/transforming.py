@@ -176,13 +176,13 @@ class TransformingSystem(TransformType, _SequentialSystem):
                 raise TypeError(f"{step} is not an instance of TransformType")
 
         super().__post_init__()
-        
+
     def setup(self, data: Any = None) -> Any:
         """Setup the transformation block.
 
         :param data: The input data.
         """
-        
+
         for step in self.steps:
             data = step.setup(data)
         return data

@@ -1,24 +1,31 @@
 from math import prod
+
 import torch
 
 from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSampler
-from src.modules.training.datasets.token_dataset import TokenMinigridDataset
-from src.modules.training.datasets.token_dataset import TokenType
+from src.modules.training.datasets.autoregressive_dataset import AutoregressiveDataset, TokenType
 from src.typing.pipeline_objects import XData
 
 
-def create_token_minigrid_dataset(environment: str, num_samples: int, num_samples_per_env: int, perc_train: int, indices: str, discretize: bool = False) -> TokenMinigridDataset:
+def create_token_minigrid_dataset(
+    environment: str,
+    num_samples: int,
+    num_samples_per_env: int,
+    perc_train: int,
+    indices: str,
+    discretize: bool = False,
+) -> AutoregressiveDataset:
     """Create a token minigrid dataset."""
     builder = GymnasiumBuilder(environment)
     sampler = GymnasiumSampler(num_samples, num_samples_per_env, perc_train)
-    
+
     info = builder.setup({})
     info = sampler.setup(info)
-    
+
     data = builder.transform(XData())
     data = sampler.transform(data)
-    
-    dataset = TokenMinigridDataset(data, indices, discretize)
+
+    dataset = AutoregressiveDataset(data, indices, discretize)
     dataset.setup(info)
 
     return dataset, info
@@ -26,16 +33,22 @@ def create_token_minigrid_dataset(environment: str, num_samples: int, num_sample
 
 def _test_token_minigrid_dataset():
     """Test the TokenMinigridDataset class."""
-    
+
     num_samples_total = 100
     per_train = 0.8
     num_samples_train = num_samples_total * per_train
     environment_shape = (5, 5)
-    dataset, info = create_token_minigrid_dataset(environment="MiniGrid-Empty-5x5-v0", num_samples=num_samples_total, num_samples_per_env=5, perc_train=0.8, indices="train_indices")
+    dataset, info = create_token_minigrid_dataset(
+        environment="MiniGrid-Empty-5x5-v0",
+        num_samples=num_samples_total,
+        num_samples_per_env=5,
+        perc_train=0.8,
+        indices="train_indices",
+    )
 
     # Check the length of the dataset
     assert len(dataset) == num_samples_train * (prod(environment_shape) + 1)
-    
+
     # Access all items once to check for errors
     padding_token_list = []
     reward_token_list = []
@@ -76,20 +89,28 @@ def _test_token_minigrid_dataset():
     # Check that for each trajectory, a reward token is present
     assert len(reward_token_list) == 80
 
+
 def test_token_minigrid_dataset_with_token_discretizer():
     """Test the TokenMinigridDataset class with a TokenDiscretizer."""
-    
+
     num_samples_total = 50
     perc_train = 0.8
     num_samples_train = round(num_samples_total * perc_train)
     environment_shape = (5, 5)
-    dataset, info = create_token_minigrid_dataset(environment="MiniGrid-Empty-5x5-v0", num_samples=num_samples_total, num_samples_per_env=5, perc_train=perc_train, indices="train_indices", discretize=True)
-    
+    dataset, info = create_token_minigrid_dataset(
+        environment="MiniGrid-Empty-5x5-v0",
+        num_samples=num_samples_total,
+        num_samples_per_env=5,
+        perc_train=perc_train,
+        indices="train_indices",
+        discretize=True,
+    )
+
     ti = info["token_index"]
 
     # Check the length of the dataset
     assert len(dataset) == num_samples_train * (prod(environment_shape) + 1)
-    
+
     # Access all items once to check for errors
     padding_token_list = []
     y_reward_token_list = []
@@ -100,42 +121,41 @@ def test_token_minigrid_dataset_with_token_discretizer():
         ti.discrete = True
         assert x.shape == (5 * 5 * 2 + 1 + 1 + 1, ti.shape)
         assert y.shape == (ti.shape,)
-        
+
         # Check that everything is discretized correctly
         assert x.dtype == torch.uint8
         assert y.dtype == torch.uint8
-        
+
         assert torch.all(torch.sum(x[:, ti.type_], dim=-1) == 1)
         assert torch.sum(y[ti.type_]) == 1
-        
+
         assert torch.all(torch.sum(x[:, ti.observation[0]], dim=-1) == 1)
         assert torch.sum(y[ti.observation[0]]) == 1
-        
+
         assert torch.all(torch.sum(x[:, ti.observation[1]], dim=-1) == 1)
         assert torch.sum(y[ti.observation[1]]) == 1
-        
+
         assert torch.all(torch.sum(x[:, ti.observation[2]], dim=-1) == 1)
         assert torch.sum(y[ti.observation[2]]) == 1
-        
+
         assert torch.all(torch.sum(x[:, ti.action_], dim=-1) == 1)
         assert torch.sum(y[ti.action_]) == 1
-            
+
         # Reward is continuous
         assert torch.sum(x[:, ti.reward_]) == 0
-        assert y[ti.reward_] >= 0   # Reward is always positive
-        
+        assert y[ti.reward_] >= 0  # Reward is always positive
 
         # Check padding length
         num_padding_tokens = torch.sum(x[:, ti.type_][:, 0] == 1).item()
         assert num_padding_tokens <= 5 * 5
         padding_token_list.append(num_padding_tokens)
-        
+
         # Check action tokens - always appear in x
         assert torch.sum(x[:, ti.type_][:, TokenType.ACTION.value]) == 1
-        
+
         # Check action tokens - no action tokens as y
         assert y[ti.type_][TokenType.ACTION.value] == 0
-        
+
         # Check reward tokens - sometimes reward tokens as y
         if y[ti.type_][TokenType.REWARD.value] == 1:
             y_reward_token_list.append(y[ti.reward_].item())

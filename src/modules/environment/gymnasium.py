@@ -9,12 +9,12 @@ import minigrid.core
 import numpy as np
 import numpy.typing as npt
 import tqdm
+from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
 from minigrid.wrappers import ImgObsWrapper
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.typing.pipeline_objects import XData
-from minigrid.core.constants import OBJECT_TO_IDX, COLORS, STATE_TO_IDX
 
 from .minigrid_wrappers import FullyObsWrapper
 
@@ -49,7 +49,7 @@ class GymnasiumBuilder(TransformationBlock):
         self.env = FullyObsWrapper(self.env)  # Output fully observable grid
         self.env = ImgObsWrapper(self.env)  # Output only numpy array
         self.env.reset(seed=42)  # Seed the environment
-        
+
     def setup(self, data: dict[str, Any]) -> dict[str, Any]:
         """Setup the transformation block.
 
@@ -58,26 +58,27 @@ class GymnasiumBuilder(TransformationBlock):
         """
         if data is None:
             data = {}
-        
-        data.update({
-            "env_build": {
-                "action_space": self.env.action_space,
-                "observation_space": self.env.observation_space,
-                
-                "observation_info": [
-                    (0, len(OBJECT_TO_IDX)),
-                    (1, len(COLORS)),
-                    (2, len(STATE_TO_IDX) + 1),
-                ],
-                "action_info": [
-                    (0, self.env.action_space.n.item()),
-                ],
-                "reward_info": [
-                    (0, 0),
-                ],
+
+        data.update(
+            {
+                "env_build": {
+                    "action_space": self.env.action_space,
+                    "observation_space": self.env.observation_space,
+                    "observation_info": [
+                        (0, len(OBJECT_TO_IDX)),
+                        (1, len(COLORS)),
+                        (2, len(STATE_TO_IDX) + 1),
+                    ],
+                    "action_info": [
+                        (0, self.env.action_space.n.item()),
+                    ],
+                    "reward_info": [
+                        (0, 0),
+                    ],
+                }
             }
-        })
-        
+        )
+
         return data
 
     def custom_transform(self, data: XData) -> npt.NDArray[np.float32]:

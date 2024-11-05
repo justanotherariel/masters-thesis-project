@@ -23,7 +23,7 @@ def setup_transform_args(
     :param save_model_preds: Whether to save the model predictions
     :return: Dictionary containing arguments
     """
-    
+
     # Environment system
     env_sys = {
         "cache_args": cache_args,

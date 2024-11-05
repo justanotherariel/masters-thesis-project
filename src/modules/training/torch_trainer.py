@@ -3,12 +3,11 @@
 import contextlib
 import copy
 import functools
-import gc
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from os import PathLike
 from pathlib import Path
-from typing import Annotated, Any, Literal, Tuple, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -22,7 +21,7 @@ from tqdm import tqdm
 
 import wandb
 from src.framework.logging import Logger
-from src.framework.trainers._custom_data_parallel import _CustomDataParallel
+from src.framework.trainers.data_parallel import DataParallel
 from src.framework.trainers.utils import _get_onnxrt, _get_openvino
 from src.framework.transforming import TransformationBlock
 from src.typing.pipeline_objects import XData
@@ -86,7 +85,6 @@ class TorchTrainer(TransformationBlock):
     criterion: nn.Module
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     dataloader_args: dict[str, Any] = field(default_factory=dict, repr=False)
-    dataset: functools.partial[Dataset[Tuple[Tensor, Tensor]]] | None = None
 
     # Training parameters
     epochs: Annotated[int, Gt(0)] = 10
@@ -157,7 +155,7 @@ class TorchTrainer(TransformationBlock):
         # If multiple GPUs are available, distribute batch size over the GPUs
         if torch.cuda.device_count() > 1:
             logger.info(f"Using {torch.cuda.device_count()} GPUs")
-            self.model = _CustomDataParallel(self.model)
+            self.model = DataParallel(self.model)
 
         self.model.to(self.device)
 
@@ -172,7 +170,7 @@ class TorchTrainer(TransformationBlock):
             torch.set_float32_matmul_precision("high")
 
         super().__post_init__()
-        
+
     def setup(self, info: dict[str, Any]) -> dict[str, Any]:
         """Setup the transformation block.
 
@@ -180,14 +178,14 @@ class TorchTrainer(TransformationBlock):
         :return: The transformed data.
         """
         self.setup_info = info
-        
+
         if isinstance(self.model.get_dataset_cls(), functools.partial):
-            info['token_index'] = self.model.get_dataset_cls().func.create_ti(info)
+            info["token_index"] = self.model.get_dataset_cls().func.create_ti(info)
         else:
-            info['token_index'] = self.model.get_dataset_cls().create_ti(info)
-        
+            info["token_index"] = self.model.get_dataset_cls().create_ti(info)
+
         self.model.setup(info)
-        
+
         return info
 
     def custom_transform(self, data: XData, **train_args: Any) -> XData:
@@ -215,7 +213,6 @@ class TorchTrainer(TransformationBlock):
 
         # Evaluate the model
         loader = self.create_dataloader(data, f"{self.to_predict}_indices", shuffle=False)
-        data.validation_labels = loader.dataset
         data.validation_predictions, data.validation_labels = self.predict_on_loader(loader)
         return data
 
@@ -639,29 +636,6 @@ class TorchTrainer(TransformationBlock):
                     return True
         return False
 
-    def _concat_datasets(
-        self,
-        train_dataset: T,
-        validation_dataset: T,
-        train_indices: list[int] | npt.NDArray[np.int32],
-        validation_indices: list[int] | npt.NDArray[np.int32],
-    ) -> Dataset[T_co]:
-        """Concatenate the training and validation datasets according to original order
-        specified by train_indices and validation_indices.
-
-        :param train_dataset: The training dataset.
-        :param validation_dataset: The validation dataset.
-        :param train_indices: The indices for the training data.
-        :param validation_indices: The indices for the validation data.
-        :return: A new dataset containing the concatenated data in the original order.
-        """
-        return TrainValidationDataset(
-            train_dataset,
-            validation_dataset,
-            list(train_indices),
-            list(validation_indices),
-        )
-
     def get_model_path(self) -> Path:
         """Get the model path.
 
@@ -680,75 +654,3 @@ class TorchTrainer(TransformationBlock):
     def wrap_log(self, text: str) -> str:
         """Add logging prefix and postfix to the message."""
         return f"{self.logging_prefix}{text}{self.logging_postfix}"
-
-
-class TrainValidationDataset(Dataset[T_co]):
-    """Dataset as a concatenation of multiple datasets.
-
-    This class is useful to assemble different existing datasets.
-
-    :param train_dataset: The train dataset
-    :param validation_dataset: The validation dataset
-    :param train_indices: The train indices
-    :param validation_indices: The validation indices
-    """
-
-    train_dataset: Dataset[T_co]
-    validation_dataset: Dataset[T_co]
-    train_indices: list[int]
-    validation_indices: list[int]
-
-    def __init__(
-        self,
-        train_dataset: Dataset[T_co],
-        validation_dataset: Dataset[T_co],
-        train_indices: list[int],
-        validation_indices: list[int],
-    ) -> None:
-        """Initialize TrainValidationDataset.
-
-        :param train_dataset: The train dataset.
-        :param validation_dataset: The validation dataset.
-        :param train_indices: The train indices.
-        :param validation_indices: The validation indices.
-        """
-        super().__init__()
-        if len(train_dataset) != len(train_indices):  # type: ignore[arg-type]
-            raise ValueError("Train_dataset should be the same length as train_indices")
-        if len(validation_dataset) != len(validation_indices):  # type: ignore[arg-type]
-            raise ValueError("Validation_dataset should be the same length as validation_indices")
-        self.train_dataset = train_dataset
-        self.validation_dataset = validation_dataset
-        self.train_indices = train_indices
-        self.validation_indices = validation_indices
-
-    def __len__(self) -> int:
-        """Get the length of the dataset.
-
-        :return: The length of the dataset.
-        """
-        return len(self.train_dataset) + len(self.validation_dataset)  # type: ignore[arg-type]
-
-    def __getitem__(self, idx: int) -> T_co:
-        """Get the item at an idx.
-
-        :param idx: Index to retrieve.
-        :return: Value to return.
-        """
-        if idx < 0:
-            if -idx > len(self):
-                raise ValueError(
-                    "absolute value of index should not exceed dataset length",
-                )
-            idx = len(self) + idx
-
-        item = self.train_dataset[0]
-
-        if idx in self.train_indices:
-            train_index = self.train_indices.index(idx)
-            item = self.train_dataset[train_index]
-        else:
-            validation_index = self.validation_indices.index(idx)
-            item = self.validation_dataset[validation_index]
-
-        return item

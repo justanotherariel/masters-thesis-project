@@ -1,5 +1,6 @@
 """Transformer model with sparse attention mechanism."""
 
+import functools
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -7,13 +8,13 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import functools
-    
+
+
 class SparseMultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1, sparsity: float = 0.9):
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
-        
+
         self.d_model = d_model
         self.num_heads = num_heads
         self.dropout = dropout
@@ -79,14 +80,12 @@ class SparseTransformer(nn.Module):
 
     def __post_init__(self):
         super().__init__()
-        
+
         # Layer normalization
         self.norm = nn.LayerNorm(self.d_model)
-        
+
         # Positional encoding
-        self.pos_encoding = nn.Parameter(
-            torch.zeros(1, self.max_seq_length, self.d_model)
-        )
+        self.pos_encoding = nn.Parameter(torch.zeros(1, self.max_seq_length, self.d_model))
         self._init_pos_encoding()
 
         # Transformer layers
@@ -96,7 +95,7 @@ class SparseTransformer(nn.Module):
                 for _ in range(self.num_layers)
             ]
         )
-        
+
     def setup(self, info: dict[str, Any]) -> dict[str, Any]:
         """Setup the transformation block.
 
@@ -104,7 +103,7 @@ class SparseTransformer(nn.Module):
         :return: The transformed data.
         """
         self.info = info
-        ti = info['token_index']
+        ti = info["token_index"]
         ti.discrete = True
         self.softmax_ranges = [
             ti.type_,
@@ -113,9 +112,9 @@ class SparseTransformer(nn.Module):
             ti.observation[2],
             ti.action_,
         ]
-        
+
         return info
-        
+
     # def _init_pos_encoding(self):
     #     position = torch.arange(self.max_seq_length).unsqueeze(1)
     #     div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-math.log(10000.0) / self.d_model))
@@ -123,48 +122,46 @@ class SparseTransformer(nn.Module):
     #     pe[0, :, 0::2] = torch.sin(position * div_term)
     #     pe[0, :, 1::2] = torch.cos(position * div_term)
     #     self.pos_encoding.data.copy_(pe)
-    
+
     def _init_pos_encoding(self):
         position = torch.arange(self.max_seq_length).unsqueeze(1)  # [seq_len, 1]
-        
+
         # Calculate dimensions for even indices and odd indices
         even_dim = (self.d_model + 1) // 2  # Number of sin terms (ceiling division)
-        odd_dim = self.d_model // 2         # Number of cos terms (floor division)
-        
+        # odd_dim = self.d_model // 2         # Number of cos terms (floor division)
+
         # Create div_term for the maximum number of terms needed
-        div_term = torch.exp(
-            torch.arange(0, even_dim) * (-math.log(10000.0) / self.d_model)
-        )
-        
+        div_term = torch.exp(torch.arange(0, even_dim) * (-math.log(10000.0) / self.d_model))
+
         # Initialize positional encoding tensor
         pe = torch.zeros(1, self.max_seq_length, self.d_model)
-        
+
         # Generate indices for sin and cos terms
         even_indices = torch.arange(0, self.d_model, 2)  # [0, 2, 4, ...]
-        odd_indices = torch.arange(1, self.d_model, 2)   # [1, 3, 5, ...]
-        
+        odd_indices = torch.arange(1, self.d_model, 2)  # [1, 3, 5, ...]
+
         # Fill in sin terms (even indices)
-        pe[0, :, even_indices] = torch.sin(position * div_term[:len(even_indices)])
-        
+        pe[0, :, even_indices] = torch.sin(position * div_term[: len(even_indices)])
+
         # Fill in cos terms (odd indices)
         if len(odd_indices) > 0:
-            pe[0, :, odd_indices] = torch.cos(position * div_term[:len(odd_indices)])
-        
+            pe[0, :, odd_indices] = torch.cos(position * div_term[: len(odd_indices)])
+
         self.pos_encoding.data.copy_(pe)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Calculate mask based on padding tokens in x sequence
         mask = (x[:, :, 0] == 0).unsqueeze(1).unsqueeze(1)
 
         # Modify input
-        x = x.float() # Convert to float
-        x = x + self.pos_encoding[:, :x.size(1)] # Positional encoding
-        x = self.norm(x) # Normalize
+        x = x.float()  # Convert to float
+        x = x + self.pos_encoding[:, : x.size(1)]  # Positional encoding
+        x = self.norm(x)  # Normalize
 
         # Apply layers
         for layer in self.layers:
             x = layer(x, mask)
-            
+
         # Apply softmax
         for range in self.softmax_ranges:
             x[:, :, range] = F.softmax(x[:, :, range], dim=-1)
@@ -185,6 +182,6 @@ class SparseTransformer(nn.Module):
         return hash(repr(self))
 
     def get_dataset_cls(self):
-        from ..datasets.token_dataset import TokenMinigridDataset
+        from ..datasets.autoregressive_dataset import AutoregressiveDataset
 
-        return functools.partial(TokenMinigridDataset, discretize = True)
+        return functools.partial(AutoregressiveDataset, discretize=True)

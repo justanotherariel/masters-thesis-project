@@ -45,7 +45,7 @@ class ModelPipeline(TransformType):
                 children.append(sys)
 
         self._set_children(children)
-        
+
     def setup(self, data: Any = None) -> Any:
         """Setup the pipeline.
 

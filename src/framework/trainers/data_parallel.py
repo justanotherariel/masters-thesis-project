@@ -3,7 +3,7 @@
 from torch import nn
 
 
-class _CustomDataParallel(nn.DataParallel):  # type: ignore[type-arg]
+class DataParallel(nn.DataParallel):  # type: ignore[type-arg]
     """Custom DataParallel class."""
 
     def __repr__(self) -> str:
