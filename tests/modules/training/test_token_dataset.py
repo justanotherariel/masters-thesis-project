@@ -2,7 +2,7 @@ from math import prod
 
 import torch
 
-from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSampler
+from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom
 from src.modules.training.datasets.autoregressive_dataset import AutoregressiveDataset, TokenType
 from src.typing.pipeline_objects import XData
 
@@ -17,7 +17,7 @@ def create_token_minigrid_dataset(
 ) -> AutoregressiveDataset:
     """Create a token minigrid dataset."""
     builder = GymnasiumBuilder(environment)
-    sampler = GymnasiumSampler(num_samples, num_samples_per_env, perc_train)
+    sampler = GymnasiumSamplerRandom(num_samples, num_samples_per_env, perc_train)
 
     info = builder.setup({})
     info = sampler.setup(info)
@@ -106,7 +106,7 @@ def test_token_minigrid_dataset_with_token_discretizer():
         discretize=True,
     )
 
-    ti = info["token_index"]
+    ti = dataset.ti
 
     # Check the length of the dataset
     assert len(dataset) == num_samples_train * (prod(environment_shape) + 1)
