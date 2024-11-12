@@ -30,6 +30,4 @@ class XData:
         length = len(self.actions)
         if len(self.rewards) != length:
             raise ValueError("rewards[] length does not match rewards[] length.")
-        if len(self.observations) < length:
-            raise ValueError("observations[] length is less than actions[] length.")
         return True

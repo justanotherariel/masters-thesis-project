@@ -115,35 +115,75 @@ class TokenIndex:
         raise ValueError(f"Original index {org_idx} out of range.")
 
 class TokenDiscretizer:
-    """Discretize the tokens."""
+    """
+    Discretize tokens with support for both 1D and 2D inputs.
+    
+    The discretizer can handle inputs of shapes:
+    - x: (token_seq_len, token_len) or (token_len)
+    - y: (token_seq_len, token_len) or (token_len)
+    """
 
     def __init__(self, ti: TokenIndex):
         self.ti = ti
-
         self.ti.discrete = True
         self.new_shape = ti.shape
 
-    def apply(self, x: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        self.ti.discrete = True
-        new_x = torch.zeros((x.shape[0], self.new_shape), dtype=x.dtype)
-        new_y = torch.zeros((self.new_shape,), dtype=y.dtype)
-        new_idx = 0
+    def _reshape_input(self, tensor: torch.Tensor) -> tuple[torch.Tensor, bool]:
+        """
+        Reshape input tensor to 2D if it's 1D.
+        Returns the reshaped tensor and a flag indicating if it was originally 1D.
+        """
+        if tensor.dim() == 1:
+            return tensor.unsqueeze(0), True
+        return tensor, False
 
+    def _reshape_output(self, tensor: torch.Tensor, was_1d: bool) -> torch.Tensor:
+        """Reshape output tensor back to 1D if input was 1D."""
+        if was_1d:
+            return tensor.squeeze(0)
+        return tensor
+
+    def apply(self, x: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Apply discretization to input tensors.
+        
+        Args:
+            x: Input tensor of shape (token_seq_len, token_len) or (token_len)
+            y: Target tensor of shape (token_seq_len, token_len) or (token_len)
+            
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]: Discretized versions of input tensors
+        """
+        self.ti.discrete = True
+        
+        # Reshape inputs if necessary
+        x, x_was_1d = self._reshape_input(x)
+        y, y_was_1d = self._reshape_input(y)
+        
+        # Initialize output tensors
+        new_x = torch.zeros((x.shape[0], self.new_shape), dtype=x.dtype)
+        new_y = torch.zeros((y.shape[0], self.new_shape), dtype=y.dtype)
+        
+        # Process each original index
         for org_idx in range(x.shape[1]):
             new_idx, num_classes = self.ti.get_discrete_idx(org_idx)
-
+            
             if num_classes == 0:
                 new_x[:, new_idx] = x[:, org_idx]
-                new_y[new_idx] = y[org_idx]
+                new_y[:, new_idx] = y[:, org_idx]
                 continue
-
+            
             new_x[:, new_idx : new_idx + num_classes] = torch.nn.functional.one_hot(
                 x[:, org_idx].long(), num_classes=num_classes
             )
-            new_y[new_idx : new_idx + num_classes] = torch.nn.functional.one_hot(
-                y[org_idx].long(), num_classes=num_classes
+            new_y[:, new_idx : new_idx + num_classes] = torch.nn.functional.one_hot(
+                y[:, org_idx].long(), num_classes=num_classes
             )
-
+        
+        # Reshape outputs back if necessary
+        new_x = self._reshape_output(new_x, x_was_1d)
+        new_y = self._reshape_output(new_y, y_was_1d)
+        
         return new_x, new_y
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:

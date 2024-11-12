@@ -36,7 +36,7 @@ def _test_token_minigrid_dataset():
 
     num_samples_total = 100
     per_train = 0.8
-    num_samples_train = num_samples_total * per_train
+    num_samples_train = round(num_samples_total * per_train)
     environment_shape = (5, 5)
     dataset, info = create_token_minigrid_dataset(
         environment="MiniGrid-Empty-5x5-v0",

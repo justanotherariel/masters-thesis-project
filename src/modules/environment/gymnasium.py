@@ -1,5 +1,6 @@
 """Block to instatiate a Gymnasium Minigrid Environment."""
 
+from bdb import set_trace
 from dataclasses import dataclass
 from typing import Any, Tuple
 
@@ -208,8 +209,9 @@ class MinigridSamplerExtensive(TransformationBlock):
         # Iterate through all positions in the grid
         for i in range(env.unwrapped.width):
             for j in range(env.unwrapped.height):
-                # Check if position is empty or a door
-                if grid[i, j, 0] in [OBJECT_TO_IDX['empty'], OBJECT_TO_IDX['door'], OBJECT_TO_IDX['goal']]:
+                # Check if the agent can overlap with the object at this position
+                # .venv/lib/python3.11/site-packages/minigrid/core/world_object.py#L46
+                if grid[i, j, 0] in [OBJECT_TO_IDX['empty'], OBJECT_TO_IDX['goal']]:
                     valid_positions.append((i, j))
         
         return valid_positions
@@ -224,7 +226,7 @@ class MinigridSamplerExtensive(TransformationBlock):
         """
         env.unwrapped.agent_pos = pos
         env.unwrapped.agent_dir = dir
-        env.unwrapped.grid.set(*pos, None)  # Clear the cell where we place the agent
+        env.unwrapped.step_count = 0    # Reward, if any, is 1
         
     def _sample_pos(self, 
                         env: gym.Env, 
