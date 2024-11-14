@@ -138,36 +138,13 @@ class TorchTrainer(TransformationBlock):
         self.save_model_to_disk = True
         self.best_model_state_dict: dict[Any, Any] = {}
 
-        # Set optimizer
-        self.initialized_optimizer = self.optimizer(self.model.parameters())
-
-        # Set scheduler
-        self.initialized_scheduler: LRScheduler | None
-        if self.scheduler is not None:
-            self.initialized_scheduler = self.scheduler(self.initialized_optimizer)
-        else:
-            self.initialized_scheduler = None
-
         # Set the device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Setting device: {self.device}")
 
-        # If multiple GPUs are available, distribute batch size over the GPUs
-        if torch.cuda.device_count() > 1:
-            logger.info(f"Using {torch.cuda.device_count()} GPUs")
-            self.model = DataParallel(self.model)
-
-        self.model.to(self.device)
-
         # Early stopping
         self.last_val_loss = np.inf
         self._lowest_val_loss = np.inf
-
-        # Mixed precision
-        if self.use_mixed_precision:
-            logger.info("Using mixed precision training.")
-            self.scaler = torch.GradScaler(device=self.device.type)
-            torch.set_float32_matmul_precision("high")
 
         super().__post_init__()
 
@@ -185,6 +162,30 @@ class TorchTrainer(TransformationBlock):
             info["token_index"] = self.model.get_dataset_cls().create_ti(info)
 
         self.model.setup(info)
+        
+        # If multiple GPUs are available, distribute batch size over the GPUs
+        if torch.cuda.device_count() > 1:
+            logger.info(f"Using {torch.cuda.device_count()} GPUs")
+            self.model = DataParallel(self.model)
+
+        # Move model to device
+        self.model.to(self.device)
+        
+        # Set optimizer
+        self.initialized_optimizer = self.optimizer(self.model.parameters())
+
+        # Set scheduler
+        self.initialized_scheduler: LRScheduler | None
+        if self.scheduler is not None:
+            self.initialized_scheduler = self.scheduler(self.initialized_optimizer)
+        else:
+            self.initialized_scheduler = None
+            
+        # Mixed precision
+        if self.use_mixed_precision:
+            logger.info("Using mixed precision training.")
+            self.scaler = torch.GradScaler(device=self.device.type)
+            torch.set_float32_matmul_precision("high")
 
         return info
 
@@ -316,13 +317,18 @@ class TorchTrainer(TransformationBlock):
         # Create datasets
         dataset = self.model.get_dataset_cls()(data, indices)
         dataset.setup(self.setup_info)
+        
+        # Check if the dataset has a custom collate function
+        collate = self.collate_fn if hasattr(dataset, "__getitems__") else None
+        if hasattr(dataset, "custom_collate_fn"):
+            collate = dataset.custom_collate_fn
 
         # Create dataloaders
         loader = DataLoader(
             dataset,
             batch_size=self.batch_size,
             shuffle=shuffle,
-            collate_fn=(self.collate_fn if hasattr(dataset, "__getitems__") else None),
+            collate_fn=collate,
             **self.dataloader_args,
         )
         return loader
@@ -506,14 +512,21 @@ class TorchTrainer(TransformationBlock):
         )
         for batch in pbar:
             x_batch, y_batch = batch
-
-            x_batch = x_batch.to(self.device)
-            y_batch = y_batch.to(self.device)
+            
+            if isinstance(x_batch, tuple):
+                x_batch = tuple(x.to(self.device) for x in x_batch)
+            else:
+                x_batch = x_batch.to(self.device)
+            
+            if isinstance(y_batch, tuple):
+                y_batch = tuple(y.to(self.device) for y in y_batch)
+            else:
+                y_batch = y_batch.to(self.device)
 
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
-                y_pred = self.model(x_batch).squeeze(1)
-                loss = self.criterion(y_pred, y_batch.float())
+                y_pred = self.model(x_batch)
+                loss = self.model.compute_loss(y_pred, y_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()

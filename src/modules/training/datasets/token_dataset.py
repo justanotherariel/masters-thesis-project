@@ -14,7 +14,7 @@ from .utils import TokenDiscretizer, TokenIndex, TokenType
 
 
 @dataclass
-class SimpleMinigridDataset(Dataset):
+class TokenDataset(Dataset):
     """Simple dataset for transformer training."""
 
     _data: XData | None = None

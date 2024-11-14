@@ -53,7 +53,7 @@ class TokenIndex:
     """Manages token indices for different types defined in the info dictionary."""
 
     def __init__(self, info: Dict[str, List[Tuple[int, int]]]):
-        required_keys = {"type", "observation", "action", "reward"}
+        required_keys = {"observation", "action", "reward"}
         if not required_keys.issubset(info.keys()):
             raise ValueError(f"TokenIndex must have all keys: {required_keys}")
 
@@ -63,7 +63,21 @@ class TokenIndex:
         # dict[type, list[tuple[discrete_start_idx, len]]]
         self.info_discrete: Dict[str, List[Tuple[int, int]]] = {}
 
+        # Flags
         self.discrete: bool = False
+        self.seperate: bool = False
+        
+        # Check if seperate
+        num_idx_zero = 0
+        for key, value in self.info.items():
+            indices = [x[0] for x in value]
+            if 0 in indices:
+                num_idx_zero += 1
+        if num_idx_zero == len(self.info):
+            self.seperate = True
+        elif num_idx_zero != 1:
+            raise ValueError("Only one or all keys can have index 0.")
+        
         self._calculate_discrete_info()
 
     def _calc_num_items_before(self, org_idx: int) -> int:
@@ -76,13 +90,29 @@ class TokenIndex:
                     idx = orig_indices.index(i)
                     num_items += value[idx][1]
         return num_items
+    
+    def _calc_num_items_before_seperate(self, key: str, org_idx: int) -> int:
+        """Calculate total number of items before a given original index."""
+        num_items = 0
+        for i in range(org_idx):
+            orig_indices = [x[0] for x in self.info[key]]
+            if i in orig_indices:
+                idx = orig_indices.index(i)
+                num_items += self.info[key][idx][1]
+        return num_items
 
     def _calculate_discrete_info(self) -> None:
         """Calculate discrete index information for all token types."""
-        self.info_discrete = {
-            key: [(self._calc_num_items_before(original_idx), num_items) for original_idx, num_items in value]
-            for key, value in self.info.items()
-        }
+        if not self.seperate:
+            self.info_discrete = {
+                key: [(self._calc_num_items_before(original_idx), num_items) for original_idx, num_items in value]
+                for key, value in self.info.items()
+            }
+        else:
+            self.info_discrete = {
+                key: [(self._calc_num_items_before_seperate(key, original_idx), num_items) for original_idx, num_items in value]
+                for key, value in self.info.items()
+            }
 
     def __getattr__(self, name: str) -> Any:
         """

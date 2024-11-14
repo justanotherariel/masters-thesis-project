@@ -1,6 +1,6 @@
 import math
 from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom, MinigridSamplerExtensive
-from src.modules.training.datasets.simple_dataset import SimpleMinigridDataset
+from src.modules.training.datasets.token_dataset import TokenDataset
 from src.typing.pipeline_objects import XData
 from src.framework.transforming import TransformationBlock
 import torch
@@ -12,7 +12,7 @@ def create_dataset(
     sampler: TransformationBlock,
     indices: str,
     discretize: bool = False,
-) -> SimpleMinigridDataset:
+) -> TokenDataset:
     """Create a token minigrid dataset."""
 
     info = builder.setup({})
@@ -21,7 +21,7 @@ def create_dataset(
     data = builder.transform(XData())
     data = sampler.transform(data)
 
-    dataset = SimpleMinigridDataset(data, indices, discretize)
+    dataset = TokenDataset(data, indices, discretize)
     dataset.setup(info)
     
     return dataset, info

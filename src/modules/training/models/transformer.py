@@ -182,6 +182,6 @@ class SparseTransformer(nn.Module):
         return hash(repr(self))
 
     def get_dataset_cls(self):
-        from ..datasets.autoregressive_dataset import AutoregressiveDataset
+        from ..datasets.autoregressive_token_dataset import AutoregressiveTokenDataset
 
-        return functools.partial(AutoregressiveDataset, discretize=True)
+        return functools.partial(AutoregressiveTokenDataset, discretize=True)

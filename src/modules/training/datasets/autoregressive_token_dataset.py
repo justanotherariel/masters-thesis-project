@@ -10,7 +10,7 @@ from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import XData
 from .utils import TokenIndex, TokenType, TokenDiscretizer
 
-class AutoregressiveDataset(Dataset):
+class AutoregressiveTokenDataset(Dataset):
     """Main dataset for transformer training with token-level processing."""
 
     discretize: bool = False
