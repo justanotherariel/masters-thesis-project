@@ -14,6 +14,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
       model_name: "Transformer"
+      checkpointing_enabled: false
       model:
         _target_: src.modules.training.models.cnn.CNN
         # obs_shape: [5,5,20]

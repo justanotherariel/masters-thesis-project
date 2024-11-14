@@ -221,7 +221,7 @@ class TorchTrainer(TransformationBlock):
         self,
         loader: DataLoader[tuple[Tensor, ...]],
         compile_method: str | None = None,
-    ) -> npt.NDArray[np.float32]:
+    ) -> tuple[list[tuple[Tensor, ...], list[tuple[Tensor, ...]]]] | tuple[list[Tensor], list[Tensor]]:
         """Predict on the loader.
 
         :param loader: The loader to predict on.
@@ -234,8 +234,8 @@ class TorchTrainer(TransformationBlock):
         if compile_method is None:
             with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
                 for data in tepoch:
-                    X_batch = data[0].to(self.device)
-                    y_pred = self.model(X_batch).squeeze(1).cpu().numpy()
+                    X_batch = moveTo(data[0], None, self.device)
+                    y_pred = self.model(X_batch)
                     predictions.extend(y_pred)
                     labels.extend(data[1])
 
@@ -288,7 +288,7 @@ class TorchTrainer(TransformationBlock):
                     labels.extend(data[1])
 
         logger.info("Done predicting!")
-        return np.array(predictions), np.array(labels)
+        return predictions, labels
 
     def get_hash(self) -> str:
         """Get the hash of the block.
@@ -512,16 +512,7 @@ class TorchTrainer(TransformationBlock):
         )
         for batch in pbar:
             x_batch, y_batch = batch
-            
-            if isinstance(x_batch, tuple):
-                x_batch = tuple(x.to(self.device) for x in x_batch)
-            else:
-                x_batch = x_batch.to(self.device)
-            
-            if isinstance(y_batch, tuple):
-                y_batch = tuple(y.to(self.device) for y in y_batch)
-            else:
-                y_batch = y_batch.to(self.device)
+            x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
@@ -565,13 +556,11 @@ class TorchTrainer(TransformationBlock):
         with torch.no_grad():
             for batch in pbar:
                 x_batch, y_batch = batch
-
-                x_batch = x_batch.to(self.device)
-                y_batch = y_batch.to(self.device)
+                x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
                 # Forward pass
-                y_pred = self.model(x_batch).squeeze(1)
-                loss = self.criterion(y_pred, y_batch.float())
+                y_pred = self.model(x_batch)
+                loss = self.model.compute_loss(y_pred, y_batch)
 
                 # Print losses
                 losses.append(loss.item())
@@ -667,3 +656,20 @@ class TorchTrainer(TransformationBlock):
     def wrap_log(self, text: str) -> str:
         """Add logging prefix and postfix to the message."""
         return f"{self.logging_prefix}{text}{self.logging_postfix}"
+
+def moveTo(x_batch: torch.Tensor | tuple[torch.Tensor, ...], y_batch: None | torch.Tensor | tuple[torch.Tensor, ...], device: torch.device) -> torch.Tensor | tuple[torch.Tensor, ...] | tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
+    """Move tensor(s) to device."""
+    if isinstance(x_batch, tuple):
+        x_batch = tuple(x.to(device) for x in x_batch)
+    else:
+        x_batch = x_batch.to(device)
+    
+    if y_batch is None:
+        return x_batch
+    
+    if isinstance(y_batch, tuple):
+        y_batch = tuple(y.to(device) for y in y_batch)
+    else:
+        y_batch = y_batch.to(device)
+
+    return x_batch, y_batch

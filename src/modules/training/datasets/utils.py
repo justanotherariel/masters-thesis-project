@@ -119,6 +119,9 @@ class TokenIndex:
         Enable dynamic access to TokenIndexSub instances and full token sequences.
         Supports both direct access (e.g., type) and underscore suffix (e.g., type_).
         """
+        if name == "info":
+            raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
+        
         # Handle direct attribute access (e.g., type, observation)
         if name in self.info:
             return TokenIndexSub(self, name)
