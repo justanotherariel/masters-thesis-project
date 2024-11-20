@@ -57,11 +57,11 @@ class TwoDDataset(Dataset):
         idx = self._indices[idx]
 
         # Create input observation and action
-        x_obs = torch.tensor(self._data.observations[idx[0]], dtype=torch.float32)
-        action = torch.tensor([self._data.actions[idx[2]].item()], dtype=torch.float32)
+        x_obs = torch.tensor(self._data.observations[idx[0]], dtype=torch.uint8)
+        action = torch.tensor([self._data.actions[idx[2]].item()], dtype=torch.uint8)
 
         # Create target observation and reward
-        y_obs = torch.tensor(self._data.observations[idx[1]], dtype=torch.float32)
+        y_obs = torch.tensor(self._data.observations[idx[1]], dtype=torch.uint8)
         reward = torch.tensor([self._data.rewards[idx[2]].item()], dtype=torch.float32)
 
         if self.discretize:
@@ -81,13 +81,14 @@ class TwoDDataset(Dataset):
         # Reshape to (H*W, C) for discretization
         flat_obs = obs.reshape(-1, obs.shape[-1])
         
-        shape = self.ti.observation_[:].shape
         self.ti.discrete = True
-        discretized = torch.zeros((flat_obs.shape[0], self.ti.observation_.shape[0]), dtype=torch.uint8)
+        discretized = torch.zeros((flat_obs.shape[0], len(self.ti.observation_)), dtype=torch.uint8)
         for i in range(flat_obs.shape[1]):
-            idx = self.ti.observation_[i]
+            idx = self.ti.observation[i]
             if self.ti.info['observation'][i][1] > 0:  # If discretization is needed
-                discretized[:, idx] = flat_obs[:, i].long()
+                discretized[:, idx] = torch.nn.functional.one_hot(flat_obs[:, i].long(), num_classes=self.ti.info['observation'][i][1]).to(torch.uint8)
+            else:
+                discretized[:, idx] = flat_obs[:, i]
         
         # Reshape back to (H, W, C')
         return discretized.reshape(*original_shape[:-1], -1)
@@ -98,14 +99,12 @@ class TwoDDataset(Dataset):
             raise ValueError("TokenIndex not initialized. Call setup() first.")
         
         if token_type == TokenType.ACTION:
-            idx = self.ti.action_[0]
             num_classes = self.ti.info['action'][0][1]
         else:  # TokenType.REWARD
-            idx = self.ti.reward_[0]
             num_classes = self.ti.info['reward'][0][1]
             
         if num_classes > 0:
-            return torch.nn.functional.one_hot(value.long(), num_classes=num_classes)[0]
+            return torch.nn.functional.one_hot(value.long(), num_classes=num_classes)[0].to(torch.uint8)
         return value
 
     @staticmethod

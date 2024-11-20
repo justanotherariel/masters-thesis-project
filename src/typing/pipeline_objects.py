@@ -1,6 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from numpy.typing import NDArray
+from typing import Any
 
 
 class XData:
@@ -12,8 +13,8 @@ class XData:
     train_indices: NDArray[np.int32] | None
     validation_indices: NDArray[np.int32] | None
 
-    validation_labels: NDArray[np.number] | None
-    validation_predictions: NDArray[np.number] | None
+    predictions: list[Any] | None
+    targets: list[Any] | None
 
     def check_data(self) -> bool:
         """Check if the data is valid. Can raise Errors."""

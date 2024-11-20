@@ -50,7 +50,6 @@ class TorchTrainer(TransformationBlock):
     ----------
     - `model` (nn.Module): The model to train.
     - `optimizer` (functools.partial[Optimizer]): Optimizer to use for training.
-    - `criterion` (nn.Module): Criterion to use for training.
     - `scheduler` (Callable[[Optimizer], LRScheduler] | None): Scheduler to use for training.
     - `dataloader_args (dict): Arguments for the dataloader`
 
@@ -82,7 +81,6 @@ class TorchTrainer(TransformationBlock):
     # Modules
     model: nn.Module
     optimizer: functools.partial[Optimizer]
-    criterion: nn.Module
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     dataloader_args: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -109,7 +107,7 @@ class TorchTrainer(TransformationBlock):
     setup_info: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     # Parameters relevant for Hashing
-    n_folds: Annotated[int, Ge(0)] = field(default=-1, init=True, repr=False, compare=False)
+    n_folds: Annotated[int, Ge(0)] = field(default=0, init=True, repr=False, compare=False)
     _fold: int = field(default=-1, init=False, repr=False, compare=False)
     validation_size: Annotated[float, Interval(ge=0, le=1)] = 0.2
 
@@ -122,11 +120,6 @@ class TorchTrainer(TransformationBlock):
         # Make sure to_predict is either "validation" or "all" or "none"
         if self.to_predict not in ["validation", "all", "none"]:
             raise ValueError("to_predict should be either 'validation', 'all' or 'none'")
-
-        if self.n_folds == -1:
-            raise ValueError(
-                "Please specify the number of folds for cross validation or set n_folds to 0 for train full.",
-            )
 
         if self.model_name is None:
             raise ValueError("self.model_name is None, please specify a model_name")
@@ -214,7 +207,7 @@ class TorchTrainer(TransformationBlock):
 
         # Evaluate the model
         loader = self.create_dataloader(data, f"{self.to_predict}_indices", shuffle=False)
-        data.validation_predictions, data.validation_labels = self.predict_on_loader(loader)
+        data.predictions, data.targets = self.predict_on_loader(loader)
         return data
 
     def predict_on_loader(
