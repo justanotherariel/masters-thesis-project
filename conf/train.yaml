@@ -1,7 +1,7 @@
 defaults:
   - base_train
   - hydra/logging
-  - model: cnn_extensive
+  - model: unet_extensive
   - wandb: train
 
 ###############

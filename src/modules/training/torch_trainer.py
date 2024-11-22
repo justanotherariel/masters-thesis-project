@@ -88,6 +88,7 @@ class TorchTrainer(TransformationBlock):
     epochs: Annotated[int, Gt(0)] = 10
     patience: Annotated[int, Gt(0)] = -1  # Early stopping
     batch_size: Annotated[int, Gt(0)] = 32
+    oversampling_factor: Annotated[int, Ge(1)] = 1
     collate_fn: Callable[[list[Tensor]], tuple[Tensor, Tensor]] = field(
         default=custom_collate, init=True, repr=False, compare=False
     )
@@ -206,8 +207,13 @@ class TorchTrainer(TransformationBlock):
             self._model_train(data)
 
         # Evaluate the model
-        loader = self.create_dataloader(data, f"{self.to_predict}_indices", shuffle=False)
-        data.predictions, data.targets = self.predict_on_loader(loader)
+        if self.to_predict == "all":
+            loader = self.create_dataloader(data, "train_indices", shuffle=False)
+            data.train_predictions, data.train_targets = self.predict_on_loader(loader)
+        if self.to_predict == "all" or self.to_predict == "validation":
+            loader = self.create_dataloader(data, "validation_indices", shuffle=False)
+            data.validation_predictions, data.validation_targets = self.predict_on_loader(loader)
+        
         return data
 
     def predict_on_loader(
@@ -300,6 +306,7 @@ class TorchTrainer(TransformationBlock):
         data: XData,
         indices: str,
         shuffle: bool = True,
+        oversampling_factor: int = 1,
     ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
         """Create the dataloaders for training and validation.
 
@@ -308,7 +315,7 @@ class TorchTrainer(TransformationBlock):
         :return: The training and validation dataloaders.
         """
         # Create datasets
-        dataset = self.model.get_dataset_cls()(data, indices)
+        dataset = self.model.get_dataset_cls()(data, indices, oversampling_factor=oversampling_factor)
         dataset.setup(self.setup_info)
         
         # Check if the dataset has a custom collate function
@@ -341,7 +348,7 @@ class TorchTrainer(TransformationBlock):
         logger.info(f"Training model: {self.model.__class__.__name__}")
 
         # Create dataloaders
-        train_loader = self.create_dataloader(data, "train_indices")
+        train_loader = self.create_dataloader(data, "train_indices", oversampling_factor=self.oversampling_factor)
         validation_loader = self.create_dataloader(data, "validation_indices")
 
         # Resume from checkpoint if enabled and checkpoint exists

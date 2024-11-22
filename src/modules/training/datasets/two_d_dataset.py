@@ -15,14 +15,16 @@ from .utils import TokenDiscretizer, TokenIndex, TokenType
 class TwoDDataset(Dataset):
     """Dataset that preserves 2D structure of observations and separates actions/rewards."""
 
-    _data: XData | None = None
-    _indices: npt.NDArray | None = None
+    _data: XData
+    _indices: npt.NDArray
+    _oversampling_factor: int
 
-    def __init__(self, data: XData, indices: str, discretize: bool = False) -> None:
+    def __init__(self, data: XData, indices: str, discretize: bool = False, oversampling_factor: int = 1) -> None:
         """Set up the dataset for training."""
         if indices != "all_indices" and not hasattr(data, indices):
             raise ValueError(f"Data does not have attribute {indices}")
         
+        self._oversampling_factor = oversampling_factor
         self.discretize = discretize
 
         data.check_data()
@@ -35,6 +37,9 @@ class TwoDDataset(Dataset):
         # Grab correct indices
         self._indices = getattr(data, indices) if indices != "all_indices" else np.array(range(len(data.observations)))
         self._indices = flatten_indices(self._indices)
+        
+        # Oversample the indices
+        self._indices = np.repeat(self._indices, self._oversampling_factor, axis=0)
 
     def __len__(self) -> int:
         """Get the total number of training examples."""

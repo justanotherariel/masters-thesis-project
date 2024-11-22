@@ -6,6 +6,7 @@ env_sys:
   steps:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
       environment: MiniGrid-Empty-5x5-v0
+
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
       train_envs: 1
       validation_envs: 1
@@ -13,39 +14,38 @@ env_sys:
 train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
-      model_name: "Transformer"
+      model_name: "U-Net"
+
+      epochs: 5
+      batch_size: 2048
+      # patience: 10
+      oversampling_factor: 100
+      to_predict: "all"
       checkpointing_enabled: false
+
       model:
-        _target_: src.modules.training.models.cnn.CNN
-        # obs_shape: [5,5,20]
-        # action_dim: 7
-      criterion:
-        _target_: torch.nn.CrossEntropyLoss
+        _target_: src.modules.training.models.unet.UNet
+        hidden_channels: [32, 64]
+
       optimizer:
         _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
             path: torch.optim.AdamW
         lr: 0.001
-      epochs: 15
-      batch_size: 2048
-      patience: 10
+
       scheduler:
         _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
-            path: timm.scheduler.cosine_lr.CosineLRScheduler
-        t_initial: 100
-        cycle_mul: 1
-        cycle_decay: 1
-        cycle_limit: 1
-        warmup_t: 1
-        warmup_lr_init: 1e-5
-      n_folds: 5
-      # dataloader_args:
-      #   num_workers: 8
-      #   prefetch_factor: 4
-      #   persistent_workers: false
+            path: timm.scheduler.step_lr.StepLRScheduler
+        decay_t: 2
+        decay_rate: 0.5
+
+      dataloader_args:
+        num_workers: 8
+        prefetch_factor: 4
+        persistent_workers: false
 
 pred_sys:
   steps:

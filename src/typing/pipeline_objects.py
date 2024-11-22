@@ -13,8 +13,10 @@ class XData:
     train_indices: NDArray[np.int32] | None
     validation_indices: NDArray[np.int32] | None
 
-    predictions: list[Any] | None
-    targets: list[Any] | None
+    train_predictions: list[Any] | None
+    train_targets: list[Any] | None
+    validation_predictions: list[Any] | None
+    validation_targets: list[Any] | None
 
     def check_data(self) -> bool:
         """Check if the data is valid. Can raise Errors."""

@@ -27,11 +27,26 @@ class MinigridScorer(TransformationBlock):
         :return: The transformed data
         """
         
+        if data.train_predictions is not None and data.train_targets is not None:
+            self.calc_accuracy(data.train_predictions, data.train_targets, "Train")
+        
+        if data.validation_predictions is not None and data.validation_targets is not None:
+            self.calc_accuracy(data.validation_predictions, data.validation_targets, "Validation")
+
+        return data
+
+    def calc_accuracy(self, predictions, targets, index_pretty_name: str):
+        """Calculate the accuracy of the model.
+
+        :param index_name: The name of the indice.
+        :param index_pretty_name: The pretty name of the indice.
+        """
+                
         ti = self.info['token_index']
         ti.discrete = True  # ToDo: fetch from info, supplied by model setup
-        
-        obs_pred, reward_pred = data.predictions
-        obs_target, reward_target = data.targets
+
+        obs_pred, reward_pred = predictions
+        obs_target, reward_target = targets
         
         # Check Observation object accuaracy
         obs_pred_obj = obs_pred[..., ti.observation[0]].argmax(axis=-1)
@@ -59,22 +74,20 @@ class MinigridScorer(TransformationBlock):
         reward_accuracy = torch.isclose(reward_target, reward_pred, atol=0.1).sum()/len(reward_target)
         
         # Log the results
-        logger.info(f"Observation Object Accuracy: {obs_obj_accuracy}")
-        logger.info(f"Observation Object Accuracy (no walls): {obs_obj_accuracy_no_walls}")
-        logger.info(f"Observation Color Accuracy: {obs_color_accuracy}")
-        logger.info(f"Observation State Accuracy: {obs_state_accuracy}")
-        logger.info(f"Observation Agent Accuracy: {obs_agent_accuracy}")
-        logger.info(f"Reward Accuracy: {reward_accuracy}")
+        logger.info(f"{index_pretty_name}: Observation Object Accuracy: {obs_obj_accuracy}")
+        logger.info(f"{index_pretty_name}: Observation Object Accuracy (no walls): {obs_obj_accuracy_no_walls}")
+        logger.info(f"{index_pretty_name}: Observation Color Accuracy: {obs_color_accuracy}")
+        logger.info(f"{index_pretty_name}: Observation State Accuracy: {obs_state_accuracy}")
+        logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_accuracy}")
+        logger.info(f"{index_pretty_name}: Reward Accuracy: {reward_accuracy}")
         
         logger.log_to_external(
             message={
-                "Observation Object Accuracy": obs_obj_accuracy,
-                "Observation Object Accuracy (no walls)": obs_obj_accuracy_no_walls,
-                "Observation Color Accuracy": obs_color_accuracy,
-                "Observation State Accuracy": obs_state_accuracy,
-                "Observation Agent Accuracy": obs_agent_accuracy,
-                "Reward Accuracy": reward_accuracy,
+                f"{index_pretty_name}/Observation Object Accuracy": obs_obj_accuracy,
+                f"{index_pretty_name}/Observation Object Accuracy (no walls)": obs_obj_accuracy_no_walls,
+                f"{index_pretty_name}/Observation Color Accuracy": obs_color_accuracy,
+                f"{index_pretty_name}/Observation State Accuracy": obs_state_accuracy,
+                f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_accuracy,
+                f"{index_pretty_name}/Reward Accuracy": reward_accuracy,
             },
         )
-
-        return data
