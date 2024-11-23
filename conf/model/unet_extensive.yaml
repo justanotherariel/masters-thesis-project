@@ -5,7 +5,8 @@ defaults:
 env_sys:
   steps:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
-      environment: MiniGrid-Empty-5x5-v0
+      # environment: MiniGrid-Empty-5x5-v0
+      environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
       train_envs: 1
@@ -16,10 +17,10 @@ train_sys:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
       model_name: "U-Net"
 
-      epochs: 5
+      epochs: 10
       batch_size: 2048
-      # patience: 10
-      oversampling_factor: 100
+      patience: 2
+      oversampling_factor: 500
       to_predict: "all"
       checkpointing_enabled: false
 
@@ -43,7 +44,7 @@ train_sys:
         decay_rate: 0.5
 
       dataloader_args:
-        num_workers: 8
+        num_workers: 14
         prefetch_factor: 4
         persistent_workers: false
 
