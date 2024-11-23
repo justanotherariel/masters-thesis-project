@@ -53,7 +53,7 @@ class MinigridScorer(TransformationBlock):
         obs_target_obj = obs_target[..., ti.observation[0]].argmax(axis=-1)
         obs_obj_accuracy = (obs_pred_obj == obs_target_obj).sum()/obs_pred_obj.numel()
         
-        obs_obj_accuracy_no_walls = (obs_pred_obj[:, 1:-1, 1:-1] == obs_target_obj[:, 1:-1, 1:-1]).sum()/obs_pred_obj.numel()
+        obs_obj_accuracy_no_walls = (obs_pred_obj[:, 1:-1, 1:-1] == obs_target_obj[:, 1:-1, 1:-1]).sum()/obs_pred_obj[:, 1:-1, 1:-1].numel()
 
         # Check Observation color accuracy
         obs_pred_color = obs_pred[..., ti.observation[1]].argmax(axis=-1)
@@ -73,7 +73,11 @@ class MinigridScorer(TransformationBlock):
         # Check Reward accuracy
         reward_accuracy = torch.isclose(reward_target, reward_pred, atol=0.1).sum()/len(reward_target)
         
+        # Overall accuracy
+        accuracy = (obs_obj_accuracy + obs_color_accuracy + obs_state_accuracy + obs_agent_accuracy + reward_accuracy) / 5
+        
         # Log the results
+        logger.info(f"{index_pretty_name}: Accuracy: {accuracy}")
         logger.info(f"{index_pretty_name}: Observation Object Accuracy: {obs_obj_accuracy}")
         logger.info(f"{index_pretty_name}: Observation Object Accuracy (no walls): {obs_obj_accuracy_no_walls}")
         logger.info(f"{index_pretty_name}: Observation Color Accuracy: {obs_color_accuracy}")
@@ -83,6 +87,7 @@ class MinigridScorer(TransformationBlock):
         
         logger.log_to_external(
             message={
+                f"{index_pretty_name}/Accuracy": accuracy,
                 f"{index_pretty_name}/Observation Object Accuracy": obs_obj_accuracy,
                 f"{index_pretty_name}/Observation Object Accuracy (no walls)": obs_obj_accuracy_no_walls,
                 f"{index_pretty_name}/Observation Color Accuracy": obs_color_accuracy,

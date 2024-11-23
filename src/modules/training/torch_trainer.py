@@ -235,6 +235,12 @@ class TorchTrainer(TransformationBlock):
                 for data in tepoch:
                     X_batch = moveTo(data[0], None, self.device)
                     y_pred = self.model(X_batch)
+                    
+                    if isinstance(y_pred, tuple):
+                        y_pred = tuple(y.to("cpu") for y in y_pred)
+                    else:
+                        y_pred = y_pred.to("cpu")
+
                     predictions.extend(y_pred)
                     labels.extend(data[1])
 
@@ -427,7 +433,7 @@ class TorchTrainer(TransformationBlock):
             # Log train loss
             logger.log_to_external(
                 message={
-                    self.wrap_log(f"Training/Train Loss{fold_no}"): train_losses[-1],
+                    self.wrap_log(f"Train/Loss{fold_no}"): train_losses[-1],
                     self.wrap_log("epoch"): epoch,
                 },
             )
@@ -463,24 +469,8 @@ class TorchTrainer(TransformationBlock):
                 # Log validation loss and plot train/val loss against each other
                 logger.log_to_external(
                     message={
-                        self.wrap_log(f"Validation/Validation Loss{fold_no}"): val_losses[-1],
+                        self.wrap_log(f"Validation/Loss{fold_no}"): val_losses[-1],
                         self.wrap_log("epoch"): epoch,
-                    },
-                )
-
-                logger.log_to_external(
-                    message={
-                        "type": "wandb_plot",
-                        "plot_type": "line_series",
-                        "data": {
-                            "xs": list(
-                                range(epoch + 1),
-                            ),  # Ensure it's a list, not a range object
-                            "ys": [train_losses, val_losses],
-                            "keys": [f"Train{fold_no}", f"Validation{fold_no}"],
-                            "title": self.wrap_log(f"Training/Loss{fold_no}"),
-                            "xname": "Epoch",
-                        },
                     },
                 )
 
