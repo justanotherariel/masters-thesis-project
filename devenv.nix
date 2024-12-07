@@ -11,6 +11,8 @@
   packages = [
     pkgs.git
     pkgs.ruff
+    pkgs.zstd
+    pkgs.libdrm
   ];
 
   # Disable Automatic Cache Management
