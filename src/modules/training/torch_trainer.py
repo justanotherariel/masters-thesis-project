@@ -302,7 +302,7 @@ class TorchTrainer(TransformationBlock):
             self.model.load_state_dict(self.best_model_state_dict)
 
         # Save the model
-        if self.save_model_to_disk:
+        if self.model_storage_conf.save_model_to_disk:
             self._save_model()
 
     def _model_training_loop(
