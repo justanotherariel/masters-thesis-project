@@ -1,11 +1,13 @@
 defaults:
   - base_train
   - hydra/logging
-  - model: unet_extensive
+  # - model: unet_extensive
+  - model: transformer_extensive
   - wandb: train
 
 ###############
 #    CONF     #
 ###############
 cache_path: data/cache
+debug: false
 allow_multiple_instances: true

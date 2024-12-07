@@ -27,4 +27,5 @@ class TrainConfig:
     model: Any
 
     cache_path: str
-    allow_multiple_instances: bool = False
+    debug: bool = False
+    allow_multiple_instances: bool = True

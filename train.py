@@ -1,6 +1,7 @@
 """Train.py is the main script for training the model and will take in the raw data and output a trained model."""
 import os
 import warnings
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -19,12 +20,13 @@ from src.utils.lock import Lock
 from src.utils.set_torch_seed import set_torch_seed
 from src.framework.logging import Logger
 
-warnings.filterwarnings("ignore", category=UserWarning)
+# warnings.filterwarnings("ignore", category=UserWarning)
 # Makes hydra give full error messages
 os.environ["HYDRA_FULL_ERROR"] = "1"
 # Set up the config store, necessary for type checking of config yaml
 cs = ConfigStore.instance()
 cs.store(name="base_train", node=TrainConfig)
+logger = Logger()
 
 @hydra.main(version_base=None, config_path="conf", config_name="train")
 def main(cfg: DictConfig) -> None:
@@ -32,7 +34,7 @@ def main(cfg: DictConfig) -> None:
     
     # Install coloredlogs
     coloredlogs.install()
-        
+            
     # Run the train config with an optional lock
     optional_lock = Lock if not cfg.allow_multiple_instances else nullcontext
     with optional_lock():
@@ -41,15 +43,16 @@ def main(cfg: DictConfig) -> None:
 
 def run_train(cfg: DictConfig) -> None:
     """Run the model pipeline."""
+    logger.log_section_separator("Thesis: Sparse Transformer")
+    
     # Get output directory
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
-    # Setup the logger
-    logger = Logger(output_dir)
-    logger.log_section_separator("Thesis: Sparse Transformer")
-    
     # Set seed
     set_torch_seed()
+    
+    if cfg.debug:
+        cfg.wandb.enabled = False
 
     if cfg.wandb.enabled:
         setup_wandb(cfg, "train", output_dir)
@@ -57,7 +60,7 @@ def run_train(cfg: DictConfig) -> None:
     # Preload the pipeline
     logger.info("Setting up the pipeline")
     model_pipeline = setup_pipeline(cfg)
-    _ = model_pipeline.setup()
+    _ = model_pipeline.setup({"debug": cfg.debug})
 
     # Cache arguments for x_sys
     cache_data_path = Path(cfg.cache_path)
@@ -71,18 +74,6 @@ def run_train(cfg: DictConfig) -> None:
     logger.log_section_separator("Train model pipeline")
     transform_args = setup_transform_args(model_pipeline, cache_args)
     _ = model_pipeline.transform(**transform_args)
-
-    # if y is None:
-    #     y = y_new
-
-    # if len(test_indices) > 0:
-    #     logger.log_section_separator("Scoring")
-    #     scorer = instantiate(cfg.scorer)
-    #     score = scorer(y[test_indices], predictions[test_indices])
-    #     logger.info(f"Score: {score}")
-
-    #     if wandb.run:
-    #         wandb.log({"Score": score})
 
     wandb.finish()
 
