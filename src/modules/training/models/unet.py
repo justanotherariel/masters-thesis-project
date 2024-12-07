@@ -1,3 +1,10 @@
+""" U-Net model adapted to RL transition models.
+
+Heavily inspired by:
+  Author: milesial
+  Github: https://github.com/milesial/Pytorch-UNet/
+"""
+
 import functools
 import torch
 import torch.nn as nn
@@ -81,13 +88,15 @@ class UNet(nn.Module):
     def __init__(
         self,
         hidden_channels: list[int],
+        obs_loss_weight: float = 0.5,
+        reward_loss_weight: float = 0.5,
     ):
         """Initialize the CNN model structure."""
         super().__init__()
         
         self.hidden_channels = hidden_channels
-        self.obs_loss_weight = 0.5
-        self.reward_loss_weight = 0.5
+        self.obs_loss_weight = obs_loss_weight
+        self.reward_loss_weight = reward_loss_weight
         
     def setup(self, info: dict[str, Any]) -> dict[str, Any]:
         """Setup the model parameters from pipeline info."""
@@ -110,6 +119,7 @@ class UNet(nn.Module):
         # Initialize network architecture
         self._build_network()
         
+        info.update({"train": {"dataset": "TwoDDataset"}})
         return info
     
     def _build_network(self) -> None:

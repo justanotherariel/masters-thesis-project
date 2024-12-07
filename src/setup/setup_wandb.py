@@ -41,7 +41,7 @@ def setup_wandb(
         tags=cfg.wandb.tags,
         notes=cfg.wandb.notes,
         settings=wandb.Settings(start_method="thread", code_dir="."),
-        dir=output_dir,
+        dir=str(output_dir),
         reinit=True,
     )
 

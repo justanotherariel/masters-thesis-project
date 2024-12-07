@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import XData
-from .utils import TokenDiscretizer, TokenIndex, TokenType
+from .utils import TokenIndex, TokenType
 
 
 @dataclass
@@ -24,7 +24,6 @@ class TwoDDataset(Dataset):
         if indices != "all_indices" and not hasattr(data, indices):
             raise ValueError(f"Data does not have attribute {indices}")
         
-        self._oversampling_factor = oversampling_factor
         self.discretize = discretize
 
         data.check_data()
@@ -39,7 +38,7 @@ class TwoDDataset(Dataset):
         self._indices = flatten_indices(self._indices)
         
         # Oversample the indices
-        self._indices = np.repeat(self._indices, self._oversampling_factor, axis=0)
+        self._indices = np.repeat(self._indices, oversampling_factor, axis=0)
 
     def __len__(self) -> int:
         """Get the total number of training examples."""
@@ -133,7 +132,10 @@ class TwoDDataset(Dataset):
         :param info: The configuration information.
         :return: The configuration information.
         """
+        info.update({"train": {"dataset": self.__class__.__name__}})
+        
         self.ti = self.create_ti(info)
+        
         return info
     
     @staticmethod

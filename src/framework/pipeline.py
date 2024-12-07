@@ -46,19 +46,19 @@ class ModelPipeline(TransformType):
 
         self._set_children(children)
 
-    def setup(self, data: Any = None) -> Any:
+    def setup(self, info: dict = None) -> dict:
         """Setup the pipeline.
 
         :param data: The input data.
         """
         if self.env_sys is not None:
-            data = self.env_sys.setup(data)
+            info = self.env_sys.setup(info)
         if self.train_sys is not None:
-            data = self.train_sys.setup(data)
+            info = self.train_sys.setup(info)
         if self.pred_sys is not None:
-            data = self.pred_sys.setup(data)
+            info = self.pred_sys.setup(info)
 
-        return
+        return info
 
     def transform(self, data: Any = None, **transform_args: Any) -> XData:
         """Train the system.

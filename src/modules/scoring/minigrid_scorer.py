@@ -1,6 +1,7 @@
 from typing import Any
 
 from src.framework.transforming import TransformationBlock
+from src.modules.training.datasets.utils import TokenIndex
 from src.typing.pipeline_objects import XData
 import torch
 from src.framework.logging import Logger
@@ -17,6 +18,7 @@ class MinigridScorer(TransformationBlock):
         :return: The transformed data.
         """
         self.info = info
+        self.conversion = CONVERT[info['train']['dataset']]
         return info
 
     def custom_transform(self, data: XData, **kwargs) -> XData:
@@ -26,6 +28,8 @@ class MinigridScorer(TransformationBlock):
         :param kwargs: Any additional arguments
         :return: The transformed data
         """
+        
+        data = self.conversion(data, self.info)
         
         if data.train_predictions is not None and data.train_targets is not None:
             self.calc_accuracy(data.train_predictions, data.train_targets, "Train")
@@ -96,3 +100,37 @@ class MinigridScorer(TransformationBlock):
                 f"{index_pretty_name}/Reward Accuracy": reward_accuracy,
             },
         )
+        
+def convert_token_dataset(data: XData, info: dict) -> Any:
+    
+    def convert_tokens(data: torch.Tensor, ti: TokenIndex, obs_shape: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
+        data = torch.stack(data).reshape(-1, *obs_shape, data[0].shape[-1])
+        obs = data[..., :-1, ti.observation_]
+        obs = data.reshape(-1, *obs_shape, obs.shape[-1])
+        reward = data[..., -1, ti.reward_]
+        return obs, reward
+    
+    ti = info['token_index']
+    shape = info['env_build']['observation_space'].shape[:2]
+    
+    if data.train_predictions is not None:
+        data.train_predictions = convert_tokens(data.train_predictions, ti, shape)
+    
+    if data.train_targets is not None:
+        data.train_targets = convert_tokens(data.train_targets, ti, shape)
+        
+    if data.validation_predictions is not None:
+        data.validation_predictions = convert_tokens(data.validation_predictions, ti, shape)
+    
+    if data.validation_targets is not None:
+        data.validation_targets = convert_tokens(data.validation_targets, ti, shape)
+    
+    return data
+
+def convert_two_d_dataset(data: XData, info: dict) -> Any:
+    return data
+
+CONVERT = {
+    "TokenDataset": convert_token_dataset,
+    "TwoDDataset": convert_two_d_dataset
+}

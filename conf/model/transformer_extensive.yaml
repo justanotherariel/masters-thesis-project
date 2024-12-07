@@ -1,0 +1,62 @@
+defaults:
+  - pipeline/default@_here_
+  - _self_
+
+env_sys:
+  steps:
+    - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
+      environment: MiniGrid-Empty-5x5-v0
+      # environment: MiniGrid-LavaCrossingS11N5-v0
+
+    - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
+      train_envs: 1
+      validation_envs: 1
+
+train_sys:
+  steps:
+    - _target_: src.modules.training.torch_trainer.TorchTrainer
+
+      epochs: 15
+      batch_size: 2048
+      patience: 10
+      to_predict: VALIDATION
+
+      model:
+        _target_: src.modules.training.models.transformer.Transformer
+        d_model: 512
+        n_heads: 8
+        n_layers: 6
+        d_ff: 2048
+
+      model_storage_conf:
+        save_model_to_disk: true
+        save_model_to_wandb: true
+        save_checkpoints_to_disk: false
+        save_checkpoint_every_x_epochs: 1
+        resume_training_from_checkpoint: false
+        save_directory: !!python/object/apply:pathlib.PosixPath
+          - 'tm/'
+
+      dataloader_conf:
+        num_workers: 8
+        prefetch_factor: 4
+        persistent_workers: true
+
+      optimizer:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: torch.optim.AdamW
+        lr: 0.001
+
+      scheduler:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: timm.scheduler.step_lr.StepLRScheduler
+        decay_t: 2
+        decay_rate: 0.5
+
+pred_sys:
+  steps:
+    - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
