@@ -4,7 +4,7 @@ import glob
 import os
 import pickle
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, NotRequired, TypedDict
+from typing import Any, Callable, Literal, NotRequired, TypedDict
 
 import numpy as np
 
@@ -165,7 +165,7 @@ class Cacher:
         output_data_type = cache_args["output_data_type"]
         read_args = cache_args.get("read_args", {})
 
-        load_functions: Dict[str, LoaderFunction] = {
+        load_functions: dict[str, LoaderFunction] = {
             ".npy": self._load_npy,
             ".parquet": self._load_parquet,
             ".csv": self._load_csv,
@@ -283,7 +283,7 @@ class Cacher:
         output_data_type = cache_args["output_data_type"]
         store_args = cache_args.get("store_args", {})
 
-        store_functions: Dict[str, StoreFunction] = {
+        store_functions: dict[str, StoreFunction] = {
             ".npy": self._store_npy,
             ".parquet": self._store_parquet,
             ".csv": self._store_csv,

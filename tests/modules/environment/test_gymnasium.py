@@ -100,7 +100,6 @@ def test_minigrid_sampler_extensive():
     assert data.observations.shape[1:] == observation_size
 
     # Check agent placement and direction in observations
-    target = [10, 0]  # Agent encoding
     mask = np.ones(data.observations.shape[:-1], dtype=bool)
     mask &= data.observations[..., 3] > 0
     mask &= data.observations[..., 3] <= 4
@@ -175,6 +174,6 @@ def test_minigrid_sampler_extensive():
     assert data.env.unwrapped.spec is not None  # Environment should still be valid
     try:
         data.env.step(0)
-        assert False, "Environment should be closed"
+        raise AssertionError("Environment should be closed")
     except Exception:
         pass  # Expected - environment should be closed

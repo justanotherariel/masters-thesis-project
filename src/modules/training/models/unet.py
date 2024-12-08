@@ -6,7 +6,7 @@ Heavily inspired by:
 """
 
 import functools
-from typing import Any, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -73,7 +73,7 @@ class Up(nn.Module):
 
 class OutConv(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(OutConv, self).__init__()
+        super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
@@ -111,7 +111,7 @@ class UNet(nn.Module):
         ]
 
         # Set observation shape and action dimension from environment info
-        self.obs_dim: Tuple[int, int, int] = (*info["env_build"]["observation_space"].shape[:2], len(ti.observation_))
+        self.obs_dim: tuple[int, int, int] = (*info["env_build"]["observation_space"].shape[:2], len(ti.observation_))
         self.action_dim: int = info["env_build"]["action_space"].n.item()
 
         # Initialize network architecture
@@ -147,7 +147,7 @@ class UNet(nn.Module):
         )
         self.up_last = OutConv(self.hidden_channels[0], self.obs_dim[-1])
 
-    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the network."""
 
         # Unpack input
@@ -222,9 +222,9 @@ class UNet(nn.Module):
 
     def compute_loss(
         self,
-        x: Tuple[torch.Tensor, torch.Tensor],
-        y: Tuple[torch.Tensor, torch.Tensor],
-    ) -> Tuple[torch.Tensor, dict]:
+        x: tuple[torch.Tensor, torch.Tensor],
+        y: tuple[torch.Tensor, torch.Tensor],
+    ) -> tuple[torch.Tensor, dict]:
         """Compute the combined loss for observation and reward predictions."""
         # Compute observation loss using cross entropy for softmaxed ranges
         predicted_next_obs, predicted_reward = x

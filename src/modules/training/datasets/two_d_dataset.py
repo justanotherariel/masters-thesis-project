@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List, Tuple
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -45,7 +45,7 @@ class TwoDDataset(Dataset):
         """Get the total number of training examples."""
         return self._indices.shape[0]
 
-    def __getitem__(self, idx: int) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+    def __getitem__(self, idx: int) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """Get a single training example.
 
         Returns:
@@ -143,8 +143,8 @@ class TwoDDataset(Dataset):
 
     @staticmethod
     def custom_collate_fn(
-        batch: List[Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]],
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        batch: list[tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]],
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """Custom collate function for TwoDDataset that properly batches 2D observations with actions/rewards.
 
         Args:

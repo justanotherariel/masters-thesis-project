@@ -1,7 +1,7 @@
 """Block to instatiate a Gymnasium Minigrid Environment."""
 
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any
 
 import gymnasium as gym
 import minigrid
@@ -194,7 +194,7 @@ class MinigridSamplerExtensive(TransformationBlock):
     train_envs: int
     validation_envs: int
 
-    def _get_valid_positions(self, env) -> list[Tuple[int, int]]:
+    def _get_valid_positions(self, env) -> list[tuple[int, int]]:
         """Get all valid positions in the grid where the agent can be placed.
 
         Args:
@@ -216,7 +216,7 @@ class MinigridSamplerExtensive(TransformationBlock):
 
         return valid_positions
 
-    def _place_agent(self, env, pos: Tuple[int, int], dir: int = 0) -> None:
+    def _place_agent(self, env, pos: tuple[int, int], dir: int = 0) -> None:
         """Place the agent at a specific position with given direction.
 
         Args:

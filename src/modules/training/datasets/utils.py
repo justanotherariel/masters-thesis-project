@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 import torch
 
@@ -52,16 +52,16 @@ class TokenIndexSub:
 class TokenIndex:
     """Manages token indices for different types defined in the info dictionary."""
 
-    def __init__(self, info: Dict[str, List[Tuple[int, int]]]):
+    def __init__(self, info: dict[str, list[tuple[int, int]]]):
         required_keys = {"observation", "action", "reward"}
         if not required_keys.issubset(info.keys()):
             raise ValueError(f"TokenIndex must have all keys: {required_keys}")
 
         # dict[type, list[tuple[original_idx, num_items]]]
-        self.info: Dict[str, List[Tuple[int, int]]] = info
+        self.info: dict[str, list[tuple[int, int]]] = info
 
         # dict[type, list[tuple[discrete_start_idx, len]]]
-        self.info_discrete: Dict[str, List[Tuple[int, int]]] = {}
+        self.info_discrete: dict[str, list[tuple[int, int]]] = {}
 
         # Flags
         self.discrete: bool = False
@@ -69,7 +69,7 @@ class TokenIndex:
 
         # Check if seperate
         num_idx_zero = 0
-        for key, value in self.info.items():
+        for _key, value in self.info.items():
             indices = [x[0] for x in value]
             if 0 in indices:
                 num_idx_zero += 1

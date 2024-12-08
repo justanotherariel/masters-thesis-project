@@ -18,7 +18,7 @@ train_sys:
 
       epochs: 1_000
       batch_size: 2048
-      patience: 4
+      patience: 200
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 50
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL

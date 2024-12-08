@@ -203,10 +203,7 @@ class TorchTrainer(TransformationBlock):
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model(X_batch)
 
-                if isinstance(y_pred, tuple):
-                    y_pred = tuple(y.to("cpu") for y in y_pred)
-                else:
-                    y_pred = y_pred.to("cpu")
+                y_pred = tuple(y.to("cpu") for y in y_pred) if isinstance(y_pred, tuple) else y_pred.to("cpu")
 
                 predictions.extend(y_pred)
                 labels.extend(data[1])
@@ -385,10 +382,10 @@ class TorchTrainer(TransformationBlock):
                     },
                 )
 
-                # Early stopping
-                if self.patience_exceeded():
-                    logger.log_to_external(message={f"Epochs{fold_no}": (epoch + 1) - self.patience})
-                    break
+            # Early stopping
+            if self.patience_exceeded():
+                logger.log_to_external(message={f"Epochs{fold_no}": (epoch + 1) - self.patience})
+                break
 
             # Log the trained epochs to wandb if we finished training
             logger.log_to_external(message={f"Epochs{fold_no}": epoch + 1})
@@ -509,17 +506,11 @@ def moveTo(
     device: torch.device,
 ) -> torch.Tensor | tuple[torch.Tensor, ...] | tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
     """Move tensor(s) to device."""
-    if isinstance(x_batch, tuple):
-        x_batch = tuple(x.to(device) for x in x_batch)
-    else:
-        x_batch = x_batch.to(device)
+    x_batch = tuple(x.to(device) for x in x_batch) if isinstance(x_batch, tuple) else x_batch.to(device)
 
     if y_batch is None:
         return x_batch
 
-    if isinstance(y_batch, tuple):
-        y_batch = tuple(y.to(device) for y in y_batch)
-    else:
-        y_batch = y_batch.to(device)
+    y_batch = tuple(y.to(device) for y in y_batch) if isinstance(y_batch, tuple) else y_batch.to(device)
 
     return x_batch, y_batch

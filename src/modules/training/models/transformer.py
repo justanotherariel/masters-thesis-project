@@ -7,7 +7,6 @@ Heavily inspired by
 
 import functools
 import math
-from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -26,7 +25,7 @@ class PositionalEncoding(nn.Module):
         :param d_model: dimension of model
         :param max_len: max sequence length
         """
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
 
         # same size with input matrix (for adding with input matrix)
         self.encoding = torch.zeros(max_len, d_model)
@@ -69,12 +68,12 @@ class TokenEmbedding(nn.Embedding):
         :param vocab_size: size of vocabulary
         :param d_model: dimensions of model
         """
-        super(TokenEmbedding, self).__init__(vocab_size, d_model, padding_idx=1)
+        super().__init__(vocab_size, d_model, padding_idx=1)
 
 
 class LayerNorm(nn.Module):
     def __init__(self, d_model, eps=1e-12):
-        super(LayerNorm, self).__init__()
+        super().__init__()
         self.gamma = nn.Parameter(torch.ones(d_model))
         self.beta = nn.Parameter(torch.zeros(d_model))
         self.eps = eps
@@ -91,7 +90,7 @@ class LayerNorm(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, n_head):
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
         self.n_head = n_head
         self.attention = ScaleDotProductAttention()
         self.w_q = nn.Linear(d_model, d_model)
@@ -149,7 +148,7 @@ class MultiHeadAttention(nn.Module):
 
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model, hidden, drop_prob=0.1):
-        super(PositionwiseFeedForward, self).__init__()
+        super().__init__()
         self.linear1 = nn.Linear(d_model, hidden)
         self.linear2 = nn.Linear(hidden, d_model)
         self.relu = nn.ReLU()
@@ -173,7 +172,7 @@ class ScaleDotProductAttention(nn.Module):
     """
 
     def __init__(self):
-        super(ScaleDotProductAttention, self).__init__()
+        super().__init__()
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, q, k, v, mask=None, e=1e-12):
@@ -260,11 +259,11 @@ class Transformer(nn.Module):
         ]
 
         # Set observation shape and action dimension from environment info
-        self.input_dim: Tuple[int, int] = (
+        self.input_dim: tuple[int, int] = (
             math.prod(info["env_build"]["observation_space"].shape[:2]) + 1,
             self.ti.shape,
         )
-        self.output_dim: Tuple[int, int] = (
+        self.output_dim: tuple[int, int] = (
             math.prod(info["env_build"]["observation_space"].shape[:2]) + 1,
             self.ti.shape,
         )
@@ -369,7 +368,7 @@ class Transformer(nn.Module):
         self,
         x: torch.Tensor,
         y: torch.Tensor,
-    ) -> Tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict]:
         x = x.float()
         y = y.float()
 

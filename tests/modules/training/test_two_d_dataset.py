@@ -123,7 +123,7 @@ def test_two_d_dataset_discretized():
     )
 
     ti = dataset.ti
-    environment_shape = info["env_build"]["observation_space"].shape[:-1]
+    info["env_build"]["observation_space"].shape[:-1]
 
     assert len(dataset) == num_samples_train
 
