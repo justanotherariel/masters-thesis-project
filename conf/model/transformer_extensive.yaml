@@ -16,10 +16,12 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 15
+      epochs: 1_000
       batch_size: 2048
-      patience: 10
-      to_predict: VALIDATION
+      patience: 100
+      load_all_batches_to_gpu: true
+      validate_every_x_epochs: 50
+      to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
 
       model:
         _target_: src.modules.training.models.transformer.Transformer
@@ -54,7 +56,7 @@ train_sys:
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 2
+        decay_t: 100
         decay_rate: 0.5
 
 pred_sys:

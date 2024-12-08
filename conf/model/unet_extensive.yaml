@@ -15,18 +15,31 @@ env_sys:
 train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
-      model_name: "U-Net"
 
-      epochs: 10
+      epochs: 1_000
       batch_size: 2048
-      patience: 2
-      oversampling_factor: 500
-      to_predict: "all"
-      checkpointing_enabled: false
+      patience: 100
+      load_all_batches_to_gpu: true
+      validate_every_x_epochs: 50
+      to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
 
       model:
         _target_: src.modules.training.models.unet.UNet
         hidden_channels: [32, 64]
+
+      model_storage_conf:
+        save_model_to_disk: true
+        save_model_to_wandb: true
+        save_checkpoints_to_disk: false
+        save_checkpoint_every_x_epochs: 1
+        resume_training_from_checkpoint: false
+        save_directory: !!python/object/apply:pathlib.PosixPath
+          - 'tm/'
+
+      dataloader_conf:
+        num_workers: 8
+        prefetch_factor: 4
+        persistent_workers: true
 
       optimizer:
         _target_: functools.partial
@@ -40,13 +53,8 @@ train_sys:
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 2
+        decay_t: 100
         decay_rate: 0.5
-
-      dataloader_args:
-        num_workers: 14
-        prefetch_factor: 4
-        persistent_workers: false
 
 pred_sys:
   steps:

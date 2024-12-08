@@ -68,6 +68,8 @@ class TorchTrainer(TransformationBlock):
     patience: Annotated[int, Gt(0)] = -1  # Early stopping
     batch_size: Annotated[int, Gt(0)] = 32
     use_mixed_precision: bool = field(default=False)
+    validate_every_x_epochs: Annotated[int, Gt(0)] = 1
+    load_all_batches_to_gpu: bool = field(default=False)
 
     # Predction parameters
     to_predict: DataSetTypes = field(default=DataSetTypes.VALIDATION, repr=False, compare=False)
@@ -83,6 +85,9 @@ class TorchTrainer(TransformationBlock):
         ms = self.model_storage_conf
         if ms.save_model_to_wandb and not ms.save_model_to_disk:
             raise ValueError("Cannot save model to wandb without saving to disk.")
+        
+        # self.to_predict is a string, but we want to store it as a DataSetTypes
+        self.to_predict = DataSetTypes[self.to_predict]
         
         # Initialize variables
         self.best_model_state_dict: dict[Any, Any] = {}
@@ -117,7 +122,7 @@ class TorchTrainer(TransformationBlock):
         self.model.setup(info)
 
         # Move model to fastest device
-        if torch.cuda.is_available() and not info['debug']:
+        if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
@@ -303,7 +308,7 @@ class TorchTrainer(TransformationBlock):
 
         # Save the model
         if self.model_storage_conf.save_model_to_disk:
-            self._save_model()
+            self.model_storage.save_model(self.model)
 
     def _model_training_loop(
         self,
@@ -366,7 +371,7 @@ class TorchTrainer(TransformationBlock):
                     self.get_model_checkpoint_path(epoch - 1).unlink()
 
             # Compute validation loss
-            if len(validation_loader) > 0:
+            if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
                 self.last_val_loss = self.val_one_epoch(
                     validation_loader,
                     desc=f"Epoch {epoch} Valid",
@@ -403,14 +408,30 @@ class TorchTrainer(TransformationBlock):
         """
         losses = []
         self.model.train()
-        pbar = tqdm(
-            dataloader,
-            unit="batch",
-            desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
-        )
+        
+        if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_train_batches"):
+            self.preloaded_train_batches = list(dataloader)
+            batches = self.preloaded_train_batches
+            for batch_idx in range(len(batches)):
+                batches[batch_idx] = moveTo(batches[batch_idx][0], batches[batch_idx][1], self.device)
+        
+        if self.load_all_batches_to_gpu:
+            pbar = tqdm(
+                self.preloaded_train_batches, 
+                unit="batch", 
+                desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})")
+        else:
+            pbar = tqdm(
+                dataloader,
+                unit="batch",
+                desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
+            )
+        
         for batch in pbar:
             x_batch, y_batch = batch
-            x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
+            
+            if not self.load_all_batches_to_gpu:
+                x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]

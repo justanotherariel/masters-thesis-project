@@ -104,10 +104,9 @@ class MinigridScorer(TransformationBlock):
 def convert_token_dataset(data: XData, info: dict) -> Any:
     
     def convert_tokens(data: torch.Tensor, ti: TokenIndex, obs_shape: tuple[int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-        data = torch.stack(data).reshape(-1, *obs_shape, data[0].shape[-1])
-        obs = data[..., :-1, ti.observation_]
-        obs = data.reshape(-1, *obs_shape, obs.shape[-1])
-        reward = data[..., -1, ti.reward_]
+        data_tensor = torch.stack(data)
+        obs = data_tensor[..., :-1, :].reshape(data_tensor.shape[0], *obs_shape, -1)
+        reward = data_tensor[..., -1, ti.reward_].float()
         return obs, reward
     
     ti = info['token_index']

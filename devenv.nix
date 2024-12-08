@@ -4,7 +4,10 @@
   # Configure Python
   languages.python = {
   	enable = true;
-    poetry.enable = true;
+    venv.enable = true;
+    # poetry.enable = true;
+    # poetry.activate.enable = false;
+    # poetry.install.enable = false;
   };
 
   # Add Dev Packages
