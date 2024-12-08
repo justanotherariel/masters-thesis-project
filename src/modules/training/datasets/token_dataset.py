@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import XData
+
 from .utils import TokenDiscretizer, TokenIndex, TokenType
 
 
@@ -24,7 +25,7 @@ class TokenDataset(Dataset):
         """Set up the dataset for training."""
         if indices != "all_indices" and not hasattr(data, indices):
             raise ValueError(f"Data does not have attribute {indices}")
-        
+
         self.discretize = discretize
 
         data.check_data()
@@ -58,27 +59,26 @@ class TokenDataset(Dataset):
         # Create input token sequence
         self.ti.discrete = False
         x = torch.zeros((self._data_len_of_input, self.ti.shape), dtype=torch.uint8)
-        
+
         # Add Initial Observation
         x[: self._data_len_of_obs, self.ti.type_] = TokenType.OBSERVATION.value
         x[: self._data_len_of_obs, self.ti.observation_] = torch.tensor(
             self._data.observations[idx[0]].reshape(-1, self.ti.observation_.shape[0])
         )
-        
+
         # Add Action
         x[-1, self.ti.type_] = TokenType.ACTION.value
         x[-1, self.ti.action_] = self._data.actions[idx[2]].item()
 
-
         # Create target token sequence
         y = torch.zeros((self._data_len_of_input, self.ti.shape), dtype=torch.uint8)
-        
+
         # Add Resulting Observation
         y[: self._data_len_of_obs, self.ti.type_] = TokenType.OBSERVATION.value
         y[: self._data_len_of_obs, self.ti.observation_] = torch.tensor(
             self._data.observations[idx[1]].reshape(-1, self.ti.observation_.shape[0])
         )
-        
+
         # Add Reward
         y[-1, self.ti.type_] = TokenType.REWARD.value
         y[-1, self.ti.reward_] = self._data.rewards[idx[2]].item()

@@ -1,6 +1,5 @@
 """Block to instatiate a Gymnasium Minigrid Environment."""
 
-from bdb import set_trace
 from dataclasses import dataclass
 from typing import Any, Tuple
 
@@ -9,9 +8,8 @@ import minigrid
 import minigrid.core
 import numpy as np
 import numpy.typing as npt
-from tqdm import tqdm
 from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
-from minigrid.wrappers import ImgObsWrapper
+from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
@@ -65,7 +63,7 @@ class GymnasiumBuilder(TransformationBlock):
                     "action_space": self.env.action_space,
                     "observation_space": self.env.observation_space,
                     "observation_info": [
-                        (0, len(OBJECT_TO_IDX) -1), # Remove agent idx, represented by the last dimension
+                        (0, len(OBJECT_TO_IDX) - 1),  # Remove agent idx, represented by the last dimension
                         (1, len(COLORS)),
                         (2, len(STATE_TO_IDX)),
                         (3, 5),  # 0: agent not present, 1-4: agent direction
@@ -182,6 +180,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
         env.close()
         return data
 
+
 @dataclass
 class MinigridSamplerExtensive(TransformationBlock):
     """Block to extensively sample a MiniGrid Environment by placing the agent at each valid position and executing each possible action.
@@ -191,34 +190,35 @@ class MinigridSamplerExtensive(TransformationBlock):
         train_envs (int): Number of environments to sample for training
         validation_envs (int): Number of environments to sample for validation
     """
+
     train_envs: int
     validation_envs: int
 
     def _get_valid_positions(self, env) -> list[Tuple[int, int]]:
         """Get all valid positions in the grid where the agent can be placed.
-        
+
         Args:
             env: The MiniGrid environment
-            
+
         Returns:
             List of (x, y) coordinates where the agent can be placed
         """
         valid_positions = []
         grid = env.unwrapped.grid.encode()
-        
+
         # Iterate through all positions in the grid
         for i in range(env.unwrapped.width):
             for j in range(env.unwrapped.height):
                 # Check if the agent can overlap with the object at this position
                 # .venv/lib/python3.11/site-packages/minigrid/core/world_object.py#L46
-                if grid[i, j, 0] in [OBJECT_TO_IDX['empty'], OBJECT_TO_IDX['goal']]:
+                if grid[i, j, 0] in [OBJECT_TO_IDX["empty"], OBJECT_TO_IDX["goal"]]:
                     valid_positions.append((i, j))
-        
+
         return valid_positions
 
     def _place_agent(self, env, pos: Tuple[int, int], dir: int = 0) -> None:
         """Place the agent at a specific position with given direction.
-        
+
         Args:
             env: The MiniGrid environment
             pos: (x, y) position to place the agent
@@ -226,25 +226,25 @@ class MinigridSamplerExtensive(TransformationBlock):
         """
         env.unwrapped.agent_pos = pos
         env.unwrapped.agent_dir = dir
-        env.unwrapped.step_count = 0    # Reward, if any, is 1
-        
-    def _sample_pos(self, 
-                        env: gym.Env, 
-                        pos: tuple[int, int],
-                        env_indices: list[list[int]],
-                        observations_list: list[npt.NDArray],
-                        actions_list: list[int],
-                        rewards_list: list[float]
-                        ) -> None:
-        
-        # For each possible direction        
+        env.unwrapped.step_count = 0  # Reward, if any, is 1
+
+    def _sample_pos(
+        self,
+        env: gym.Env,
+        pos: tuple[int, int],
+        env_indices: list[list[int]],
+        observations_list: list[npt.NDArray],
+        actions_list: list[int],
+        rewards_list: list[float],
+    ) -> None:
+        # For each possible direction
         for dir in range(4):
             # Place agent at position and direction
             self._place_agent(env, pos, dir)
-            
+
             # Get initial observation
             initial_obs = env.getObservation()
-            
+
             # Only record the observation if it has not been recorded before
             x_idx = None
             for i in range(len(observations_list)):
@@ -257,10 +257,9 @@ class MinigridSamplerExtensive(TransformationBlock):
 
             # For each possible action
             for action in range(env.action_space.n):
-                
                 # Take action and get new observation
                 new_obs, reward, _terminated, _truncated, _info = env.step(action)
-                
+
                 # If the observation data has already been recorded before, skip
                 y_idx = None
                 for i in range(len(observations_list)):
@@ -270,16 +269,15 @@ class MinigridSamplerExtensive(TransformationBlock):
                 if not y_idx:
                     observations_list.append(new_obs)
                     y_idx = len(observations_list) - 1
-                    
+
                 # Store the action, and reward
                 actions_list.append(action)
                 rewards_list.append(reward)
-                
-                # Store indices for this sample
-                env_indices.append([x_idx, y_idx, len(actions_list)-1])
-                
-        return env_indices, observations_list, actions_list, rewards_list
 
+                # Store indices for this sample
+                env_indices.append([x_idx, y_idx, len(actions_list) - 1])
+
+        return env_indices, observations_list, actions_list, rewards_list
 
     def custom_transform(self, data: XData) -> XData:
         """Extensively sample the environment by placing the agent at each valid position
@@ -298,50 +296,45 @@ class MinigridSamplerExtensive(TransformationBlock):
         observations_list = []
         actions_list = []
         rewards_list = []
-        
+
         train_indices: list[list[int]] = []
         validation_indices: list[list[int]] = []
-        
+
         current_env = 0
-        
-        while current_env < total_envs:            
+
+        while current_env < total_envs:
             # Reset environment to get a new layout
             env.reset()
-            
+
             # Get valid positions for this environment
             valid_positions = self._get_valid_positions(env)
-            
+
             # Track indices for this environment's samples
             env_indices = []
-            
+
             # For each valid position
-            with tqdm(total=len(valid_positions), desc=f"Sampling Environment {current_env + 1}/{total_envs}", unit="samples") as pbar:
+            with tqdm(
+                total=len(valid_positions), desc=f"Sampling Environment {current_env + 1}/{total_envs}", unit="samples"
+            ) as pbar:
                 for pos in valid_positions:
                     # Create samples for this position
-                    self._sample_pos(
-                        env, 
-                        pos,
-                        env_indices,
-                        observations_list,
-                        actions_list,
-                        rewards_list
-                        )
+                    self._sample_pos(env, pos, env_indices, observations_list, actions_list, rewards_list)
 
                     pbar.update(1)
-            
+
             # Store indices in appropriate set
             if current_env < self.train_envs:
                 train_indices.append(env_indices)
             else:
                 validation_indices.append(env_indices)
-            
+
             current_env += 1
 
         # Convert lists to numpy arrays
         data.observations = np.stack(observations_list, axis=0)
         data.actions = np.array(actions_list, dtype=np.int8).reshape(-1, 1)
         data.rewards = np.array(rewards_list, dtype=np.float16).reshape(-1, 1)
-        
+
         # Store indices
         data.train_indices = np.array(train_indices)
         data.validation_indices = np.array(validation_indices)

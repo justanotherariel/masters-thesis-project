@@ -1,9 +1,10 @@
-from math import prod
 import torch
+from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, STATE_TO_IDX
+
 from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
 from src.typing.pipeline_objects import XData
-from minigrid.core.constants import OBJECT_TO_IDX, COLOR_TO_IDX, STATE_TO_IDX
+
 
 def create_dataset(
     environment: str,
@@ -28,6 +29,7 @@ def create_dataset(
 
     return dataset, info
 
+
 def test_two_d_dataset():
     """Test the TwoDDataset class."""
     num_samples_total = 100
@@ -41,11 +43,10 @@ def test_two_d_dataset():
         perc_train=per_train,
         indices="train_indices",
     )
-    
+
     ti = dataset.ti
-    environment_shape = info['env_build']['observation_space'].shape[:-1]
+    environment_shape = info["env_build"]["observation_space"].shape[:-1]
     channels = len(ti.observation_)
-    
 
     # Check the length of the dataset
     assert len(dataset) == num_samples_train
@@ -67,44 +68,45 @@ def test_two_d_dataset():
         assert reward.dtype == torch.float32
 
         # Check value ranges for MiniGrid
-        
+
         ## Observation: Object
         object = x_obs[..., ti.observation[0]].squeeze()
         assert (object >= 0).all() and (object < len(OBJECT_TO_IDX)).all()
-        assert (object == OBJECT_TO_IDX['goal']).sum() == 1 # One goal present
-        
+        assert (object == OBJECT_TO_IDX["goal"]).sum() == 1  # One goal present
+
         object = y_obs[..., ti.observation[0]].squeeze()
         assert (object >= 0).all() and (object < len(OBJECT_TO_IDX)).all()
-        assert (object == OBJECT_TO_IDX['goal']).sum() == 1 # One goal present
+        assert (object == OBJECT_TO_IDX["goal"]).sum() == 1  # One goal present
 
         ## Observation: Color
         color = x_obs[..., ti.observation[1]].squeeze()
         assert (color >= 0).all() and (color < len(COLOR_TO_IDX)).all()
-        
+
         color = y_obs[..., ti.observation[1]].squeeze()
         assert (color >= 0).all() and (color < len(COLOR_TO_IDX)).all()
-        
+
         ## Observation: State
         state = x_obs[..., ti.observation[2]].squeeze()
         assert (state >= 0).all() and (state < len(STATE_TO_IDX)).all()
-        
+
         state = y_obs[..., ti.observation[2]].squeeze()
         assert (state >= 0).all() and (state < len(STATE_TO_IDX)).all()
-        
+
         ## Observation: Agent
         agent = x_obs[..., ti.observation[3]].squeeze()
-        assert (agent >= 0).all() and (agent <= 4).all() # 4 directions + 0 (no agent)
+        assert (agent >= 0).all() and (agent <= 4).all()  # 4 directions + 0 (no agent)
         assert (agent != 0).sum() == 1  # One agent present
-        
+
         agent = y_obs[..., ti.observation[3]].squeeze()
         assert (agent >= 0).all() and (agent <= 4).all()
         assert (agent != 0).sum() == 1
-        
+
         ## Action
         assert (action >= 0).all() and (action < 7).all()  # MiniGrid has 7 actions
-        
-        ## Reward        
+
+        ## Reward
         assert (reward >= 0).all() and (reward <= 1).all()  # MiniGrid rewards are between 0 and 1
+
 
 def test_two_d_dataset_discretized():
     num_samples_total = 100
@@ -121,7 +123,7 @@ def test_two_d_dataset_discretized():
     )
 
     ti = dataset.ti
-    environment_shape = info['env_build']['observation_space'].shape[:-1]
+    environment_shape = info["env_build"]["observation_space"].shape[:-1]
 
     assert len(dataset) == num_samples_train
 
@@ -137,12 +139,12 @@ def test_two_d_dataset_discretized():
         ## Observation: Object
         object_x = torch.argmax(x_obs[..., ti.observation[0]], dim=-1)
         assert (object_x >= 0).all() and (object_x < len(OBJECT_TO_IDX)).all()
-        assert (object_x == OBJECT_TO_IDX['goal']).sum() == 1
+        assert (object_x == OBJECT_TO_IDX["goal"]).sum() == 1
         assert torch.sum(x_obs[..., ti.observation[0]], dim=-1).all() == 1
 
         object_y = torch.argmax(y_obs[..., ti.observation[0]], dim=-1)
         assert (object_y >= 0).all() and (object_y < len(OBJECT_TO_IDX)).all()
-        assert (object_y == OBJECT_TO_IDX['goal']).sum() == 1
+        assert (object_y == OBJECT_TO_IDX["goal"]).sum() == 1
         assert torch.sum(y_obs[..., ti.observation[0]], dim=-1).all() == 1
 
         ## Observation: Color
@@ -180,8 +182,8 @@ def test_two_d_dataset_discretized():
         assert torch.sum(action) == 1
 
         assert reward >= 0 and reward <= 1
-        
-    
+
+
 def test_collate_function():
     """Test the custom collate function."""
     batch_size = 4

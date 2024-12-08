@@ -1,24 +1,21 @@
 from pathlib import Path
 from typing import Any
 
-import wandb
 import torch
 from torch import nn
+
+import wandb
 from src.framework.logging import Logger
 
 logger = Logger()
+
 
 class ModelStorage:
     save_dir: Path
     model_hash: str
     save_to_wandb: bool
-    
-    def __init__(
-        self,
-        save_dir: Path,
-        model_hash = str,
-        saved_to_wandb: bool = True
-    ):
+
+    def __init__(self, save_dir: Path, model_hash=str, saved_to_wandb: bool = True):
         self.save_dir = save_dir
         self.model_hash = model_hash
         self.save_to_wandb = saved_to_wandb
@@ -29,7 +26,7 @@ class ModelStorage:
         :return: The model path.
         """
         return Path(self.save_dir) / f"{self.model_hash}.pt"
-    
+
     def get_model_path(self) -> Path | None:
         """Get the model path.
 
@@ -44,7 +41,7 @@ class ModelStorage:
         :return: The checkpoint path.
         """
         return Path(self.save_dir) / f"{self.model_hash}_checkpoint_{epoch}.pt"
-    
+
     def get_model_checkpoint_path(self, epoch: int) -> Path | None:
         """Get the checkpoint path.
 
@@ -60,7 +57,6 @@ class ModelStorage:
             return latest_checkpoint
         return 0
 
-
     def save_model(
         self,
         model: nn.Module,
@@ -69,16 +65,16 @@ class ModelStorage:
         """Save the model in the model_directory folder."""
         location = location if location is not None else self._get_model_path()
         location.parent.mkdir(exist_ok=True, parents=True)
-        
+
         logger.info(f"Saving model to {location}")
         torch.save(model, location)
 
         if self.save_to_wandb and wandb.run:
-            logger.info(f"Saving model to wandb")
-            model_artifact = wandb.Artifact('model_trained', type="model")
+            logger.info("Saving model to wandb")
+            model_artifact = wandb.Artifact("model_trained", type="model")
             model_artifact.add_file(f"{self.save_dir}/{self.model_hash}.pt")
             wandb.log_artifact(model_artifact)
-            
+
     def save_model_checkpoint(
         self,
         model: nn.Module,
@@ -87,7 +83,7 @@ class ModelStorage:
         """Save the model checkpoint in the model_directory folder."""
         location = self._get_model_checkpoint_path(epoch)
         location.parent.mkdir(exist_ok=True, parents=True)
-        
+
         logger.info(f"Saving model checkpoint to {location}")
         torch.save(model, location)
 
@@ -102,7 +98,6 @@ class ModelStorage:
         # Load model
         logger.info(f"Loading model from {model_path}")
         return torch.load(model_path, weights_only=False)
-
 
     def get_model_checkpoint(self, epoch: int) -> Any:
         location = self.get_model_checkpoint_path(epoch)

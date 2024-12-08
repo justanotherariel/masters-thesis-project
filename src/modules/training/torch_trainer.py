@@ -5,26 +5,22 @@ import copy
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from os import PathLike
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, TypeVar
 
 import numpy as np
-import numpy.typing as npt
 import torch
-from annotated_types import Ge, Gt, Interval
+from annotated_types import Ge, Gt
 from torch import Tensor, nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-import wandb
 from src.framework.logging import Logger
-from src.framework.trainers.utils import _get_onnxrt, _get_openvino
 from src.framework.transforming import TransformationBlock
 from src.modules.training.utils.model_storage import ModelStorage
-from src.typing.pipeline_objects import XData, DataSetTypes
+from src.typing.pipeline_objects import DataSetTypes, XData
 
 logger = Logger()
 
@@ -41,16 +37,18 @@ def custom_collate(batch: list[Tensor]) -> tuple[Tensor, Tensor]:
     X, y = batch[0], batch[1]
     return X, y
 
+
 @dataclass
 class ModelStorageConf:
     save_model_to_disk: bool = field(default=True, repr=False, compare=False)
     save_model_to_wandb: bool = field(default=True, repr=False, compare=False)
     save_checkpoints_to_disk: bool = field(default=True, repr=False, compare=False)
-    
+
     save_checkpoint_every_x_epochs: Annotated[int, Gt(0)] = field(default=0, repr=False, compare=False)
     resume_training_from_checkpoint: bool = field(default=True, repr=False, compare=False)
-    
+
     save_directory: Path = field(default=Path("tm/"), repr=False, compare=False)
+
 
 @dataclass
 class TorchTrainer(TransformationBlock):
@@ -79,16 +77,16 @@ class TorchTrainer(TransformationBlock):
 
     def __post_init__(self) -> None:
         """Post init method for the TorchTrainer class."""
-        
+
         # Setup ModelStorage
         self.model_storage_conf = ModelStorageConf(**self.model_storage_conf)
         ms = self.model_storage_conf
         if ms.save_model_to_wandb and not ms.save_model_to_disk:
             raise ValueError("Cannot save model to wandb without saving to disk.")
-        
+
         # self.to_predict is a string, but we want to store it as a DataSetTypes
         self.to_predict = DataSetTypes[self.to_predict]
-        
+
         # Initialize variables
         self.best_model_state_dict: dict[Any, Any] = {}
 
@@ -101,7 +99,7 @@ class TorchTrainer(TransformationBlock):
         :return: The transformed data.
         """
         self._setup_info = info
-        
+
         # Setup Fold
         self.current_fold = -1
 
@@ -117,7 +115,7 @@ class TorchTrainer(TransformationBlock):
             info["token_index"] = self.model.get_dataset_cls().func.create_ti(info)
         else:
             info["token_index"] = self.model.get_dataset_cls().create_ti(info)
-        
+
         # Setup Model
         self.model.setup(info)
 
@@ -130,10 +128,10 @@ class TorchTrainer(TransformationBlock):
         self.model.to(self.device)
 
         # Disable Dataloader parallelism if debugging
-        if info['debug']:
+        if info["debug"]:
             logger.info("Debug Mode: Disabling Dataloader Parallelism")
             self.dataloader_conf = {}
-                
+
         # Set optimizer
         self.initialized_optimizer = self.optimizer(self.model.parameters())
 
@@ -143,7 +141,7 @@ class TorchTrainer(TransformationBlock):
             self.initialized_scheduler = self.scheduler(self.initialized_optimizer)
         else:
             self.initialized_scheduler = None
-            
+
         # Mixed precision
         if self.use_mixed_precision:
             logger.info("Enabling Mixed Precision Training")
@@ -179,11 +177,11 @@ class TorchTrainer(TransformationBlock):
         if DataSetTypes.TRAIN in self.to_predict:
             loader = self.create_dataloader(data, "train_indices", shuffle=False)
             data.train_predictions, data.train_targets = self.predict_on_loader(loader)
-        
+
         if DataSetTypes.VALIDATION in self.to_predict:
             loader = self.create_dataloader(data, "validation_indices", shuffle=False)
             data.validation_predictions, data.validation_targets = self.predict_on_loader(loader)
-        
+
         return data
 
     def predict_on_loader(
@@ -199,12 +197,12 @@ class TorchTrainer(TransformationBlock):
         self.model.eval()
         labels = []
         predictions = []
-        
+
         with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model(X_batch)
-                
+
                 if isinstance(y_pred, tuple):
                     y_pred = tuple(y.to("cpu") for y in y_pred)
                 else:
@@ -243,7 +241,7 @@ class TorchTrainer(TransformationBlock):
         # Create datasets
         dataset = self.model.get_dataset_cls()(data, indices)
         dataset.setup(self._setup_info)
-        
+
         # Check if the dataset has a custom collate function
         collate = self.collate_fn if hasattr(dataset, "__getitems__") else None
         if hasattr(dataset, "custom_collate_fn"):
@@ -408,28 +406,29 @@ class TorchTrainer(TransformationBlock):
         """
         losses = []
         self.model.train()
-        
+
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_train_batches"):
             self.preloaded_train_batches = list(dataloader)
             batches = self.preloaded_train_batches
             for batch_idx in range(len(batches)):
                 batches[batch_idx] = moveTo(batches[batch_idx][0], batches[batch_idx][1], self.device)
-        
+
         if self.load_all_batches_to_gpu:
             pbar = tqdm(
-                self.preloaded_train_batches, 
-                unit="batch", 
-                desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})")
+                self.preloaded_train_batches,
+                unit="batch",
+                desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
+            )
         else:
             pbar = tqdm(
                 dataloader,
                 unit="batch",
                 desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
             )
-        
+
         for batch in pbar:
             x_batch, y_batch = batch
-            
+
             if not self.load_all_batches_to_gpu:
                 x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
@@ -503,16 +502,21 @@ class TorchTrainer(TransformationBlock):
                     return True
         return False
 
-def moveTo(x_batch: torch.Tensor | tuple[torch.Tensor, ...], y_batch: None | torch.Tensor | tuple[torch.Tensor, ...], device: torch.device) -> torch.Tensor | tuple[torch.Tensor, ...] | tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
+
+def moveTo(
+    x_batch: torch.Tensor | tuple[torch.Tensor, ...],
+    y_batch: None | torch.Tensor | tuple[torch.Tensor, ...],
+    device: torch.device,
+) -> torch.Tensor | tuple[torch.Tensor, ...] | tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
     """Move tensor(s) to device."""
     if isinstance(x_batch, tuple):
         x_batch = tuple(x.to(device) for x in x_batch)
     else:
         x_batch = x_batch.to(device)
-    
+
     if y_batch is None:
         return x_batch
-    
+
     if isinstance(y_batch, tuple):
         y_batch = tuple(y.to(device) for y in y_batch)
     else:

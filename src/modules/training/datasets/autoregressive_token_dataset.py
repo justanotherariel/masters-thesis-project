@@ -1,14 +1,17 @@
 """Main dataset"""
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 import torch
 from torch.utils.data import Dataset
-from typing import Any, Dict, List, Tuple, Union
 
 from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import XData
-from .utils import TokenIndex, TokenType, TokenDiscretizer
+
+from .utils import TokenDiscretizer, TokenIndex, TokenType
+
 
 class AutoregressiveTokenDataset(Dataset):
     """Main dataset for transformer training with token-level processing."""
@@ -113,30 +116,28 @@ class AutoregressiveTokenDataset(Dataset):
         # Create input token sequence
         self.ti.discrete = False
         x = torch.zeros((self._data_len_of_input + self._data_len_of_output - 1, self.ti.shape), dtype=torch.uint8)
-        
+
         # SOS
         x[0, self.ti.type_] = TokenType.SOS.value
-        
+
         # Add Initial Observation
         x[1 : self._data_len_of_obs + 1, self.ti.type_] = TokenType.OBSERVATION.value
         x[1 : self._data_len_of_obs + 1, self.ti.observation_] = torch.tensor(
-            self._data.observations[sample_idx[0]]
-                .reshape(-1, self.ti.observation_.shape[0])
+            self._data.observations[sample_idx[0]].reshape(-1, self.ti.observation_.shape[0])
         )
-        
+
         # Add Action
         x[self._data_len_of_input - 2, self.ti.type_] = TokenType.ACTION.value
         x[self._data_len_of_input - 2, self.ti.action_] = self._data.actions[sample_idx[2]].item()
-        
+
         # Add SEP
-        x[self._data_len_of_input - 1, self.ti.type_] = TokenType.SEP.value 
+        x[self._data_len_of_input - 1, self.ti.type_] = TokenType.SEP.value
 
         # Add resulting observation
         x[self._data_len_of_input : self._data_len_of_input + position_idx, self.ti.type_] = TokenType.OBSERVATION.value
         x[self._data_len_of_input : self._data_len_of_input + position_idx, self.ti.observation_] = torch.tensor(
-            self._data.observations[sample_idx[1]]
-                .reshape(-1, self.ti.observation_.shape[0])[:position_idx]
-            )
+            self._data.observations[sample_idx[1]].reshape(-1, self.ti.observation_.shape[0])[:position_idx]
+        )
 
         # Pad the rest of input token sequence (Already padded with zeros)
         # x[self._data_len_of_input + position_idx :, self.ti.type_] = TokenType.PAD.value
@@ -146,9 +147,8 @@ class AutoregressiveTokenDataset(Dataset):
         if position_idx < self._data_len_of_obs:
             y[self.ti.type_] = TokenType.OBSERVATION.value
             y[self.ti.observation_] = torch.tensor(
-                self._data.observations[sample_idx[1]]
-                    .reshape(-1, self.ti.observation_.shape[0])[position_idx]
-                )
+                self._data.observations[sample_idx[1]].reshape(-1, self.ti.observation_.shape[0])[position_idx]
+            )
         else:
             y[self.ti.type_] = TokenType.REWARD.value
             y[self.ti.reward_] = self._data.rewards[sample_idx[2]].item()

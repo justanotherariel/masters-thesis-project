@@ -198,7 +198,7 @@ class TransformingSystem(TransformType, _SequentialSystem):
         for step in self.steps:
             step_name = step.__class__.__name__
             set_of_steps.add(step_name)
-        if set_of_steps != set(transform_args.keys()):
+        if set_of_steps != set(transform_args.keys()) and set_of_steps != set():
             # Raise a warning and print all the keys that do not match
             logger.warning(
                 "The following steps do not exist but were given in the kwargs: "

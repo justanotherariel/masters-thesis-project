@@ -66,7 +66,7 @@ class TokenIndex:
         # Flags
         self.discrete: bool = False
         self.seperate: bool = False
-        
+
         # Check if seperate
         num_idx_zero = 0
         for key, value in self.info.items():
@@ -77,7 +77,7 @@ class TokenIndex:
             self.seperate = True
         elif num_idx_zero != 1:
             raise ValueError("Only one or all keys can have index 0.")
-        
+
         self._calculate_discrete_info()
 
     def _calc_num_items_before(self, org_idx: int) -> int:
@@ -90,7 +90,7 @@ class TokenIndex:
                     idx = orig_indices.index(i)
                     num_items += value[idx][1]
         return num_items
-    
+
     def _calc_num_items_before_seperate(self, key: str, org_idx: int) -> int:
         """Calculate total number of items before a given original index."""
         num_items = 0
@@ -110,7 +110,10 @@ class TokenIndex:
             }
         else:
             self.info_discrete = {
-                key: [(self._calc_num_items_before_seperate(key, original_idx), num_items) for original_idx, num_items in value]
+                key: [
+                    (self._calc_num_items_before_seperate(key, original_idx), num_items)
+                    for original_idx, num_items in value
+                ]
                 for key, value in self.info.items()
             }
 
@@ -121,7 +124,7 @@ class TokenIndex:
         """
         if name == "info":
             raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
-        
+
         # Handle direct attribute access (e.g., type, observation)
         if name in self.info:
             return TokenIndexSub(self, name)
@@ -147,10 +150,11 @@ class TokenIndex:
                     return self.info_discrete[key][i]
         raise ValueError(f"Original index {org_idx} out of range.")
 
+
 class TokenDiscretizer:
     """
     Discretize tokens with support for both 1D and 2D inputs.
-    
+
     The discretizer can handle inputs of shapes:
     - x: (token_seq_len, token_len) or (token_len)
     - y: (token_seq_len, token_len) or (token_len)
@@ -179,44 +183,44 @@ class TokenDiscretizer:
     def apply(self, x: torch.Tensor, y: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Apply discretization to input tensors.
-        
+
         Args:
             x: Input tensor of shape (token_seq_len, token_len) or (token_len)
             y: Target tensor of shape (token_seq_len, token_len) or (token_len)
-            
+
         Returns:
             tuple[torch.Tensor, torch.Tensor]: Discretized versions of input tensors
         """
         self.ti.discrete = True
-        
+
         # Reshape inputs if necessary
         x, x_was_1d = self._reshape_input(x)
         y, y_was_1d = self._reshape_input(y)
-        
+
         # Initialize output tensors
         new_x = torch.zeros((x.shape[0], self.new_shape), dtype=x.dtype)
         new_y = torch.zeros((y.shape[0], self.new_shape), dtype=y.dtype)
-        
+
         # Process each original index
         for org_idx in range(x.shape[1]):
             new_idx, num_classes = self.ti.get_discrete_idx(org_idx)
-            
+
             if num_classes == 0:
                 new_x[:, new_idx] = x[:, org_idx]
                 new_y[:, new_idx] = y[:, org_idx]
                 continue
-            
+
             new_x[:, new_idx : new_idx + num_classes] = torch.nn.functional.one_hot(
                 x[:, org_idx].long(), num_classes=num_classes
             )
             new_y[:, new_idx : new_idx + num_classes] = torch.nn.functional.one_hot(
                 y[:, org_idx].long(), num_classes=num_classes
             )
-        
+
         # Reshape outputs back if necessary
         new_x = self._reshape_output(new_x, x_was_1d)
         new_y = self._reshape_output(new_y, y_was_1d)
-        
+
         return new_x, new_y
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:

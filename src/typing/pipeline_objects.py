@@ -1,16 +1,20 @@
 from enum import Flag
+from typing import Any
+
 import gymnasium as gym
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any
+
 
 class DataSetTypes(Flag):
     """The types of datasets."""
+
     NONE = 0
     TRAIN = 1
     VALIDATION = 2
     TEST = 4
     ALL = TRAIN | VALIDATION | TEST
+
 
 class XData:
     env: gym.Env | None

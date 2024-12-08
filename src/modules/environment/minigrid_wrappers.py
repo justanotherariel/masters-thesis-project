@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import spaces
 from gymnasium.core import ObservationWrapper
-from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX
 
 
 class FullyObsWrapper(ObservationWrapper):
@@ -37,8 +36,8 @@ class FullyObsWrapper(ObservationWrapper):
     def observation(self, obs):
         env = self.unwrapped
         full_grid = np.zeros((env.width, env.height, 4), dtype=np.uint8)
-        full_grid[:,:,:3] = env.grid.encode()
-        full_grid[env.agent_pos[0]][env.agent_pos[1], 3] = env.agent_dir +1
+        full_grid[:, :, :3] = env.grid.encode()
+        full_grid[env.agent_pos[0]][env.agent_pos[1], 3] = env.agent_dir + 1
 
         return full_grid
 
