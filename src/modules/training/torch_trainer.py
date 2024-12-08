@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
+import time
 
 import numpy as np
 import torch
@@ -171,7 +172,11 @@ class TorchTrainer(TransformationBlock):
             model = self.model_storage.get_model()
             self.model.load_state_dict(model.state_dict())
         else:
+            current_time = time.time()
             self._model_train(data)
+            minutes = (time.time() - current_time) / 60
+            seconds = (time.time() - current_time) % 60
+            logger.info(f"Training took {f'{int(minutes)} minutes and ' if minutes > 0 else ''}{seconds:.2f} seconds")
 
         # Evaluate the model
         if DataSetTypes.TRAIN in self.to_predict:
@@ -281,7 +286,7 @@ class TorchTrainer(TransformationBlock):
 
         # Train the model
         logger.info(
-            f"Training model for {self.epochs} epochs"
+            f"Training model for {self.epochs:,} epochs"
             f"{', starting at epoch ' + str(start_epoch) if start_epoch > 0 else ''}"
         )
         self._model_training_loop(
