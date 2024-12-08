@@ -5,8 +5,8 @@ defaults:
 env_sys:
   steps:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
-      environment: MiniGrid-Empty-5x5-v0
-      # environment: MiniGrid-LavaCrossingS11N5-v0
+      # environment: MiniGrid-Empty-5x5-v0
+      environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
       train_envs: 1
@@ -18,7 +18,7 @@ train_sys:
 
       epochs: 1_000
       batch_size: 2048
-      patience: 200
+      # patience: 200
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 50
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
@@ -61,4 +61,5 @@ train_sys:
 
 pred_sys:
   steps:
+    - _target_: src.modules.scoring.minigrid_prediction_reshape.MinigridPredictionReshape
     - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
