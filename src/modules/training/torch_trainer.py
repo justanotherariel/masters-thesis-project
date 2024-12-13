@@ -169,6 +169,7 @@ class TorchTrainer(TransformationBlock):
             logger.info(
                 f"Model exists in {self.model_storage.get_model_path()}. Loading model...",
             )
+            logger.log_to_external({"Cached Model": self.model_storage.db.get_name()})
             model = self.model_storage.get_model()
             self.model.load_state_dict(model.state_dict())
         else:

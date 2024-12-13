@@ -19,6 +19,7 @@ class ModelStorage:
         self.save_dir = save_dir
         self.model_hash = model_hash
         self.save_to_wandb = saved_to_wandb
+        self.db = ModelStorageDB(model_hash, save_dir, save_dir / "model_db.csv")
 
     def _get_model_path(self) -> Path:
         """Get the model path.
@@ -70,6 +71,8 @@ class ModelStorage:
         torch.save(model, location)
 
         if self.save_to_wandb and wandb.run:
+            self.db.add(self.model_hash, wandb.run.name)
+
             logger.info("Saving model to wandb")
             model_artifact = wandb.Artifact("model_trained", type="model")
             model_artifact.add_file(f"{self.save_dir}/{self.model_hash}.pt")
@@ -102,3 +105,42 @@ class ModelStorage:
     def get_model_checkpoint(self, epoch: int) -> Any:
         location = self.get_model_checkpoint_path(epoch)
         return self.get_model(location)
+
+class ModelStorageDB:
+    current_hash: str
+    model_dir: Path
+    db_path: Path
+
+    def __init__(self, current_hash: str, model_dir: Path, db_path: Path):
+        self.current_hash = current_hash
+        self.model_dir = model_dir
+        self.db_path = db_path
+
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.db_path.touch(exist_ok=True)
+
+    def add(self, model_hash: str, run_name: str):
+        self.gc()
+        with open(self.db_path, "a") as db:
+            db.write(f"{model_hash},{run_name}\n")
+
+    def get_name(self, model_hash: str | None = None) -> str:
+        if model_hash is None:
+            model_hash = self.current_hash
+        with open(self.db_path, "r") as db:
+            for line in db:
+                model, name = line.strip().split(",")
+                if model == model_hash:
+                    return name
+        return None
+    
+    def gc(self):
+        models = [model.stem for model in self.model_dir.glob("*.pt")]
+        lines_to_keep = []
+        with open(self.db_path, "r") as db:
+            for line in db:
+                model_hash, _ = line.strip().split(",")
+                if model_hash in models:
+                    lines_to_keep.append(line)
+        with open(self.db_path, "w") as db:
+            db.writelines(lines_to_keep)
