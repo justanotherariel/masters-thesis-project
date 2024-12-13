@@ -4,6 +4,7 @@ from typing import Any
 import gymnasium as gym
 import numpy as np
 from numpy.typing import NDArray
+from minigrid.core.grid import Grid
 
 
 class DataSetTypes(Flag):
@@ -22,6 +23,7 @@ class XData:
     actions: NDArray[np.int8] | None
     rewards: NDArray[np.float32] | None
 
+    grids: list[Grid] | None
     train_indices: NDArray[np.int32] | None
     validation_indices: NDArray[np.int32] | None
 

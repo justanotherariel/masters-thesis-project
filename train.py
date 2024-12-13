@@ -60,7 +60,10 @@ def run_train(cfg: DictConfig) -> None:
     # Preload the pipeline
     logger.info("Setting up the pipeline")
     model_pipeline = setup_pipeline(cfg)
-    _ = model_pipeline.setup({"debug": cfg.debug})
+    _ = model_pipeline.setup({
+        "debug": cfg.debug,
+        "output_dir": output_dir,
+    })
 
     # Cache arguments for x_sys
     cache_data_path = Path(cfg.cache_path)

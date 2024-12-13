@@ -37,8 +37,6 @@ class GymnasiumBuilder(TransformationBlock):
 
     def __post_init__(self):
         """Initialize the Gymnasium Environment."""
-        if "MiniGrid-BlockedUnlockPickup-v0" not in gym.envs.registry:
-            minigrid.register_minigrid_envs()
         self.env = gym.make(self.environment)
 
         # Check if the environment is a minigrid environment
@@ -131,6 +129,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
         # [trajectory_id, [state_x, state_y, action/reward_idx]]
         train_indices: list[list[int]] = []
         validation_indices: list[list[int]] = []
+        data.grids = []
 
         samples_idx = 0
 
@@ -138,6 +137,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
         while samples_idx < self.num_samples:
             trajectory: list[int] = []
             observation, _info = env.reset()
+            data.grids.append(env.unwrapped.grid)
 
             for _ in range(self.num_samples_per_env):
                 # Save current State
@@ -299,12 +299,14 @@ class MinigridSamplerExtensive(TransformationBlock):
 
         train_indices: list[list[int]] = []
         validation_indices: list[list[int]] = []
+        data.grids = []
 
         current_env = 0
 
         while current_env < total_envs:
             # Reset environment to get a new layout
             env.reset()
+            data.grids.append(env.unwrapped.grid)
 
             # Get valid positions for this environment
             valid_positions = self._get_valid_positions(env)
