@@ -16,7 +16,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 1_000
+      epochs: 500
       batch_size: 2048
       # patience: 200
       load_all_batches_to_gpu: true
@@ -25,10 +25,10 @@ train_sys:
 
       model:
         _target_: src.modules.training.models.transformer.Transformer
-        d_model: 512
-        n_heads: 8
-        n_layers: 6
-        d_ff: 2048
+        d_model: 128
+        n_heads: 4
+        n_layers: 2
+        d_ff: 1024
 
       model_storage_conf:
         save_model_to_disk: true
@@ -63,3 +63,4 @@ pred_sys:
   steps:
     - _target_: src.modules.scoring.minigrid_prediction_reshape.MinigridPredictionReshape
     - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
+    - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
