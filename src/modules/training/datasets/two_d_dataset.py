@@ -18,9 +18,8 @@ class TwoDDataset(Dataset):
 
     _data: XData
     _indices: npt.NDArray
-    _oversampling_factor: int
 
-    def __init__(self, data: XData, indices: str, discretize: bool = False, oversampling_factor: int = 1) -> None:
+    def __init__(self, data: XData, indices: str, discretize: bool = False) -> None:
         """Set up the dataset for training."""
         if indices != "all_indices" and not hasattr(data, indices):
             raise ValueError(f"Data does not have attribute {indices}")
@@ -37,9 +36,6 @@ class TwoDDataset(Dataset):
         # Grab correct indices
         self._indices = getattr(data, indices) if indices != "all_indices" else np.array(range(len(data.observations)))
         self._indices = flatten_indices(self._indices)
-
-        # Oversample the indices
-        self._indices = np.repeat(self._indices, oversampling_factor, axis=0)
 
     def __len__(self) -> int:
         """Get the total number of training examples."""
