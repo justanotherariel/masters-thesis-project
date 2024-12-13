@@ -332,6 +332,9 @@ class Transformer(nn.Module):
         # Project to output size
         x = self.output_linear(x)  # [batch, output_len, output_size]
 
+        # Apply softmax to appropriate ranges
+        x = self.apply_softmax_to_tokens(x)
+
         return x
 
     def apply_softmax_to_tokens(self, x):
