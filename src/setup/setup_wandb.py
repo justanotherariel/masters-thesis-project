@@ -31,6 +31,13 @@ def setup_wandb(
     logger.debug("Initializing Weights & Biases")
 
     config = OmegaConf.to_container(cfg, resolve=True)
+
+    # Get the model name
+    model_target = get_nested_value(config, 'model.train_sys.steps.0.model._target_')
+    if model_target:
+        model_name = model_target.split('.')[-1]
+        config['model']['train_sys']['steps'][0]['model']['name'] = model_name
+
     run = wandb.init(
         config=replace_list_with_dict(config),  # type: ignore[arg-type]
         project="Thesis",
@@ -110,3 +117,35 @@ def replace_list_with_dict(o: object) -> object:
     elif isinstance(o, list):
         o = {i: replace_list_with_dict(v) for i, v in enumerate(o)}
     return o
+
+def get_nested_value(dictionary, path, default=None):
+    """
+    Safely access nested dictionary values using a list of keys or dot notation string.
+    Returns default value if path doesn't exist.
+    
+    Args:
+        dictionary (dict): The dictionary to search in
+        path (str|list): Path to value, either as a dot-separated string or list of keys
+        default: Value to return if path doesn't exist (default: None)
+    
+    Examples:
+        get_nested_value(config, 'model.train_sys.steps.0.model._target_')
+        get_nested_value(config, ['model', 'train_sys', 'steps', 0, 'model', '_target_'])
+    """
+    if isinstance(path, str):
+        keys = path.split('.')
+    else:
+        keys = path
+
+    current = dictionary
+    for key in keys:
+        try:
+            key = int(key) if isinstance(key, str) and key.isdigit() else key
+            if isinstance(current, (dict, list)):
+                current = current[key] if isinstance(current, dict) else current[int(key)]
+            else:
+                return default
+        except (KeyError, IndexError, TypeError, ValueError):
+            return default
+    
+    return current
