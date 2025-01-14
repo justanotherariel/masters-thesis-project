@@ -6,6 +6,7 @@ env_sys:
   steps:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
       # environment: MiniGrid-Empty-5x5-v0
+      # environment: MiniGrid-Fetch-8x8-N3-v0
       environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
