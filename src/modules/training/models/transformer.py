@@ -11,6 +11,7 @@ import math
 import torch
 import torch.nn.functional as F
 from torch import nn
+from src.typing.pipeline_objects import PipelineInfo
 
 
 class PositionalEncoding(nn.Module):
@@ -245,9 +246,9 @@ class Transformer(nn.Module):
         self.obs_loss_weight = obs_loss_weight  # Weight for observation loss
         self.reward_loss_weight = reward_loss_weight  # Weight for reward loss
 
-    def setup(self, info):
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         self.info = info
-        self.ti = info["token_index"]
+        self.ti = info.model_ti
 
         # Store softmax ranges for each grid cell component
         self.ti.discrete = True
@@ -260,11 +261,11 @@ class Transformer(nn.Module):
 
         # Set observation shape and action dimension from environment info
         self.input_dim: tuple[int, int] = (
-            math.prod(info["env_build"]["observation_space"].shape[:2]) + 1,
+            math.prod(info.data_info["observation_space"].shape[:2]) + 1,
             self.ti.shape,
         )
         self.output_dim: tuple[int, int] = (
-            math.prod(info["env_build"]["observation_space"].shape[:2]) + 1,
+            math.prod(info.data_info["observation_space"].shape[:2]) + 1,
             self.ti.shape,
         )
 
@@ -277,7 +278,7 @@ class Transformer(nn.Module):
         # Initialize network architecture
         self._build_network()
 
-        info.update({"train": {"dataset": "TokenDataset"}})
+        # info.model_ds_class = "TokenDataset"
         return info
 
     def _build_network(self) -> None:

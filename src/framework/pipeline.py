@@ -6,7 +6,6 @@ from typing import Any
 from joblib import hash
 
 from src.framework.logging import Logger
-from src.typing.pipeline_objects import XData
 
 from .caching import CacheArgs, Cacher
 from .transforming import Transformer, TransformingSystem, TransformType
@@ -46,7 +45,7 @@ class ModelPipeline(TransformType):
 
         self._set_children(children)
 
-    def setup(self, info: dict = None) -> dict:
+    def setup(self, info: Any) -> Any:
         """Setup the pipeline.
 
         :param data: The input data.
@@ -60,7 +59,7 @@ class ModelPipeline(TransformType):
 
         return info
 
-    def transform(self, data: Any = None, **transform_args: Any) -> XData:
+    def transform(self, data: Any = None, **transform_args: Any) -> Any:
         """Train the system.
 
         :param train_args: The arguments to pass to the training system. (Default is {})

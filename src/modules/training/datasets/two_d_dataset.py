@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData, DatasetGroup, PipelineInfo
 
 from .utils import TokenIndex, TokenType
 
@@ -16,13 +16,13 @@ from .utils import TokenIndex, TokenType
 class TwoDDataset(Dataset):
     """Dataset that preserves 2D structure of observations and separates actions/rewards."""
 
-    _data: XData
+    _data: PipelineData
     _indices: npt.NDArray
 
-    def __init__(self, data: XData, indices: str, discretize: bool = False) -> None:
+    def __init__(self, data: PipelineData, ds_group: DatasetGroup, discretize: bool = False) -> None:
         """Set up the dataset for training."""
-        if indices != "all_indices" and not hasattr(data, indices):
-            raise ValueError(f"Data does not have attribute {indices}")
+        if not ds_group in data.indices:
+            raise ValueError(f"Data does not have attribute {ds_group.name}.")
 
         self.discretize = discretize
 
@@ -34,7 +34,7 @@ class TwoDDataset(Dataset):
         self._obs_channels = data.observations.shape[-1]  # number of channels
 
         # Grab correct indices
-        self._indices = getattr(data, indices) if indices != "all_indices" else np.array(range(len(data.observations)))
+        self._indices = data.indices[ds_group]
         self._indices = flatten_indices(self._indices)
 
     def __len__(self) -> int:
@@ -51,8 +51,9 @@ class TwoDDataset(Dataset):
                 - target_observation: 2D tensor of shape (height, width, channels)
                 - reward: single value tensor
         """
-        if self._data is None or not self._data.check_data():
+        if self._data is None:
             raise ValueError("Dataset not initialized.")
+        self._data.check_data()
 
         # Grab the correct index / [state_x, state_y, action/reward_idx]
         idx = self._indices[idx]
@@ -111,11 +112,11 @@ class TwoDDataset(Dataset):
         return value
 
     @staticmethod
-    def create_ti(info: dict[str, Any]) -> TokenIndex:
+    def create_ti(info: PipelineInfo) -> TokenIndex:
         """Create a TokenIndex object from the given info dictionary."""
-        observation_info = info["env_build"]["observation_info"]
-        action_info = info["env_build"]["action_info"]
-        reward_info = info["env_build"]["reward_info"]
+        observation_info = info.data_info["observation_info"]
+        action_info = info.data_info["action_info"]
+        reward_info = info.data_info["reward_info"]
 
         token_info = {}
 
@@ -125,14 +126,12 @@ class TwoDDataset(Dataset):
 
         return TokenIndex(token_info)
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param info: The configuration information.
         :return: The configuration information.
         """
-        info.update({"train": {"dataset": self.__class__.__name__}})
-
         self.ti = self.create_ti(info)
 
         return info

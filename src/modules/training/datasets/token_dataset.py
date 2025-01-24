@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData, PipelineInfo
 
 from .utils import TokenDiscretizer, TokenIndex, TokenType
 
@@ -18,10 +18,10 @@ from .utils import TokenDiscretizer, TokenIndex, TokenType
 class TokenDataset(Dataset):
     """Simple dataset for transformer training."""
 
-    _data: XData | None = None
+    _data: PipelineData | None = None
     _indices: npt.NDArray | None = None
 
-    def __init__(self, data: XData, indices: str, discretize: bool = False) -> None:
+    def __init__(self, data: PipelineData, indices: str, discretize: bool = False) -> None:
         """Set up the dataset for training."""
         if indices != "all_indices" and not hasattr(data, indices):
             raise ValueError(f"Data does not have attribute {indices}")
@@ -50,8 +50,9 @@ class TokenDataset(Dataset):
         Returns:
             tuple: (input_sequence, target_token)
         """
-        if self._data is None or not self._data.check_data():
+        if self._data is None:
             raise ValueError("Dataset not initialized.")
+        self._data.check_data()
 
         # Grab the correct index / [state_x, state_y, action/reward_idx]
         idx = self._indices[idx]
@@ -89,11 +90,11 @@ class TokenDataset(Dataset):
         return x, y
 
     @staticmethod
-    def create_ti(info: dict[str, Any]) -> TokenIndex:
+    def create_ti(info: PipelineInfo) -> TokenIndex:
         """Create a TokenIndex object from the given info dictionary."""
-        observation_info = info["env_build"]["observation_info"]
-        action_info = info["env_build"]["action_info"]
-        reward_info = info["env_build"]["reward_info"]
+        observation_info = info.data_info["observation_info"]
+        action_info = info.data_info["action_info"]
+        reward_info = info.data_info["reward_info"]
 
         token_info = {
             "type": [(0, len(TokenType))],
@@ -122,7 +123,7 @@ class TokenDataset(Dataset):
 
         return TokenIndex(token_info)
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param data: The input data.

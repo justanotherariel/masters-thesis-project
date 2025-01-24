@@ -5,12 +5,12 @@ import torch
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.datasets.utils import TokenIndex
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData, PipelineInfo
 
 logger = Logger()
 
 
-def convert_token_dataset(data: XData, info: dict) -> Any:
+def convert_token_dataset(data: PipelineData, info: PipelineInfo) -> Any:
     def convert_tokens(
         data: torch.Tensor, ti: TokenIndex, obs_shape: tuple[int, int]
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -19,8 +19,8 @@ def convert_token_dataset(data: XData, info: dict) -> Any:
         reward = data_tensor[..., -1, ti.reward_].float()
         return obs, reward
 
-    ti = info["token_index"]
-    shape = info["env_build"]["observation_space"].shape[:2]
+    ti = info.model_ti
+    shape = info.data_info["observation_space"].shape[:2]
 
     if data.train_predictions is not None:
         data.train_predictions = convert_tokens(data.train_predictions, ti, shape)
@@ -36,14 +36,14 @@ def convert_token_dataset(data: XData, info: dict) -> Any:
 
     return data
 
-def convert_two_d_dataset(data: XData, info: dict) -> Any:
+def convert_two_d_dataset(data: PipelineData, info: PipelineInfo) -> Any:
     return data
 
 
 class MinigridPredictionReshape(TransformationBlock):
     """Score the predictions of the model."""
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param info: The input data.
@@ -52,7 +52,7 @@ class MinigridPredictionReshape(TransformationBlock):
         self.info = info
         return info
 
-    def custom_transform(self, data: XData, **kwargs) -> XData:
+    def custom_transform(self, data: PipelineData, **kwargs) -> PipelineData:
         """Apply a custom transformation to the data.
 
         :param data: The data to transform
@@ -65,4 +65,4 @@ class MinigridPredictionReshape(TransformationBlock):
             "TwoDDataset": convert_two_d_dataset
         }
 
-        return CONVERT[self.info["train"]["dataset"]](data, self.info)
+        return CONVERT[self.info.model_ds_class](data, self.info)

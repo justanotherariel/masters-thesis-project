@@ -12,6 +12,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from src.typing.pipeline_objects import PipelineInfo
+
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
@@ -96,10 +98,10 @@ class UNet(nn.Module):
         self.obs_loss_weight = obs_loss_weight
         self.reward_loss_weight = reward_loss_weight
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the model parameters from pipeline info."""
         self.info = info
-        ti = info["token_index"]
+        ti = info.model_ti
 
         # Store softmax ranges for each grid cell component
         ti.discrete = True
@@ -111,13 +113,13 @@ class UNet(nn.Module):
         ]
 
         # Set observation shape and action dimension from environment info
-        self.obs_dim: tuple[int, int, int] = (*info["env_build"]["observation_space"].shape[:2], len(ti.observation_))
-        self.action_dim: int = info["env_build"]["action_space"].n.item()
+        self.obs_dim: tuple[int, int, int] = (*info.data_info["observation_space"].shape[:2], len(ti.observation_))
+        self.action_dim: int = info.data_info["action_space"].n.item()
 
         # Initialize network architecture
         self._build_network()
 
-        info.update({"train": {"dataset": "TwoDDataset"}})
+        # info.model_ds_class = "TwoDDataset"
         return info
 
     def _build_network(self) -> None:

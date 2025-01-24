@@ -6,7 +6,7 @@ from src.framework.transforming import TransformationBlock
 from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom, MinigridSamplerExtensive
 from src.modules.training.datasets.token_dataset import TokenDataset
 from src.modules.training.datasets.utils import TokenType
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData
 
 
 def create_dataset(
@@ -20,7 +20,7 @@ def create_dataset(
     info = builder.setup({})
     info = sampler.setup(info)
 
-    data = builder.transform(XData())
+    data = builder.transform(PipelineData())
     data = sampler.transform(data)
 
     dataset = TokenDataset(data, indices, discretize)

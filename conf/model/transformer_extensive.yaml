@@ -64,4 +64,8 @@ pred_sys:
   steps:
     - _target_: src.modules.scoring.minigrid_prediction_reshape.MinigridPredictionReshape
     - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
-    - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
+    - _target_: src.modules.scoring.minigrid_heatmap_new.MinigridHeatmap
+      metric_calculators: 
+        - AgentPovCertaintyCalc
+        - AgentPovAccuracyCalc
+        - FieldPovAccuracyCalc

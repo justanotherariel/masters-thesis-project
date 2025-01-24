@@ -3,7 +3,7 @@ from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, STATE_TO_IDX
 
 from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData
 
 
 def create_dataset(
@@ -21,7 +21,7 @@ def create_dataset(
     info = builder.setup({})
     info = sampler.setup(info)
 
-    data = builder.transform(XData())
+    data = builder.transform(PipelineData())
     data = sampler.transform(data)
 
     dataset = TwoDDataset(data, indices, discretize)

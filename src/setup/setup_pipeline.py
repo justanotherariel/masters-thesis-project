@@ -8,11 +8,13 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.framework.logging import Logger
 from src.framework.pipeline import ModelPipeline
+from src.typing.pipeline_objects import PipelineInfo
+from pathlib import Path
 
 logger = Logger()
 
 
-def setup_pipeline(cfg: DictConfig) -> ModelPipeline:
+def setup_pipeline(cfg: DictConfig, output_dir: Path) -> tuple[ModelPipeline, PipelineInfo]:
     """Instantiate the pipeline.
 
     :param pipeline_cfg: The model pipeline config. Root node should be a ModelPipeline
@@ -25,10 +27,17 @@ def setup_pipeline(cfg: DictConfig) -> ModelPipeline:
     model_cfg_dict = update_model_cfg_test_size(model_cfg_dict)
     pipeline_cfg = OmegaConf.create(model_cfg_dict)
 
+    # Instantiate
     model_pipeline = instantiate(pipeline_cfg)
-    logger.debug(f"Pipeline: \n{model_pipeline}")
+    
+    # Run Setup
+    info = PipelineInfo(
+        debug = cfg.debug,
+        output_dir=output_dir,
+    )
+    info = model_pipeline.setup(info)
 
-    return model_pipeline
+    return model_pipeline, info
 
 
 def update_model_cfg_test_size(

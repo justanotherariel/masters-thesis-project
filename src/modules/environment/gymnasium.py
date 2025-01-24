@@ -6,6 +6,7 @@ from typing import Any
 import gymnasium as gym
 import minigrid
 import minigrid.core
+import minigrid.core.grid
 import numpy as np
 import numpy.typing as npt
 from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
@@ -13,7 +14,7 @@ from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData, PipelineInfo, DatasetGroup
 
 from .minigrid_wrappers import FullyObsWrapper
 
@@ -46,39 +47,33 @@ class GymnasiumBuilder(TransformationBlock):
         self.env = FullyObsWrapper(self.env)  # Output fully observable grid as numpy array
         self.env.reset(seed=42)  # Seed the environment
 
-    def setup(self, data: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param data: The input data.
         :return: The transformed data.
         """
-        if data is None:
-            data = {}
+        
+        info.data_info = {
+            "action_space": self.env.action_space,
+            "observation_space": self.env.observation_space,
+            "observation_info": [
+                (0, len(OBJECT_TO_IDX) - 1),  # Remove agent idx, represented by the last dimension
+                (1, len(COLORS)),
+                (2, len(STATE_TO_IDX)),
+                (3, 5),  # 0: agent not present, 1-4: agent direction
+            ],
+            "action_info": [
+                (0, self.env.action_space.n.item()),
+            ],
+            "reward_info": [
+                (0, 0),
+            ],
+        }
+        
+        return info
 
-        data.update(
-            {
-                "env_build": {
-                    "action_space": self.env.action_space,
-                    "observation_space": self.env.observation_space,
-                    "observation_info": [
-                        (0, len(OBJECT_TO_IDX) - 1),  # Remove agent idx, represented by the last dimension
-                        (1, len(COLORS)),
-                        (2, len(STATE_TO_IDX)),
-                        (3, 5),  # 0: agent not present, 1-4: agent direction
-                    ],
-                    "action_info": [
-                        (0, self.env.action_space.n.item()),
-                    ],
-                    "reward_info": [
-                        (0, 0),
-                    ],
-                }
-            }
-        )
-
-        return data
-
-    def custom_transform(self, data: XData) -> npt.NDArray[np.float32]:
+    def custom_transform(self, data: PipelineData) -> npt.NDArray[np.float32]:
         """Apply a custom transformation to the data.
 
         :param data: The data to transform
@@ -88,7 +83,7 @@ class GymnasiumBuilder(TransformationBlock):
         logger.info("Setting Environment")
 
         if data is None:
-            data = XData()
+            data = PipelineData()
 
         data.env = self.env
         return data
@@ -105,7 +100,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
     num_samples_per_env: int
     perc_train: float
 
-    def custom_transform(self, data: XData) -> npt.NDArray[np.float32]:
+    def custom_transform(self, data: PipelineData) -> npt.NDArray[np.float32]:
         """Sample the environment.
 
         :param data: XData object containing the environment
@@ -128,8 +123,9 @@ class GymnasiumSamplerRandom(TransformationBlock):
 
         # [trajectory_id, [state_x, state_y, action/reward_idx]]
         train_indices: list[list[int]] = []
+        train_grids: list[minigrid.core.grid.Grid] = []
         validation_indices: list[list[int]] = []
-        data.grids = []
+        validation_grids: list[minigrid.core.grid.Grid] = []
 
         samples_idx = 0
 
@@ -137,7 +133,6 @@ class GymnasiumSamplerRandom(TransformationBlock):
         while samples_idx < self.num_samples:
             trajectory: list[int] = []
             observation, _info = env.reset()
-            data.grids.append(env.unwrapped.grid)
 
             for _ in range(self.num_samples_per_env):
                 # Save current State
@@ -170,13 +165,26 @@ class GymnasiumSamplerRandom(TransformationBlock):
             indices_collected[: len(trajectory)] = np.array(trajectory)
             if samples_idx <= train_samples:
                 train_indices.append(indices_collected)
+                train_grids.append(env.unwrapped.grid)
             else:
                 validation_indices.append(indices_collected)
+                validation_grids.append(env.unwrapped.grid)
 
+        # Store raw sampled data
         data.observations = np.stack(observations, axis=0)
-        data.train_indices = np.stack(train_indices, axis=0)
-        data.validation_indices = np.stack(validation_indices, axis=0)
-
+        
+        # Store Metadata
+        data.indices = {
+            DatasetGroup.TRAIN: np.stack(train_indices, axis=0),
+            DatasetGroup.VALIDATION: np.stack(validation_indices, axis=0),
+            DatasetGroup.ALL: np.stack(train_indices + validation_indices, axis=0),
+        }
+        data.grids = {
+            DatasetGroup.TRAIN: train_grids,
+            DatasetGroup.VALIDATION: validation_grids,
+            DatasetGroup.ALL: train_grids + validation_grids,
+        }
+        
         env.close()
         return data
 
@@ -277,9 +285,7 @@ class MinigridSamplerExtensive(TransformationBlock):
                 # Store indices for this sample
                 env_indices.append([x_idx, y_idx, len(actions_list) - 1])
 
-        return env_indices, observations_list, actions_list, rewards_list
-
-    def custom_transform(self, data: XData) -> XData:
+    def custom_transform(self, data: PipelineData) -> PipelineData:
         """Extensively sample the environment by placing the agent at each valid position
         and trying each possible action.
 
@@ -298,15 +304,15 @@ class MinigridSamplerExtensive(TransformationBlock):
         rewards_list = []
 
         train_indices: list[list[int]] = []
+        train_grids: list[minigrid.core.grid.Grid] = []
         validation_indices: list[list[int]] = []
-        data.grids = []
+        validation_grids: list[minigrid.core.grid.Grid] = []
 
         current_env = 0
 
         while current_env < total_envs:
             # Reset environment to get a new layout
             env.reset()
-            data.grids.append(env.unwrapped.grid)
 
             # Get valid positions for this environment
             valid_positions = self._get_valid_positions(env)
@@ -321,25 +327,34 @@ class MinigridSamplerExtensive(TransformationBlock):
                 for pos in valid_positions:
                     # Create samples for this position
                     self._sample_pos(env, pos, env_indices, observations_list, actions_list, rewards_list)
-
                     pbar.update(1)
 
             # Store indices in appropriate set
             if current_env < self.train_envs:
                 train_indices.append(env_indices)
+                train_grids.append(env.unwrapped.grid)
             else:
                 validation_indices.append(env_indices)
+                validation_grids.append(env.unwrapped.grid)
 
             current_env += 1
 
-        # Convert lists to numpy arrays
+        # Store raw sampled data
         data.observations = np.stack(observations_list, axis=0)
         data.actions = np.array(actions_list, dtype=np.int8).reshape(-1, 1)
         data.rewards = np.array(rewards_list, dtype=np.float16).reshape(-1, 1)
 
-        # Store indices
-        data.train_indices = np.array(train_indices)
-        data.validation_indices = np.array(validation_indices)
+        # Store Metadata
+        data.indices = {
+            DatasetGroup.TRAIN: np.array(train_indices),
+            DatasetGroup.VALIDATION: np.array(validation_indices),
+            DatasetGroup.ALL: np.array(train_indices + validation_indices),
+        }
+        data.grids = {
+            DatasetGroup.TRAIN: train_grids,
+            DatasetGroup.VALIDATION: validation_grids,
+            DatasetGroup.ALL: train_grids + validation_grids,
+        }
 
         env.close()
         return data

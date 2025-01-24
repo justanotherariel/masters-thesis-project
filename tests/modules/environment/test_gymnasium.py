@@ -6,20 +6,20 @@ from src.modules.environment.gymnasium import (
     MinigridSamplerExtensive,
     flatten_indices,
 )
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData
 
 
 def test_gymnasium_builder():
     """Test the GymnasiumBuilder class."""
     builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
-    data = builder.transform(XData())
+    data = builder.transform(PipelineData())
     assert data.env is not None
 
 
 def test_gymnsasium_sampler_random():
     """Test the GymnasiumSampler class."""
     builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
-    data: XData = builder.transform(XData())
+    data: PipelineData = builder.transform(PipelineData())
 
     num_samples = 10
     num_samples_per_env = 5
@@ -73,7 +73,7 @@ def test_minigrid_sampler_extensive():
     """Test the MinigridSamplerExtensive class."""
     # Initialize environment
     builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
-    data: XData = builder.transform(XData())
+    data: PipelineData = builder.transform(PipelineData())
 
     # Initialize sampler with 2 train and 1 validation environment
     train_envs = 2

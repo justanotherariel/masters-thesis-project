@@ -57,13 +57,9 @@ def run_train(cfg: DictConfig) -> None:
     if cfg.wandb.enabled:
         setup_wandb(cfg, "train", output_dir)
 
-    # Preload the pipeline
+    # Setup the pipeline
     logger.info("Setting up the pipeline")
-    model_pipeline = setup_pipeline(cfg)
-    _ = model_pipeline.setup({
-        "debug": cfg.debug,
-        "output_dir": output_dir,
-    })
+    model_pipeline, _info = setup_pipeline(cfg, output_dir=output_dir)
 
     # Cache arguments for x_sys
     cache_data_path = Path(cfg.cache_path)

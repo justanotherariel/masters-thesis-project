@@ -177,7 +177,7 @@ class TransformingSystem(TransformType, _SequentialSystem):
 
         super().__post_init__()
 
-    def setup(self, data: Any = None) -> Any:
+    def setup(self, data: Any) -> Any:
         """Setup the transformation block.
 
         :param data: The input data.

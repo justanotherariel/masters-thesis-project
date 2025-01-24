@@ -13,7 +13,7 @@ from PIL import ImageDraw
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.datasets.utils import TokenIndex
-from src.typing.pipeline_objects import XData
+from src.typing.pipeline_objects import PipelineData, PipelineInfo, DatasetGroup
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
 
 logger = Logger()
@@ -28,7 +28,7 @@ OBSERVATION_VARIABLES = [
 class MinigridHeatmap(TransformationBlock):
     """Score the predictions of the model."""
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param info: The input data.
@@ -37,7 +37,7 @@ class MinigridHeatmap(TransformationBlock):
         self.info = info
         return info
 
-    def custom_transform(self, data: XData, **kwargs) -> XData:
+    def custom_transform(self, data: PipelineData, **kwargs) -> PipelineData:
         """Apply a custom transformation to the data.
 
         :param data: The data to transform
@@ -45,8 +45,8 @@ class MinigridHeatmap(TransformationBlock):
         :return: The transformed data
         """
 
-        output_dir = self.info["output_dir"]
-        for grid_idx, grid in enumerate(data.grids):
+        output_dir = self.info.output_dir
+        for grid_idx, grid in enumerate(data.grids[DatasetGroup.TRAIN]):
             grid_size = (grid.width, grid.height)
 
             # Create img of grid
@@ -56,11 +56,11 @@ class MinigridHeatmap(TransformationBlock):
             img.save(img_path)
 
             # Get data
-            dataset = TwoDDataset(data, indices="train_indices", discretize=False)
+            dataset = TwoDDataset(data, ds_group=DatasetGroup.TRAIN, discretize=False)
             train_input = list(dataset)
-            train_predictions = data.train_predictions
+            train_predictions = data.predictions[DatasetGroup.TRAIN]
 
-            certainty = calculate_certainty(train_input, train_predictions, self.info)
+            certainty = calculate_heatmap_data(train_input, train_predictions, self.info)
             certainty_np = data_py_to_np(certainty, grid_size=grid_size)
             wandb_masks = {key: None for key in certainty_np}
             for key in certainty_np:
@@ -88,7 +88,7 @@ def create_img(grid: Grid, tile_size: int) -> Image:
     ).astype(np.uint8)
     return Image.fromarray(img_np)
 
-def calculate_certainty(input_data, prediction_data, info):
+def calculate_heatmap_data(input_data, prediction_data, info: PipelineInfo):
     # Extract input_data
     x_obs, x_actions, y_obs, y_rewards = [], [], [], []
     for sample_idx in range(len(input_data)):
@@ -104,15 +104,18 @@ def calculate_certainty(input_data, prediction_data, info):
 
     # Extract prediction_data
     pred_obs, pred_rewards = prediction_data
-    pred_ti = info["token_index"]
-    pred_ti.discrete = True
+    model_ti = info.model_ti
+    model_ti.discrete = True
 
     # Check that all lengths are the same
     assert len(pred_obs) == len(pred_rewards) == len(x_obs) == len(x_actions) == len(y_obs) == len(y_rewards)
     n_samples = len(pred_obs)
 
     # Calculate the accuarcy
-    data: dict[str, dict[tuple[int, int], list[float]]] = {
+    data_certainty: dict[str, dict[tuple[int, int], list[float]]] = {
+        key: {} for key in OBSERVATION_VARIABLES
+    }
+    data_accuracy: dict[str, dict[tuple[int, int], list[float]]] = {
         key: {} for key in OBSERVATION_VARIABLES
     }
     for sample_idx in range(n_samples):
@@ -124,19 +127,24 @@ def calculate_certainty(input_data, prediction_data, info):
         assert len(agent_x_pos) == 1
         agent_x_pos = tuple(agent_x_pos[0][:-1])
 
-        for key in data:
-            if agent_x_pos not in data[key]:
-                data[key][agent_x_pos] = []
+        for key in data_certainty:
+            if agent_x_pos not in data_certainty[key]:
+                data_certainty[key][agent_x_pos] = []
 
         for i in range(len(input_ti.observation)):
             x_obs_tmp = x_obs[sample_idx, :, :, input_ti.observation[i]].squeeze()
-            pred_obs_tmp_perc = pred_obs[sample_idx, :, :, pred_ti.observation[i]]
-            tmp_certainty = torch.gather(pred_obs_tmp_perc, 2, x_obs_tmp[..., None].to(torch.long)).squeeze()
-            tmp_certainty = tmp_certainty.mean(dim=[0, 1])
+            pred_obs_tmp_perc = pred_obs[sample_idx, :, :, model_ti.observation[i]]
+            pred_obs_tmp_argmax = torch.argmax(pred_obs_tmp_perc, dim=2)
 
-            data[OBSERVATION_VARIABLES[i]][agent_x_pos].append(tmp_certainty.item())
+            # Certainty
+            tmp_certainty = torch.gather(pred_obs_tmp_perc, 2, x_obs_tmp[..., None].to(torch.long)).squeeze().mean(dim=[0, 1]).item()
+            data_certainty[OBSERVATION_VARIABLES[i]][agent_x_pos].append(tmp_certainty)
 
-    return data
+            # Accuracy
+            tmp_accuracy = (pred_obs_tmp_argmax == x_obs_tmp).float().mean(dim=[0, 1]).item()
+            data_accuracy[OBSERVATION_VARIABLES[i]][agent_x_pos] = tmp_accuracy
+
+    return data_certainty, data_accuracy
 
 
 def create_overlay(data: np.ndarray, grid_size: tuple[int, int], tile_size: int, border_px: int = 2):

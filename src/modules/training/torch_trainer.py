@@ -21,7 +21,7 @@ from tqdm import tqdm
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.utils.model_storage import ModelStorage
-from src.typing.pipeline_objects import DataSetTypes, XData
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 logger = Logger()
 
@@ -71,7 +71,7 @@ class TorchTrainer(TransformationBlock):
     load_all_batches_to_gpu: bool = field(default=False)
 
     # Predction parameters
-    to_predict: DataSetTypes = field(default=DataSetTypes.VALIDATION, repr=False, compare=False)
+    to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
 
     # Parameters relevant for Hashing
     n_folds: Annotated[int, Ge(0)] = field(default=0, init=True, repr=False, compare=False)
@@ -86,14 +86,14 @@ class TorchTrainer(TransformationBlock):
             raise ValueError("Cannot save model to wandb without saving to disk.")
 
         # self.to_predict is a string, but we want to store it as a DataSetTypes
-        self.to_predict = DataSetTypes[self.to_predict]
+        self.to_predict = DatasetGroup[self.to_predict]
 
         # Initialize variables
         self.best_model_state_dict: dict[Any, Any] = {}
 
         super().__post_init__()
 
-    def setup(self, info: dict[str, Any]) -> dict[str, Any]:
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
         :param data: The input data.
@@ -113,9 +113,11 @@ class TorchTrainer(TransformationBlock):
         )
 
         if isinstance(self.model.get_dataset_cls(), functools.partial):
-            info["token_index"] = self.model.get_dataset_cls().func.create_ti(info)
+            info.model_ds_class = self.model.get_dataset_cls().func.__name__
+            info.model_ti = self.model.get_dataset_cls().func.create_ti(info)
         else:
-            info["token_index"] = self.model.get_dataset_cls().create_ti(info)
+            info.model_ds_class = self.model.get_dataset_cls().__name__
+            info.model_ti = self.model.get_dataset_cls().create_ti(info)
 
         # Setup Model
         self.model.setup(info)
@@ -125,11 +127,11 @@ class TorchTrainer(TransformationBlock):
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
-        logger.info(f"Using Device: {self.device}{' (debug)' if info['debug'] else ''}")
+        logger.info(f"Using Device: {self.device}{' (debug)' if info.debug else ''}")
         self.model.to(self.device)
 
         # Disable Dataloader parallelism if debugging
-        if info["debug"]:
+        if info.debug:
             logger.info("Debug Mode: Disabling Dataloader Parallelism")
             self.dataloader_conf = {}
 
@@ -151,7 +153,7 @@ class TorchTrainer(TransformationBlock):
 
         return info
 
-    def custom_transform(self, data: XData, **train_args: Any) -> XData:
+    def custom_transform(self, data: PipelineData, **train_args: Any) -> PipelineData:
         """Train the model.
 
         :param x: The input to the system.
@@ -175,47 +177,44 @@ class TorchTrainer(TransformationBlock):
         else:
             current_time = time.time()
             self._model_train(data)
-            minutes = (time.time() - current_time) / 60
-            seconds = (time.time() - current_time) % 60
-            logger.info(f"Training took {f'{int(minutes)} minutes and ' if minutes > 0 else ''}{seconds:.2f} seconds")
+            mins = (time.time() - current_time) // 60
+            secs = (time.time() - current_time) % 60
+            min_str = "minutes" if mins != 1 else "minute"
+            sec_str = "seconds" if secs != 1.0 else "second"
+            logger.info(f"Training took {f'{mins} {min_str} and ' if mins > 0 else ''}{secs:.2f} {sec_str}")
 
         # Evaluate the model
-        if DataSetTypes.TRAIN in self.to_predict:
-            loader = self.create_dataloader(data, "train_indices", shuffle=False)
-            data.train_predictions, data.train_targets = self.predict_on_loader(loader)
+        if DatasetGroup.TRAIN in self.to_predict:
+            logger.info("Running inference on the training set")
+            loader = self.create_dataloader(data, DatasetGroup.TRAIN, shuffle=False)
+            data.predictions.update({DatasetGroup.TRAIN: self.predict_on_loader(loader)})
 
-        if DataSetTypes.VALIDATION in self.to_predict:
-            loader = self.create_dataloader(data, "validation_indices", shuffle=False)
-            data.validation_predictions, data.validation_targets = self.predict_on_loader(loader)
+        if DatasetGroup.VALIDATION in self.to_predict:
+            logger.info("Running inference on the validation set")
+            loader = self.create_dataloader(data, DatasetGroup.VALIDATION, shuffle=False)
+            data.predictions.update({DatasetGroup.VALIDATION: self.predict_on_loader(loader)})
 
         return data
 
     def predict_on_loader(
         self,
         loader: DataLoader[tuple[Tensor, ...]],
-    ) -> tuple[list[tuple[Tensor, ...], list[tuple[Tensor, ...]]]] | tuple[list[Tensor], list[Tensor]]:
+    ) -> list[tuple[Tensor, ...]] | list[Tensor]:
         """Predict on the loader.
 
         :param loader: The loader to predict on.
         :return: The predictions.
         """
-        logger.info("Running inference on the given dataloader")
         self.model.eval()
-        labels = []
         predictions = []
 
         with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model(X_batch)
-
                 y_pred = tuple(y.to("cpu") for y in y_pred) if isinstance(y_pred, tuple) else y_pred.to("cpu")
-
                 predictions.extend(y_pred)
-                labels.extend(data[1])
-
-        logger.info("Done predicting!")
-        return predictions, labels
+        return predictions
 
     def get_hash(self) -> str:
         """Get the hash of the block.
@@ -231,8 +230,8 @@ class TorchTrainer(TransformationBlock):
 
     def create_dataloader(
         self,
-        data: XData,
-        indices: str,
+        data: PipelineData,
+        indices: DatasetGroup,
         shuffle: bool = True,
     ) -> tuple[DataLoader[tuple[Tensor, ...]], DataLoader[tuple[Tensor, ...]]]:
         """Create the dataloaders for training and validation.
@@ -262,14 +261,14 @@ class TorchTrainer(TransformationBlock):
 
     def _model_train(
         self,
-        data: XData,
+        data: PipelineData,
     ):
         # Log the model being trained
         logger.info(f"Training model: {self.model.__class__.__name__}")
 
         # Create dataloaders
-        train_loader = self.create_dataloader(data, "train_indices")
-        validation_loader = self.create_dataloader(data, "validation_indices")
+        train_loader = self.create_dataloader(data, DatasetGroup.TRAIN)
+        validation_loader = self.create_dataloader(data, DatasetGroup.VALIDATION)
 
         # Resume from checkpoint if enabled and checkpoint exists
         start_epoch = 0
