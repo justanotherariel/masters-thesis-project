@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 
 import torch
 
@@ -33,77 +33,66 @@ class MinigridScorer(TransformationBlock):
         """
 
         if DatasetGroup.TRAIN in data.predictions:
-            targets = dataset_to_list(data, DatasetGroup.TRAIN)[1]
-            self.calc_accuracy(data.predictions[DatasetGroup.TRAIN], targets, "Train")
+            raw_data = dataset_to_list(data, DatasetGroup.TRAIN)
+            raw_ti = TwoDDataset.create_ti(self.info)
+            preds = data.predictions[DatasetGroup.TRAIN]
+            model_ti = self.info.model_ti
+            self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Train")
 
         if DatasetGroup.VALIDATION in data.predictions:
-            targets = dataset_to_list(data, DatasetGroup.VALIDATION)[1]
-            self.calc_accuracy(data.predictions[DatasetGroup.VALIDATION], targets, "Validation")
+            raw_data = dataset_to_list(data, DatasetGroup.VALIDATION)
+            raw_ti = TwoDDataset.create_ti(self.info)
+            preds = data.predictions[DatasetGroup.VALIDATION]
+            model_ti = self.info.model_ti
+            self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Validation")
 
         return data
 
-    def calc_accuracy(self, predictions, targets, index_pretty_name: str):
+    def calc_accuracy(self, raw_data: List[List[torch.Tensor]], raw_ti: TokenIndex, preds: List[torch.Tensor], model_ti: TokenIndex, index_pretty_name: str):
         """Calculate the accuracy of the model.
 
         :param index_name: The name of the indice.
         :param index_pretty_name: The pretty name of the indice.
         """
+        y_obs, y_reward = raw_data[1]
+        pred_obs, pred_reward = preds
+        
+        accuracy = torch.zeros(*y_obs.shape[:3], len(raw_ti.observation))
+        for obs_idx in range(len(model_ti.observation)):
+            y_obs_tmp =  y_obs[..., raw_ti.observation[obs_idx]].squeeze()
+            pred_obs_tmp = torch.argmax(pred_obs[..., model_ti.observation[obs_idx]], dim=3)
+            accuracy[..., obs_idx] = (pred_obs_tmp == y_obs_tmp).float()
 
-        model_ti = self.info.model_ti
-        # model_ti.discrete = True  # ToDo: fetch from info, supplied by model setup
-
-        obs_pred, reward_pred = predictions
-        obs_target, reward_target = targets
-
-        # Check Observation object accuaracy
-        obs_pred_obj = obs_pred[..., model_ti.observation[0]].argmax(axis=-1)
-        obs_target_obj = obs_target[..., 0]
-        obs_obj_accuracy = (obs_pred_obj == obs_target_obj).sum() / obs_pred_obj.numel()
-
-        obs_obj_accuracy_no_walls = (obs_pred_obj[:, 1:-1, 1:-1] == obs_target_obj[:, 1:-1, 1:-1]).sum() / obs_pred_obj[
-            :, 1:-1, 1:-1
-        ].numel()
-
-        # Check Observation color accuracy
-        obs_pred_color = obs_pred[..., model_ti.observation[1]].argmax(axis=-1)
-        obs_target_color = obs_target[..., 1]
-        obs_color_accuracy = (obs_pred_color == obs_target_color).sum() / obs_pred_color.numel()
-
-        # Check Observation state accuracy
-        obs_pred_state = obs_pred[..., model_ti.observation[2]].argmax(axis=-1)
-        obs_target_state = obs_target[..., 2]
-        obs_state_accuracy = (obs_pred_state == obs_target_state).sum() / obs_pred_state.numel()
-
-        # Check Observation agent accuracy
-        obs_pred_agent = obs_pred[..., model_ti.observation[3]].argmax(axis=-1)
-        obs_target_agent = obs_target[..., 3]
-        obs_agent_accuracy = (obs_pred_agent == obs_target_agent).sum() / obs_pred_agent.numel()
+        # Check if the whole resulting observation is correct for each sample
+        obs_whole_acc = accuracy.prod(dim=-1).prod(dim=-1).prod(dim=-1).mean()
+        
+        # Calculate the mean accuracy over all fields for each sample
+        obs_field_acc = accuracy.prod(dim=-1).mean(dim=[0, 1, 2])
+        
+        # Check if the agent is predicted correctly
+        obs_agent_pos = y_obs[..., raw_ti.observation[3]].squeeze().nonzero()
+        obs_agent_acc = accuracy[obs_agent_pos[:, 0], obs_agent_pos[:, 1], obs_agent_pos[:, 2], raw_ti.observation[3]].mean()
+        
+        # For all fields, where the agent shouldn't be, check if the agent is not predicted
+        obs_non_agent_pos = torch.nonzero(y_obs[..., raw_ti.observation[3]].squeeze() == 0)
+        obs_non_agent_acc = accuracy[obs_non_agent_pos[:, 0], obs_non_agent_pos[:, 1], obs_non_agent_pos[:, 2], raw_ti.observation[3]].mean()
 
         # Check Reward accuracy
-        reward_accuracy = torch.isclose(reward_target, reward_pred, atol=0.1).sum() / len(reward_target)
-
-        # Overall accuracy
-        accuracy = (
-            obs_obj_accuracy + obs_color_accuracy + obs_state_accuracy + obs_agent_accuracy + reward_accuracy
-        ) / 5
+        reward_acc = torch.isclose(y_reward, pred_reward, atol=0.1).sum() / len(y_reward)
 
         # Log the results
-        logger.info(f"{index_pretty_name}: Accuracy: {accuracy}")
-        logger.info(f"{index_pretty_name}: Observation Object Accuracy: {obs_obj_accuracy}")
-        logger.info(f"{index_pretty_name}: Observation Object Accuracy (no walls): {obs_obj_accuracy_no_walls}")
-        logger.info(f"{index_pretty_name}: Observation Color Accuracy: {obs_color_accuracy}")
-        logger.info(f"{index_pretty_name}: Observation State Accuracy: {obs_state_accuracy}")
-        logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_accuracy}")
-        logger.info(f"{index_pretty_name}: Reward Accuracy: {reward_accuracy}")
+        logger.info(f"{index_pretty_name}: Observation Whole Accuracy: {obs_whole_acc}")
+        logger.info(f"{index_pretty_name}: Observation Field Accuracy: {obs_field_acc}")
+        logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_acc}")
+        logger.info(f"{index_pretty_name}: Observation Non-Agent Accuracy: {obs_non_agent_acc}")
+        logger.info(f"{index_pretty_name}: Reward Accuracy: {reward_acc}")
 
         logger.log_to_external(
             message={
-                f"{index_pretty_name}/Accuracy": accuracy,
-                f"{index_pretty_name}/Observation Object Accuracy": obs_obj_accuracy,
-                f"{index_pretty_name}/Observation Object Accuracy (no walls)": obs_obj_accuracy_no_walls,
-                f"{index_pretty_name}/Observation Color Accuracy": obs_color_accuracy,
-                f"{index_pretty_name}/Observation State Accuracy": obs_state_accuracy,
-                f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_accuracy,
-                f"{index_pretty_name}/Reward Accuracy": reward_accuracy,
+                f"{index_pretty_name}/Observation Whole Accuracy": obs_whole_acc,
+                f"{index_pretty_name}/Observation Field Accuracy": obs_field_acc,
+                f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_acc,
+                f"{index_pretty_name}/Observation Non-Agent Accuracy": obs_non_agent_acc,
+                f"{index_pretty_name}/Reward Accuracy": reward_acc,
             },
         )
