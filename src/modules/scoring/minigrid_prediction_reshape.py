@@ -21,19 +21,10 @@ def convert_token_dataset(data: PipelineData, info: PipelineInfo) -> Any:
 
     ti = info.model_ti
     shape = info.data_info["observation_space"].shape[:2]
-
-    if data.train_predictions is not None:
-        data.train_predictions = convert_tokens(data.train_predictions, ti, shape)
-
-    if data.train_targets is not None:
-        data.train_targets = convert_tokens(data.train_targets, ti, shape)
-
-    if data.validation_predictions is not None:
-        data.validation_predictions = convert_tokens(data.validation_predictions, ti, shape)
-
-    if data.validation_targets is not None:
-        data.validation_targets = convert_tokens(data.validation_targets, ti, shape)
-
+    
+    for key in data.predictions:
+        data.predictions[key] = convert_tokens(data.predictions[key], ti, shape)
+    
     return data
 
 def convert_two_d_dataset(data: PipelineData, info: PipelineInfo) -> Any:

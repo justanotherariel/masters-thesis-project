@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
-from src.typing.pipeline_objects import PipelineData, PipelineInfo
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .utils import TokenDiscretizer, TokenIndex, TokenType
 
@@ -21,10 +21,10 @@ class TokenDataset(Dataset):
     _data: PipelineData | None = None
     _indices: npt.NDArray | None = None
 
-    def __init__(self, data: PipelineData, indices: str, discretize: bool = False) -> None:
+    def __init__(self, data: PipelineData, ds_group: DatasetGroup, discretize: bool = False) -> None:
         """Set up the dataset for training."""
-        if indices != "all_indices" and not hasattr(data, indices):
-            raise ValueError(f"Data does not have attribute {indices}")
+        if not ds_group in data.indices:
+            raise ValueError(f"Data does not have attribute {ds_group.name}.")
 
         self.discretize = discretize
 
@@ -37,7 +37,7 @@ class TokenDataset(Dataset):
         self._data_len_of_output = self._data_len_of_obs + 1  # states + reward
 
         # Grab coorect indices
-        self._indices = getattr(data, indices) if indices != "all_indices" else np.array(range(len(data.observations)))
+        self._indices = data.indices[ds_group]
         self._indices = flatten_indices(self._indices)
 
     def __len__(self) -> int:
