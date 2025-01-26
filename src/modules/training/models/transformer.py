@@ -5,14 +5,16 @@ Heavily inspired by
     Github : https://github.com/hyunwoongko/transformer
 """
 
+from dataclasses import dataclass, field
 import functools
 import math
+from typing import Callable
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 from src.typing.pipeline_objects import PipelineInfo
-
+from .loss import focal_loss
 
 class PositionalEncoding(nn.Module):
     """
@@ -227,13 +229,14 @@ class TransformerLayer(nn.Module):
 class Transformer(nn.Module):
     def __init__(
         self,
-        d_model,
-        n_heads,
-        n_layers,
-        d_ff,
-        drop_prob=0.1,
+        d_model: int,
+        n_heads: int,
+        n_layers: int,
+        d_ff: int,
+        drop_prob: float = 0.1,
         obs_loss_weight: float = 0.5,
         reward_loss_weight: float = 0.5,
+        discrete_loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
     ):
         super().__init__()
 
@@ -245,7 +248,28 @@ class Transformer(nn.Module):
 
         self.obs_loss_weight = obs_loss_weight  # Weight for observation loss
         self.reward_loss_weight = reward_loss_weight  # Weight for reward loss
-
+        
+        self.discrete_loss_fn = F.cross_entropy if discrete_loss_fn is None else discrete_loss_fn # Loss function for discrete token_vars
+        
+    def __repr__(self):
+        attrs_to_show = [
+            'd_model',
+            'n_heads',
+            'n_layers',
+            'd_ff',
+            'drop_prob',
+            'obs_loss_weight',
+            'reward_loss_weight',
+            'discrete_loss_fn'
+        ]
+        
+        attrs = []
+        for attr in attrs_to_show:
+            if hasattr(self, attr):
+                attrs.append(f'{attr}={getattr(self, attr)}')
+        
+        return f"Transformer({', '.join(attrs)})"
+    
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         self.info = info
         self.ti = info.model_ti
@@ -389,8 +413,9 @@ class Transformer(nn.Module):
                 # For softmax ranges, use cross entropy loss
                 pred_range = predicted_next_obs[..., softmax_range]
                 target_range = target_next_obs[..., softmax_range]
-                loss = F.cross_entropy(
-                    pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
+                loss = self.discrete_loss_fn(
+                    pred_range.reshape(-1, len(softmax_range)),
+                    target_range.argmax(dim=-1).reshape(-1),
                 )
             else:
                 # For single values, use MSE

@@ -7,7 +7,8 @@ env_sys:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
       # environment: MiniGrid-Empty-5x5-v0
       # environment: MiniGrid-Fetch-8x8-N3-v0
-      environment: MiniGrid-LavaCrossingS11N5-v0
+      environment: MiniGrid-LavaCrossingS9N3-v0
+      # environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
       train_envs: 1
@@ -19,17 +20,29 @@ train_sys:
 
       epochs: 500
       batch_size: 2048
-      # patience: 200
+      # patience: 250
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 50
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
 
       model:
         _target_: src.modules.training.models.transformer.Transformer
-        d_model: 128
+        d_model: 256
         n_heads: 4
-        n_layers: 2
+        n_layers: 1
         d_ff: 1024
+        obs_loss_weight: 0.8
+        reward_loss_weight: 0.2
+        discrete_loss_fn:
+          _target_: src.utils.functools.partial
+          _args_:
+            - _target_: hydra.utils.get_method
+              # path: torch.nn.CrossEntropyLoss
+              # path: src.modules.training.models.loss.focal_loss
+              # path: src.modules.training.models.loss.adaptive_loss
+              path: src.modules.training.models.loss.rebalance_loss
+          # beta: 0.01
+          # gamma: 5
 
       model_storage_conf:
         save_model_to_disk: true

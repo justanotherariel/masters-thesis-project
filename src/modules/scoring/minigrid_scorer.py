@@ -79,8 +79,12 @@ class MinigridScorer(TransformationBlock):
 
         # Check Reward accuracy
         reward_acc = torch.isclose(y_reward, pred_reward, atol=0.1).sum() / len(y_reward)
+        
+        # Average all accuracies
+        acc = (obs_whole_acc + obs_field_acc + obs_agent_acc + obs_non_agent_acc + reward_acc) / 5
 
         # Log the results
+        logger.info(f"{index_pretty_name}: Accuracy: {acc}")
         logger.info(f"{index_pretty_name}: Observation Whole Accuracy: {obs_whole_acc}")
         logger.info(f"{index_pretty_name}: Observation Field Accuracy: {obs_field_acc}")
         logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_acc}")
@@ -89,6 +93,7 @@ class MinigridScorer(TransformationBlock):
 
         logger.log_to_external(
             message={
+                f"{index_pretty_name}/Accuracy": acc,
                 f"{index_pretty_name}/Observation Whole Accuracy": obs_whole_acc,
                 f"{index_pretty_name}/Observation Field Accuracy": obs_field_acc,
                 f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_acc,
