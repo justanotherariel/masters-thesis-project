@@ -280,10 +280,6 @@ class TorchTrainer(TransformationBlock):
                 self.model.load_state_dict(model.state_dict())
                 start_epoch = last_checkpoint + 1
 
-        # Track validation loss
-        self.lowest_val_loss = np.inf
-        self.last_val_loss = np.inf
-
         # Train the model
         logger.info(
             f"Training model for {self.epochs:,} epochs"
@@ -333,20 +329,20 @@ class TorchTrainer(TransformationBlock):
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
-
-        train_losses: list[float] = []
-        val_losses: list[float] = []
+            
+        # Track validation loss for early stopping
+        self.lowest_val_loss = np.inf
+        self.last_val_loss = np.inf
 
         for epoch in range(start_epoch, self.epochs):
             # Train using train_loader
             train_loss = self.train_one_epoch(train_loader, epoch)
             logger.debug(f"Epoch {epoch} Train Loss: {train_loss}")
-            train_losses.append(train_loss)
 
             # Log train loss
             logger.log_to_external(
                 message={
-                    f"Train/Loss{fold_no}": train_losses[-1],
+                    f"Train/Loss{fold_no}": train_loss,
                     "Epoch": epoch,
                 },
             )
@@ -377,23 +373,20 @@ class TorchTrainer(TransformationBlock):
                     epoch=epoch,
                 )
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
-                val_losses.append(self.last_val_loss)
-
-                # Log validation loss and plot train/val loss against each other
                 logger.log_to_external(
                     message={
-                        f"Validation/Loss{fold_no}": val_losses[-1],
+                        f"Validation/Loss{fold_no}": self.last_val_loss,
                         "Epoch": epoch,
                     },
                 )
 
-            # Early stopping
-            if self.patience_exceeded():
-                logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
-                logger.log_to_external(
-                    message={f"Epochs{fold_no}": (epoch + 1) - self.patience}
-                )
-                break
+                # Early stopping
+                if self.patience_exceeded():
+                    logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
+                    logger.log_to_external(
+                        message={f"Epochs{fold_no}": (epoch + 1) - (self.patience*self.validate_every_x_epochs)},
+                    )
+                    break
 
             # Log the trained epochs to wandb if we finished training
             logger.log_to_external(message={f"Epochs{fold_no}": epoch + 1})
