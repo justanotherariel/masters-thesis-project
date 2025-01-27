@@ -1,0 +1,39 @@
+command:
+  - python3
+  - ${program}
+  - ${args_no_hyphens}
+method: bayes
+project: Thesis
+entity: a-ebersberger-tu-delft
+program: train.py
+name: U-Net | rebalance_loss
+metric:
+  name: Train/Accuracy
+  goal: maximize
+parameters:
+
+  # model.train_sys.steps.0.epochs:
+  #   values: [500, 600, 700]
+
+  model.train_sys.steps.0.optimizer.lr:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-3
+
+  model.train_sys.steps.0.scheduler.decay_rate:
+    distribution: uniform
+    min: 0.5
+    max: 0.9
+
+  model.train_sys.steps.0.scheduler.decay_t:
+    distribution: uniform
+    min: 100
+    max: 300
+
+  # Model parameters
+  model.train_sys.steps.0.model.hidden_channels:
+    values:
+      - ${sweep_data.model_sizes.0}
+      - ${sweep_data.model_sizes.1}
+      - ${sweep_data.model_sizes.2}
+      - ${sweep_data.model_sizes.3}

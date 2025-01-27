@@ -7,7 +7,8 @@ env_sys:
     - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
       # environment: MiniGrid-Empty-5x5-v0
       # environment: MiniGrid-Fetch-8x8-N3-v0
-      environment: MiniGrid-LavaCrossingS11N5-v0
+      environment: MiniGrid-LavaCrossingS9N3-v0
+      # environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
       train_envs: 1
@@ -17,16 +18,18 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 300
+      epochs: 500
       batch_size: 2048
       # patience: 200
       load_all_batches_to_gpu: true
-      validate_every_x_epochs: 50
+      validate_every_x_epochs: 10
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
 
       model:
         _target_: src.modules.training.models.unet.UNet
         hidden_channels: [32, 64]
+        obs_loss_weight: 0.8
+        reward_loss_weight: 0.2
 
       model_storage_conf:
         save_model_to_disk: true

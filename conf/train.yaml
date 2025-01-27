@@ -4,6 +4,7 @@ defaults:
   - model: unet_extensive
   # - model: transformer_extensive
   - wandb: train
+  - _self_
 
 ###############
 #    CONF     #
@@ -11,3 +12,10 @@ defaults:
 cache_path: data/cache
 debug: false
 allow_multiple_instances: true
+
+sweep_data:
+  model_sizes:
+    - [32, 64]
+    - [64, 128]
+    - [16, 32, 64]
+    - [32, 64, 128]

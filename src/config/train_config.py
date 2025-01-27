@@ -29,3 +29,5 @@ class TrainConfig:
     cache_path: str
     debug: bool = False
     allow_multiple_instances: bool = True
+
+    sweep_data: Any = None
