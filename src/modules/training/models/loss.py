@@ -24,4 +24,4 @@ def rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
         class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
     )
 
-    return F.cross_entropy(predictions, targets, weight=weights, dim=0)
+    return F.cross_entropy(predictions, targets, weight=weights)

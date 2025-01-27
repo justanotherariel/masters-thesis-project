@@ -262,10 +262,10 @@ class MinigridHeatmap(TransformationBlock):
     ) -> None:
         output_dir = self.info.output_dir
         colors = {
-            MetricType.AGENT_POV_ACCURACY_ALL: (255, 0, 0, 255),
-            MetricType.AGENT_POV_ACCURACY_AVG: (255, 0, 0, 255),
-            MetricType.AGENT_POV_CERTAINTY: (255, 0, 0, 255),
-            MetricType.FIELD_POV_ACCURACY: (255, 0, 0, 255),
+            MetricType.AGENT_POV_ACCURACY_ALL: (255, 0, 0, 128),
+            MetricType.AGENT_POV_ACCURACY_AVG: (255, 0, 0, 128),
+            MetricType.AGENT_POV_CERTAINTY: (255, 0, 0, 128),
+            MetricType.FIELD_POV_ACCURACY: (255, 0, 0, 128),
         }
 
         wandb_masks: dict[str, np.ndarray] = {}

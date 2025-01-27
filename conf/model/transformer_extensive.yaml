@@ -31,6 +31,7 @@ train_sys:
         n_heads: 4
         n_layers: 1
         d_ff: 1024
+        drop_prob: 0.1
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
         discrete_loss_fn:
@@ -41,8 +42,6 @@ train_sys:
               # path: src.modules.training.models.loss.focal_loss
               # path: src.modules.training.models.loss.adaptive_loss
               path: src.modules.training.models.loss.rebalance_loss
-          # beta: 0.01
-          # gamma: 5
 
       model_storage_conf:
         save_model_to_disk: true
@@ -70,7 +69,7 @@ train_sys:
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 100
+        decay_t: 150
         decay_rate: 0.5
 
 pred_sys:

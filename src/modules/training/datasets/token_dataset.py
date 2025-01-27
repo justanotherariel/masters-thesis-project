@@ -14,11 +14,11 @@ from .utils import TokenDiscretizer, TokenIndex, TokenType
 
 
 @dataclass
-class SimpleDataset(Dataset):
+class TokenDataset(Dataset):
     """
-    Simple Dataset which supports discretization.
-    X is a tuple of observations and actions, Y is a tuple of observations and rewards.
-    Can be extended by using modifiers - e.g. for non-autoregressive tokenization.
+    Token Dataset which supports discretization.
+    X is a token sequence of observations, ending with an action tokoen.
+    Y is a token sequence of observations, ending with a reward token.
     """
 
     _data: PipelineData | None = None

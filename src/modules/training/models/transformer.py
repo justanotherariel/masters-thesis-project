@@ -304,17 +304,13 @@ class Transformer(nn.Module):
         # Initialize network architecture
         self._build_network()
 
-        # info.model_ds_class = "TokenDataset"
         return info
 
     def _build_network(self) -> None:
-        # Input embedding
-        self.input_embedding = nn.Linear(self.input_size, self.d_model)
+        # Input Projection and Positional Encoding
+        self.input_linear = nn.Linear(self.input_size, self.d_model)
         self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_len, self.d_model))
-
-        # Output embedding
-        self.output_pos_embedding = nn.Parameter(torch.randn(1, self.output_len, self.d_model))
-
+                
         # Transformer layers
         self.layers = nn.ModuleList(
             [
@@ -328,33 +324,16 @@ class Transformer(nn.Module):
         # Output projection
         self.output_linear = nn.Linear(self.d_model, self.output_size)
 
-        # Save sizes
-        self.input_len = self.input_len
-        self.output_len = self.output_len
-
-        self.dropout = nn.Dropout(p=self.drop_prob)
-
     def forward(self, x):
         x = x.float()
-        batch_size = x.shape[0]
 
         # Embed input sequence
-        x = self.input_embedding(x)  # [batch, input_len, d_model]
+        x = self.input_linear(x)  # [batch, input_len, d_model]
         x = x + self.input_pos_embedding
 
-        # Create output positional tokens
-        output_tokens = self.output_pos_embedding.expand(batch_size, -1, -1)  # [batch, output_len, d_model]
-
-        # Concatenate input and output tokens
-        x = torch.cat([x, output_tokens], dim=1)  # [batch, input_len + output_len, d_model]
-
         # Apply transformer layers
-        x = self.dropout(x)
         for layer in self.layers:
             x = layer(x)
-
-        # Extract only the output sequence positions
-        x = x[:, -self.output_len :, :]  # [batch, output_len, d_model]
 
         # Project to output size
         x = self.output_linear(x)  # [batch, output_len, output_size]
