@@ -374,7 +374,7 @@ class TorchTrainer(TransformationBlock):
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
                 self.last_val_loss = self.val_one_epoch(
                     validation_loader,
-                    desc=f"Epoch {epoch} Valid",
+                    epoch=epoch,
                 )
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
                 val_losses.append(self.last_val_loss)
@@ -389,7 +389,10 @@ class TorchTrainer(TransformationBlock):
 
             # Early stopping
             if self.patience_exceeded():
-                logger.log_to_external(message={f"Epochs{fold_no}": (epoch + 1) - self.patience})
+                logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
+                logger.log_to_external(
+                    message={f"Epochs{fold_no}": (epoch + 1) - self.patience}
+                )
                 break
 
             # Log the trained epochs to wandb if we finished training
@@ -430,7 +433,6 @@ class TorchTrainer(TransformationBlock):
 
         for batch in pbar:
             x_batch, y_batch = batch
-
             if not self.load_all_batches_to_gpu:
                 x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
@@ -458,7 +460,7 @@ class TorchTrainer(TransformationBlock):
     def val_one_epoch(
         self,
         dataloader: DataLoader[tuple[Tensor, ...]],
-        desc: str,
+        epoch: int,
     ) -> float:
         """Compute validation loss of the model for one epoch.
 
@@ -468,11 +470,31 @@ class TorchTrainer(TransformationBlock):
         """
         losses = []
         self.model.eval()
-        pbar = tqdm(dataloader, unit="batch")
+        
+        if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_validation_batches"):
+            self.preloaded_validation_batches = list(dataloader)
+            batches = self.preloaded_validation_batches
+            for batch_idx in range(len(batches)):
+                batches[batch_idx] = moveTo(batches[batch_idx][0], batches[batch_idx][1], self.device)
+
+        if self.load_all_batches_to_gpu:
+            pbar = tqdm(
+                self.preloaded_validation_batches,
+                unit="batch",
+                desc=f"Epoch {epoch} Valid",
+            )
+        else:
+            pbar = tqdm(
+                dataloader,
+                unit="batch",
+                desc=f"Epoch {epoch} Valid",
+            )
+        
         with torch.no_grad():
             for batch in pbar:
-                x_batch, y_batch = batch
-                x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
+                x_batch, y_batch = batch            
+                if not self.load_all_batches_to_gpu:
+                    x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
                 # Forward pass
                 y_pred = self.model(x_batch)
@@ -480,7 +502,6 @@ class TorchTrainer(TransformationBlock):
 
                 # Print losses
                 losses.append(loss.item())
-                pbar.set_description(desc=desc)
                 pbar.set_postfix(loss=sum(losses) / len(losses))
         return sum(losses) / len(losses)
 
@@ -498,9 +519,6 @@ class TorchTrainer(TransformationBlock):
             else:
                 self.early_stopping_counter += 1
                 if self.early_stopping_counter >= self.patience:
-                    logger.info(
-                        f"Early stopping after {self.early_stopping_counter} epochs",
-                    )
                     return True
         return False
 
