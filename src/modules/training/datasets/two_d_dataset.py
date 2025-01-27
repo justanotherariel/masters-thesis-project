@@ -1,13 +1,11 @@
 from dataclasses import dataclass
-from typing import Any
 
-import numpy as np
 import numpy.typing as npt
 import torch
 from torch.utils.data import Dataset
 
 from src.modules.environment.gymnasium import flatten_indices
-from src.typing.pipeline_objects import PipelineData, DatasetGroup, PipelineInfo
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .utils import TokenIndex, TokenType
 
@@ -21,7 +19,7 @@ class TwoDDataset(Dataset):
 
     def __init__(self, data: PipelineData, ds_group: DatasetGroup, discretize: bool = False) -> None:
         """Set up the dataset for training."""
-        if not ds_group in data.indices:
+        if ds_group not in data.indices:
             raise ValueError(f"Data does not have attribute {ds_group.name}.")
 
         self.discretize = discretize

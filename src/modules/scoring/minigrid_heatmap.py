@@ -1,20 +1,13 @@
-from typing import Any
-
-import minigrid.core
-import minigrid.core.grid
-import torch
-from PIL import Image
 import numpy as np
-import minigrid
+import torch
 from minigrid.core.grid import Grid
-import wandb
-from PIL import ImageDraw
+from PIL import Image, ImageDraw
 
+import wandb
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.modules.training.datasets.utils import TokenIndex
-from src.typing.pipeline_objects import PipelineData, PipelineInfo, DatasetGroup
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 logger = Logger()
 
@@ -24,6 +17,7 @@ OBSERVATION_VARIABLES = [
     "state",
     "agent",
 ]
+
 
 class MinigridHeatmap(TransformationBlock):
     """Score the predictions of the model."""
@@ -68,25 +62,24 @@ class MinigridHeatmap(TransformationBlock):
                 np_overlay = np.array(overlay)
                 shaded_image = Image.alpha_composite(img.convert("RGBA"), overlay)
                 shaded_image.save(output_dir / f"grid_{grid_idx}_{key}.png")
-                
-                wandb_masks[key] = {
-                    "mask_data": np.where(np_overlay[:, :, 0] == 255, 1, 0)
-                }
+
+                wandb_masks[key] = {"mask_data": np.where(np_overlay[:, :, 0] == 255, 1, 0)}
 
             # Log to wandb
             logger.log_to_external({f"Grid {grid_idx}": wandb.Image(img, masks=wandb_masks)})
 
-
         return data
-    
+
+
 def create_img(grid: Grid, tile_size: int) -> Image:
-    img_np = grid.render(   
+    img_np = grid.render(
         tile_size=tile_size,
         agent_pos=(1, 1),
         agent_dir=None,
         highlight_mask=None,
     ).astype(np.uint8)
     return Image.fromarray(img_np)
+
 
 def calculate_heatmap_data(input_data, prediction_data, info: PipelineInfo):
     # Extract input_data
@@ -112,18 +105,11 @@ def calculate_heatmap_data(input_data, prediction_data, info: PipelineInfo):
     n_samples = len(pred_obs)
 
     # Calculate the accuarcy
-    data_certainty: dict[str, dict[tuple[int, int], list[float]]] = {
-        key: {} for key in OBSERVATION_VARIABLES
-    }
-    data_accuracy: dict[str, dict[tuple[int, int], list[float]]] = {
-        key: {} for key in OBSERVATION_VARIABLES
-    }
+    data_certainty: dict[str, dict[tuple[int, int], list[float]]] = {key: {} for key in OBSERVATION_VARIABLES}
+    data_accuracy: dict[str, dict[tuple[int, int], list[float]]] = {key: {} for key in OBSERVATION_VARIABLES}
     for sample_idx in range(n_samples):
-
         # Get the agent's position
-        agent_x_pos = torch.nonzero(
-            x_obs[sample_idx, :, :, input_ti.observation[3]] > 0
-        ).tolist()
+        agent_x_pos = torch.nonzero(x_obs[sample_idx, :, :, input_ti.observation[3]] > 0).tolist()
         assert len(agent_x_pos) == 1
         agent_x_pos = tuple(agent_x_pos[0][:-1])
 
@@ -137,7 +123,12 @@ def calculate_heatmap_data(input_data, prediction_data, info: PipelineInfo):
             pred_obs_tmp_argmax = torch.argmax(pred_obs_tmp_perc, dim=2)
 
             # Certainty
-            tmp_certainty = torch.gather(pred_obs_tmp_perc, 2, x_obs_tmp[..., None].to(torch.long)).squeeze().mean(dim=[0, 1]).item()
+            tmp_certainty = (
+                torch.gather(pred_obs_tmp_perc, 2, x_obs_tmp[..., None].to(torch.long))
+                .squeeze()
+                .mean(dim=[0, 1])
+                .item()
+            )
             data_certainty[OBSERVATION_VARIABLES[i]][agent_x_pos].append(tmp_certainty)
 
             # Accuracy
@@ -149,11 +140,11 @@ def calculate_heatmap_data(input_data, prediction_data, info: PipelineInfo):
 
 def create_overlay(data: np.ndarray, grid_size: tuple[int, int], tile_size: int, border_px: int = 2):
     img_size = (grid_size[0] * tile_size, grid_size[1] * tile_size)
-    
+
     num_bars = data.shape[2]
     bar_width = (tile_size - 2 * border_px) / num_bars
-    
-    overlay = Image.new('RGBA', img_size, (0, 0, 0, 0))
+
+    overlay = Image.new("RGBA", img_size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     for i in range(grid_size[0]):
         for j in range(grid_size[1]):
@@ -163,17 +154,18 @@ def create_overlay(data: np.ndarray, grid_size: tuple[int, int], tile_size: int,
                     i * tile_size + border_px + idx * bar_width,
                     j * tile_size + tile_size - border_px - bar_height,
                     i * tile_size + border_px + (idx + 1) * bar_width,
-                    j * tile_size + tile_size - border_px
+                    j * tile_size + tile_size - border_px,
                 )
                 draw.rectangle(bar_region, fill=(255, 0, 0, 128))
 
     return overlay
 
+
 def data_py_to_np(data: dict[str, dict[tuple[int, int], list[float]]], grid_size: tuple[int, int]) -> np.ndarray:
     data_np = {}
-    for i, key in enumerate(data):
+    for _i, key in enumerate(data):
         if key not in data_np:
-                data_np[key] = np.zeros((grid_size[0], grid_size[1], 2))
+            data_np[key] = np.zeros((grid_size[0], grid_size[1], 2))
 
         for pos, values in data[key].items():
             data_np[key][pos] = np.array([np.mean(values), np.min(values)])

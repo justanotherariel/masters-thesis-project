@@ -3,11 +3,11 @@
 import contextlib
 import copy
 import functools
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, TypeVar
-import time
 
 import numpy as np
 import torch
@@ -329,7 +329,7 @@ class TorchTrainer(TransformationBlock):
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
-            
+
         # Track validation loss for early stopping
         self.lowest_val_loss = np.inf
         self.last_val_loss = np.inf
@@ -384,7 +384,7 @@ class TorchTrainer(TransformationBlock):
                 if self.patience_exceeded():
                     logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
                     logger.log_to_external(
-                        message={f"Epochs{fold_no}": (epoch + 1) - (self.patience*self.validate_every_x_epochs)},
+                        message={f"Epochs{fold_no}": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
                     )
                     break
 
@@ -463,7 +463,7 @@ class TorchTrainer(TransformationBlock):
         """
         losses = []
         self.model.eval()
-        
+
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_validation_batches"):
             self.preloaded_validation_batches = list(dataloader)
             batches = self.preloaded_validation_batches
@@ -482,10 +482,10 @@ class TorchTrainer(TransformationBlock):
                 unit="batch",
                 desc=f"Epoch {epoch} Valid",
             )
-        
+
         with torch.no_grad():
             for batch in pbar:
-                x_batch, y_batch = batch            
+                x_batch, y_batch = batch
                 if not self.load_all_batches_to_gpu:
                     x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 

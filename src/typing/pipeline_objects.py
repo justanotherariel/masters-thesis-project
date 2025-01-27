@@ -1,13 +1,14 @@
+from dataclasses import dataclass, field
 from enum import Flag
+from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
 from minigrid.core.grid import Grid
-from dataclasses import dataclass, field
+from numpy.typing import NDArray
+
 from src.modules.training.datasets.utils import TokenIndex
-from pathlib import Path
 
 
 class DatasetGroup(Flag):
@@ -18,6 +19,7 @@ class DatasetGroup(Flag):
     VALIDATION = 2
     TEST = 4
     ALL = TRAIN | VALIDATION | TEST
+
 
 @dataclass
 class PipelineData:
@@ -34,14 +36,20 @@ class PipelineData:
 
     # Predictions
     predictions: dict[DatasetGroup, list[Any]] = field(default_factory=lambda: {})
-    
+
     def check_data(self) -> None:
         """Check if the data is valid. Can raise Errors."""
 
         # Check if all data is None or present
-        if self.observations is None or self.actions is None or self.rewards is None or self.indices is None or self.grids is None:
+        if (
+            self.observations is None
+            or self.actions is None
+            or self.rewards is None
+            or self.indices is None
+            or self.grids is None
+        ):
             return
-        
+
         if self.observations is None:
             raise ValueError("x_states is None.")
         if self.actions is None:
@@ -52,30 +60,30 @@ class PipelineData:
             raise ValueError("indices is None.")
         if self.grids is None:
             raise ValueError("grids is None.")
-        
+
         # Check that keys of indices and grids match
         if set(self.indices.keys()) != set(self.grids.keys()):
             raise ValueError("indices keys do not match grids keys.")
-                    
+
         # Check if all lengths are the same
         length = len(self.actions)
         if len(self.rewards) != length:
             raise ValueError("rewards[] length does not match rewards[] length.")
-        
+
         # Check keys of predictions if not None
-        if self.predictions is not None:
-            if not set(self.predictions.keys()).issubset(self.indices.keys()):
-                raise ValueError("predictions keys are not a subset of indices keys.")
-            
+        if self.predictions is not None and not set(self.predictions.keys()).issubset(self.indices.keys()):
+            raise ValueError("predictions keys are not a subset of indices keys.")
+
+
 @dataclass
 class PipelineInfo:
     debug: bool = False
     output_dir: Path | None = None
-    
+
     # Metadata about the observation, action, and reward data provided by the sampler
     data_info: dict[str, Any] | None = None
-    
+
     # Model/Architecture specific information
     #   This is important for interpreting predictions in the scoring phase
-    model_ds_class: str | None = None   # The dataset used by the architecture
+    model_ds_class: str | None = None  # The dataset used by the architecture
     model_ti: TokenIndex | None = None  # TokenIndex object for the model

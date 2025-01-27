@@ -31,21 +31,20 @@ class ModelStorage:
     def get_model_path(self) -> Path | None:
         """Get the model path."""
         path = self._get_model_path()
-        
+
         # First, check if the model is cached locally
         if path.exists():
-            
             # If the current run will not be saved to wandb, we can always use the cached model
             if not wandb.run:
                 return path
-            
+
             # If we do want to log the current run to wandb, we need to check if the model was saved to the local db with a valid name
             if (name := self.db.get_name()) and name != "":
                 return path
-        
+
         # If we reach this point, the cached model (if there is one) was not saved to wandb
         # We thus want to delete the cached model (if there is one) and (re)train, so the the training process is logged to wandb
-        path.unlink(missing_ok=True)    # DB will be gc'd later
+        path.unlink(missing_ok=True)  # DB will be gc'd later
         return None
 
     def _get_model_checkpoint_path(self, epoch: int) -> Path:
@@ -119,6 +118,7 @@ class ModelStorage:
         location = self.get_model_checkpoint_path(epoch)
         return self.get_model(location)
 
+
 class ModelStorageDB:
     current_hash: str
     model_dir: Path
@@ -140,17 +140,17 @@ class ModelStorageDB:
     def get_name(self, model_hash: str | None = None) -> str:
         if model_hash is None:
             model_hash = self.current_hash
-        with open(self.db_path, "r") as db:
+        with open(self.db_path) as db:
             for line in db:
                 model, name = line.strip().split(",")
                 if model == model_hash:
                     return name
         return None
-    
+
     def gc(self):
         models = [model.stem for model in self.model_dir.glob("*.pt")]
         lines_to_keep = []
-        with open(self.db_path, "r") as db:
+        with open(self.db_path) as db:
             for line in db:
                 model_hash, _ = line.strip().split(",")
                 if model_hash in models:

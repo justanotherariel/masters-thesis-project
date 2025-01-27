@@ -1,12 +1,11 @@
-from typing import Any, List
-
 import torch
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.modules.training.datasets.utils import TokenIndex
-from src.typing.pipeline_objects import PipelineData, PipelineInfo, DatasetGroup
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
+from src.modules.training.datasets.utils import TokenIndex
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
+
 from .data_transform import dataset_to_list
 
 logger = Logger()
@@ -48,7 +47,14 @@ class MinigridScorer(TransformationBlock):
 
         return data
 
-    def calc_accuracy(self, raw_data: List[List[torch.Tensor]], raw_ti: TokenIndex, preds: List[torch.Tensor], model_ti: TokenIndex, index_pretty_name: str):
+    def calc_accuracy(
+        self,
+        raw_data: list[list[torch.Tensor]],
+        raw_ti: TokenIndex,
+        preds: list[torch.Tensor],
+        model_ti: TokenIndex,
+        index_pretty_name: str,
+    ):
         """Calculate the accuracy of the model.
 
         :param index_name: The name of the indice.
@@ -56,30 +62,34 @@ class MinigridScorer(TransformationBlock):
         """
         y_obs, y_reward = raw_data[1]
         pred_obs, pred_reward = preds
-        
+
         accuracy = torch.zeros(*y_obs.shape[:3], len(raw_ti.observation))
         for obs_idx in range(len(model_ti.observation)):
-            y_obs_tmp =  y_obs[..., raw_ti.observation[obs_idx]].squeeze()
+            y_obs_tmp = y_obs[..., raw_ti.observation[obs_idx]].squeeze()
             pred_obs_tmp = torch.argmax(pred_obs[..., model_ti.observation[obs_idx]], dim=3)
             accuracy[..., obs_idx] = (pred_obs_tmp == y_obs_tmp).float()
 
         # Check if the whole resulting observation is correct for each sample
         obs_whole_acc = accuracy.prod(dim=-1).prod(dim=-1).prod(dim=-1).mean()
-        
+
         # Calculate the mean accuracy over all fields for each sample
         obs_field_acc = accuracy.prod(dim=-1).mean(dim=[0, 1, 2])
-        
+
         # Check if the agent is predicted correctly
         obs_agent_pos = y_obs[..., raw_ti.observation[3]].squeeze().nonzero()
-        obs_agent_acc = accuracy[obs_agent_pos[:, 0], obs_agent_pos[:, 1], obs_agent_pos[:, 2], raw_ti.observation[3]].mean()
-        
+        obs_agent_acc = accuracy[
+            obs_agent_pos[:, 0], obs_agent_pos[:, 1], obs_agent_pos[:, 2], raw_ti.observation[3]
+        ].mean()
+
         # For all fields, where the agent shouldn't be, check if the agent is not predicted
         obs_non_agent_pos = torch.nonzero(y_obs[..., raw_ti.observation[3]].squeeze() == 0)
-        obs_non_agent_acc = accuracy[obs_non_agent_pos[:, 0], obs_non_agent_pos[:, 1], obs_non_agent_pos[:, 2], raw_ti.observation[3]].mean()
+        obs_non_agent_acc = accuracy[
+            obs_non_agent_pos[:, 0], obs_non_agent_pos[:, 1], obs_non_agent_pos[:, 2], raw_ti.observation[3]
+        ].mean()
 
         # Check Reward accuracy
         reward_acc = torch.isclose(y_reward, pred_reward, atol=0.1).sum() / len(y_reward)
-        
+
         # Average all accuracies
         acc = (obs_whole_acc + obs_field_acc + obs_agent_acc + obs_non_agent_acc + reward_acc) / 5
 

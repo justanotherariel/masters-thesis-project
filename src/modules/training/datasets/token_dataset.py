@@ -1,7 +1,6 @@
-"""Main dataset"""
+"""Simple dataset"""
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -15,15 +14,19 @@ from .utils import TokenDiscretizer, TokenIndex, TokenType
 
 
 @dataclass
-class TokenDataset(Dataset):
-    """Simple dataset for transformer training."""
+class SimpleDataset(Dataset):
+    """
+    Simple Dataset which supports discretization.
+    X is a tuple of observations and actions, Y is a tuple of observations and rewards.
+    Can be extended by using modifiers - e.g. for non-autoregressive tokenization.
+    """
 
     _data: PipelineData | None = None
     _indices: npt.NDArray | None = None
 
     def __init__(self, data: PipelineData, ds_group: DatasetGroup, discretize: bool = False) -> None:
         """Set up the dataset for training."""
-        if not ds_group in data.indices:
+        if ds_group not in data.indices:
             raise ValueError(f"Data does not have attribute {ds_group.name}.")
 
         self.discretize = discretize
@@ -48,7 +51,7 @@ class TokenDataset(Dataset):
         """Get a single training example.
 
         Returns:
-            tuple: (input_sequence, target_token)
+            tuple: (input_sequence (flattend observations + action), target_sequence (flattend observations + reward))
         """
         if self._data is None:
             raise ValueError("Dataset not initialized.")

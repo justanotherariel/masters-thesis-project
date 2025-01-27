@@ -1,7 +1,6 @@
 """Block to instatiate a Gymnasium Minigrid Environment."""
 
 from dataclasses import dataclass
-from typing import Any
 
 import gymnasium as gym
 import minigrid
@@ -14,7 +13,7 @@ from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.typing.pipeline_objects import PipelineData, PipelineInfo, DatasetGroup
+from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .minigrid_wrappers import FullyObsWrapper
 
@@ -53,7 +52,7 @@ class GymnasiumBuilder(TransformationBlock):
         :param data: The input data.
         :return: The transformed data.
         """
-        
+
         info.data_info = {
             "action_space": self.env.action_space,
             "observation_space": self.env.observation_space,
@@ -70,7 +69,7 @@ class GymnasiumBuilder(TransformationBlock):
                 (0, 0),
             ],
         }
-        
+
         return info
 
     def custom_transform(self, data: PipelineData) -> npt.NDArray[np.float32]:
@@ -172,7 +171,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
 
         # Store raw sampled data
         data.observations = np.stack(observations, axis=0)
-        
+
         # Store Metadata
         data.indices = {
             DatasetGroup.TRAIN: np.stack(train_indices, axis=0),
@@ -184,7 +183,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
             DatasetGroup.VALIDATION: validation_grids,
             DatasetGroup.ALL: train_grids + validation_grids,
         }
-        
+
         env.close()
         return data
 

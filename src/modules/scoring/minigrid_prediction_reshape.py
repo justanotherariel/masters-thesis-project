@@ -21,11 +21,12 @@ def convert_token_dataset(data: PipelineData, info: PipelineInfo) -> Any:
 
     ti = info.model_ti
     shape = info.data_info["observation_space"].shape[:2]
-    
+
     for key in data.predictions:
         data.predictions[key] = convert_tokens(data.predictions[key], ti, shape)
-    
+
     return data
+
 
 def convert_two_d_dataset(data: PipelineData, info: PipelineInfo) -> Any:
     return data
@@ -51,9 +52,6 @@ class MinigridPredictionReshape(TransformationBlock):
         :return: The transformed data
         """
 
-        CONVERT = {
-            "TokenDataset": convert_token_dataset, 
-            "TwoDDataset": convert_two_d_dataset
-        }
+        CONVERT = {"TokenDataset": convert_token_dataset, "TwoDDataset": convert_two_d_dataset}
 
         return CONVERT[self.info.model_ds_class](data, self.info)

@@ -1,6 +1,7 @@
 """File containing functions related to setting up the pipeline."""
 
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from hydra.utils import instantiate
@@ -9,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 from src.framework.logging import Logger
 from src.framework.pipeline import ModelPipeline
 from src.typing.pipeline_objects import PipelineInfo
-from pathlib import Path
 
 logger = Logger()
 
@@ -29,10 +29,10 @@ def setup_pipeline(cfg: DictConfig, output_dir: Path) -> tuple[ModelPipeline, Pi
 
     # Instantiate
     model_pipeline = instantiate(pipeline_cfg)
-    
+
     # Run Setup
     info = PipelineInfo(
-        debug = cfg.debug,
+        debug=cfg.debug,
         output_dir=output_dir,
     )
     info = model_pipeline.setup(info)

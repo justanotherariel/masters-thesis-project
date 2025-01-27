@@ -6,7 +6,7 @@ Heavily inspired by:
 """
 
 import functools
-from typing import Any, Callable
+from typing import Callable
 
 import torch
 import torch.nn as nn
@@ -98,8 +98,10 @@ class UNet(nn.Module):
         self.hidden_channels = hidden_channels
         self.obs_loss_weight = obs_loss_weight
         self.reward_loss_weight = reward_loss_weight
-        
-        self.discrete_loss_fn = F.cross_entropy if discrete_loss_fn is None else discrete_loss_fn # Loss function for discrete token_vars
+
+        self.discrete_loss_fn = (
+            F.cross_entropy if discrete_loss_fn is None else discrete_loss_fn
+        )  # Loss function for discrete token_vars
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the model parameters from pipeline info."""
@@ -246,8 +248,7 @@ class UNet(nn.Module):
                 #     pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
                 # )
                 loss = self.discrete_loss_fn(
-                    pred_range.reshape(-1, len(softmax_range)),
-                    target_range.argmax(dim=-1).reshape(-1)
+                    pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
                 )
             else:
                 # For single values, use MSE
