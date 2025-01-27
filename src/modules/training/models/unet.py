@@ -6,7 +6,7 @@ Heavily inspired by:
 """
 
 import functools
-from typing import Any
+from typing import Any, Callable
 
 import torch
 import torch.nn as nn
@@ -90,6 +90,7 @@ class UNet(nn.Module):
         hidden_channels: list[int],
         obs_loss_weight: float = 0.5,
         reward_loss_weight: float = 0.5,
+        discrete_loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
     ):
         """Initialize the CNN model structure."""
         super().__init__()
@@ -97,6 +98,8 @@ class UNet(nn.Module):
         self.hidden_channels = hidden_channels
         self.obs_loss_weight = obs_loss_weight
         self.reward_loss_weight = reward_loss_weight
+        
+        self.discrete_loss_fn = F.cross_entropy if discrete_loss_fn is None else discrete_loss_fn # Loss function for discrete token_vars
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the model parameters from pipeline info."""
@@ -239,8 +242,12 @@ class UNet(nn.Module):
                 # For softmax ranges, use cross entropy loss
                 pred_range = predicted_next_obs[..., softmax_range]
                 target_range = target_next_obs[..., softmax_range]
-                loss = F.cross_entropy(
-                    pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
+                # loss = F.cross_entropy(
+                #     pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
+                # )
+                loss = self.discrete_loss_fn(
+                    pred_range.reshape(-1, len(softmax_range)),
+                    target_range.argmax(dim=-1).reshape(-1)
                 )
             else:
                 # For single values, use MSE

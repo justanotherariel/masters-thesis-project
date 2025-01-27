@@ -16,7 +16,6 @@ def adaptive_loss(predictions, targets, beta=0.3):
 
 def rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
     num_classes = predictions.size(1)
-    # bincount requires CPU tensors to be long/int64 and GPU tensors to be int
     class_counts = torch.bincount(targets, minlength=num_classes)
     
     weights = torch.where(
@@ -25,6 +24,4 @@ def rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
         torch.zeros_like(class_counts)
     )
     
-    ce_loss = F.cross_entropy(predictions, targets, reduction='none')
-    sample_weights = weights[targets]
-    return (ce_loss * sample_weights).mean()
+    return F.cross_entropy(predictions, targets, weight=weights, dim=0)
