@@ -8,7 +8,7 @@ import numpy as np
 from minigrid.core.grid import Grid
 from numpy.typing import NDArray
 
-from src.modules.training.datasets.utils import TokenIndex
+from src.modules.training.datasets.tensor_index import TensorIndex
 
 
 class DatasetGroup(Flag):
@@ -86,4 +86,4 @@ class PipelineInfo:
     # Model/Architecture specific information
     #   This is important for interpreting predictions in the scoring phase
     model_ds_class: str | None = None  # The dataset used by the architecture
-    model_ti: TokenIndex | None = None  # TokenIndex object for the model
+    model_ti: TensorIndex | None = None  # TensorIndex object for the model

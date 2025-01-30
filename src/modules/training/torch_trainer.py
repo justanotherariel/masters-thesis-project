@@ -245,16 +245,14 @@ class TorchTrainer(TransformationBlock):
         dataset.setup(self._setup_info)
 
         # Check if the dataset has a custom collate function
-        collate = self.collate_fn if hasattr(dataset, "__getitems__") else None
-        if hasattr(dataset, "custom_collate_fn"):
-            collate = dataset.custom_collate_fn
+        collate_fn = dataset.collate_fn if hasattr(dataset, "collate_fn") else None
 
         # Create dataloaders
         loader = DataLoader(
             dataset,
             batch_size=self.batch_size,
             shuffle=shuffle,
-            collate_fn=collate,
+            collate_fn=collate_fn,
             **self.dataloader_conf,
         )
         return loader

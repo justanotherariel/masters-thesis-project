@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import PipelineData, PipelineInfo
 
-from .utils import TokenDiscretizer, TokenIndex, TokenType
+from .tensor_index import TokenDiscretizer, TensorIndex, TokenType
 
 
 class AutoregressiveTokenDataset(Dataset):
@@ -17,7 +17,7 @@ class AutoregressiveTokenDataset(Dataset):
     discretize: bool = False
 
     _data: PipelineData | None = None
-    ti: TokenIndex | None = None
+    ti: TensorIndex | None = None
     _indices: npt.NDArray | None = None
     _data_len_of_obs: int | None = None
     _data_len_of_input: int | None = None
@@ -47,7 +47,7 @@ class AutoregressiveTokenDataset(Dataset):
         self._token_indices = np.arange(len(self._indices) * self._token_combinations)
 
     @staticmethod
-    def create_ti(info: PipelineInfo) -> TokenIndex:
+    def create_ti(info: PipelineInfo) -> TensorIndex:
         """Create a TokenIndex object from the given info dictionary."""
         observation_info = info.data_info["observation_info"]
         action_info = info.data_info["action_info"]
@@ -78,7 +78,7 @@ class AutoregressiveTokenDataset(Dataset):
             }
         )
 
-        return TokenIndex(token_info)
+        return TensorIndex(token_info)
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.

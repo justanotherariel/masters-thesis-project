@@ -288,11 +288,11 @@ class Transformer(nn.Module):
         # Set observation shape and action dimension from environment info
         self.input_dim: tuple[int, int] = (
             math.prod(info.data_info["observation_space"].shape[:2]) + 1,
-            self.ti.shape,
+            self.ti.observation_.shape[0] + self.ti.action_.shape[0],
         )
         self.output_dim: tuple[int, int] = (
             math.prod(info.data_info["observation_space"].shape[:2]) + 1,
-            self.ti.shape,
+            self.ti.observation_.shape[0] + self.ti.reward_.shape[0],
         )
 
         # Set Network Parameters
@@ -414,6 +414,6 @@ class Transformer(nn.Module):
         return total_loss
 
     def get_dataset_cls(self):
-        from ..datasets.token_dataset import TokenDataset
+        from ..datasets.simple import SimpleDatasetToken
 
-        return functools.partial(TokenDataset, discretize=True)
+        return functools.partial(SimpleDatasetToken, discretize=True)

@@ -266,6 +266,6 @@ class UNet(nn.Module):
         return total_loss
 
     def get_dataset_cls(self):
-        from ..datasets.two_d_dataset import TwoDDataset
+        from ..datasets.simple import SimpleDatasetDefault
 
-        return functools.partial(TwoDDataset, discretize=True)
+        return functools.partial(SimpleDatasetDefault, discretize=True)
