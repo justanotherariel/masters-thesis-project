@@ -70,7 +70,6 @@ def run_train(cfg: DictConfig) -> None:
         "storage_path": f"{cache_data_path}",
     }
 
-    logger.log_section_separator("Train model pipeline")
     transform_args = setup_transform_args(model_pipeline, cache_args)
     _ = model_pipeline.transform(**transform_args)
 
