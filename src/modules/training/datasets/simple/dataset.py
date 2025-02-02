@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import Enum, auto
 
 import numpy.typing as npt
 import torch
@@ -9,6 +8,7 @@ from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from ..tensor_index import TensorIndex
+
 
 @dataclass
 class SimpleDataset(Dataset):
@@ -63,8 +63,8 @@ class SimpleDataset(Dataset):
         if self.discretize:
             x_obs = self._discretize_observation(x_obs)
             y_obs = self._discretize_observation(y_obs)
-            action = self._discretize_value(action, 'action')
-            reward = self._discretize_value(reward, 'reward')
+            action = self._discretize_value(action, "action")
+            reward = self._discretize_value(reward, "reward")
 
         return (x_obs, action), (y_obs, reward)
 
@@ -74,7 +74,7 @@ class SimpleDataset(Dataset):
             raise ValueError("TokenIndex not initialized. Call setup() first.")
 
         original_shape = obs.shape
-        flat_obs = obs.reshape(-1, obs.shape[-1])   # Reshape to (H*W, C)
+        flat_obs = obs.reshape(-1, obs.shape[-1])  # Reshape to (H*W, C)
 
         discretized = torch.zeros((flat_obs.shape[0], len(self.base_ti.observation_)), dtype=torch.uint8)
         for i in range(flat_obs.shape[1]):
@@ -86,7 +86,7 @@ class SimpleDataset(Dataset):
             else:
                 discretized[:, idx] = flat_obs[:, i]
 
-        return discretized.reshape(*original_shape[:-1], -1)    # Reshape back to (H, W, C')
+        return discretized.reshape(*original_shape[:-1], -1)  # Reshape back to (H, W, C')
 
     def _discretize_value(self, value: torch.Tensor, field_type: str) -> torch.Tensor:
         """Discretize a single value (action or reward)."""
@@ -107,14 +107,14 @@ class SimpleDataset(Dataset):
         """
         self.base_ti = self.create_base_ti(info)
         self.base_ti.discrete = self.discretize
-        
+
         self.ti = self.create_ti(info)
         self.ti.discrete = self.discretize
 
         return info
-    
+
     @staticmethod
-    def create_base_ti(info: PipelineInfo) -> TensorIndex:
+    def create_base_ti(info: PipelineInfo, discrete: bool | None = None) -> TensorIndex:
         """Create a TensorIndex object from the given info dictionary."""
         observation_info = info.data_info["observation_info"]
         action_info = info.data_info["action_info"]
@@ -126,4 +126,5 @@ class SimpleDataset(Dataset):
         token_info.update({"action": action_info})
         token_info.update({"reward": reward_info})
 
-        return TensorIndex(token_info)
+        discrete = discrete if discrete is not None else info.model_train_on_discrete
+        return TensorIndex(token_info, discrete)

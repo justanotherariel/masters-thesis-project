@@ -1,12 +1,14 @@
 import torch
 
-from .dataset import SimpleDataset, TensorIndex
 from src.typing.pipeline_objects import PipelineInfo
 
-class SDDefault(SimpleDataset):    
+from .dataset import SimpleDataset, TensorIndex
+
+
+class SDDefault(SimpleDataset):
     @staticmethod
-    def create_ti(info: PipelineInfo) -> TensorIndex:
-        return SimpleDataset.create_base_ti(info)
+    def create_ti(info: PipelineInfo, discrete: bool | None = None) -> TensorIndex:
+        return SimpleDataset.create_base_ti(info, discrete)
 
     @staticmethod
     def collate_fn(

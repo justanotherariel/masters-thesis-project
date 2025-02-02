@@ -12,7 +12,7 @@ from typing import Annotated, Any, TypeVar
 import numpy as np
 import torch
 from annotated_types import Ge, Gt
-from torch import Tensor, nn
+from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader, Dataset
@@ -22,6 +22,9 @@ from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.utils.model_storage import ModelStorage
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
+
+from .loss import BaseLoss
+from .models.base import BaseModel
 
 logger = Logger()
 
@@ -56,7 +59,8 @@ class TorchTrainer(TransformationBlock):
     """The Main Torch Trainer"""
 
     # Modules
-    model: nn.Module
+    model: BaseModel
+    loss: BaseLoss
     optimizer: functools.partial[Optimizer]
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     model_storage_conf: ModelStorageConf = field(default_factory=ModelStorageConf, init=True, repr=False, compare=False)
@@ -71,6 +75,7 @@ class TorchTrainer(TransformationBlock):
     load_all_batches_to_gpu: bool = field(default=False)
 
     # Predction parameters
+    discrete: bool = field(default=True)
     to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
 
     # Parameters relevant for Hashing
@@ -112,15 +117,12 @@ class TorchTrainer(TransformationBlock):
             ms.save_model_to_wandb,
         )
 
-        if isinstance(self.model.get_dataset_cls(), functools.partial):
-            info.model_ds_class = self.model.get_dataset_cls().func.__name__
-            info.model_ti = self.model.get_dataset_cls().func.create_ti(info)
-        else:
-            info.model_ds_class = self.model.get_dataset_cls().__name__
-            info.model_ti = self.model.get_dataset_cls().create_ti(info)
+        info.model_train_on_discrete = self.discrete
+        info.model_ti = self.model.get_dataset_cls().create_ti(info)
 
-        # Setup Model
+        # Setup Model and Loss
         self.model.setup(info)
+        self.loss.setup(info)
 
         # Move model to fastest device
         if torch.cuda.is_available():
@@ -128,7 +130,7 @@ class TorchTrainer(TransformationBlock):
         else:
             self.device = torch.device("cpu")
         logger.info(f"Using Device: {self.device}{' (debug)' if info.debug else ''}")
-        self.model.to(self.device)
+        self.model.module.to(self.device)
 
         # Disable Dataloader parallelism if debugging
         if info.debug:
@@ -136,7 +138,7 @@ class TorchTrainer(TransformationBlock):
             self.dataloader_conf = {}
 
         # Set optimizer
-        self.initialized_optimizer = self.optimizer(self.model.parameters())
+        self.initialized_optimizer = self.optimizer(self.model.module.parameters())
 
         # Set scheduler
         self.initialized_scheduler: LRScheduler | None
@@ -173,7 +175,7 @@ class TorchTrainer(TransformationBlock):
             )
             logger.log_to_external({"Cached Model": self.model_storage.db.get_name()})
             model = self.model_storage.get_model()
-            self.model.load_state_dict(model.state_dict())
+            self.model.module.load_state_dict(model.state_dict())
         else:
             current_time = time.time()
             self._model_train(data)
@@ -205,13 +207,13 @@ class TorchTrainer(TransformationBlock):
         :param loader: The loader to predict on.
         :return: The predictions.
         """
-        self.model.eval()
+        self.model.module.eval()
         predictions = []
 
         with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
-                y_pred = self.model(X_batch)
+                y_pred = self.model.forward(X_batch)
                 y_pred = tuple(y.to("cpu") for y in y_pred) if isinstance(y_pred, tuple) else y_pred.to("cpu")
                 predictions.extend(y_pred)
         return predictions
@@ -241,7 +243,7 @@ class TorchTrainer(TransformationBlock):
         :return: The training and validation dataloaders.
         """
         # Create datasets
-        dataset = self.model.get_dataset_cls()(data, indices)
+        dataset = self.model.get_dataset_cls()(data, indices, discretize=self.discrete)
         dataset.setup(self._setup_info)
 
         # Check if the dataset has a custom collate function
@@ -275,7 +277,7 @@ class TorchTrainer(TransformationBlock):
             if last_checkpoint > 0:
                 logger.info("Resuming training from checkpoint")
                 model = self.model_storage.get_model_checkpoint(last_checkpoint)
-                self.model.load_state_dict(model.state_dict())
+                self.model.module.load_state_dict(model.state_dict())
                 start_epoch = last_checkpoint + 1
 
         # Train the model
@@ -290,7 +292,7 @@ class TorchTrainer(TransformationBlock):
             start_epoch,
         )
         logger.info(
-            f"Done training the model: {self.model.__class__.__name__}",
+            f"Done training the model: {self.model.module.__class__.__name__}",
         )
 
         # Revert to the best model
@@ -298,11 +300,11 @@ class TorchTrainer(TransformationBlock):
             logger.info(
                 f"Reverting to model with best validation loss {self.lowest_val_loss}",
             )
-            self.model.load_state_dict(self.best_model_state_dict)
+            self.model.module.load_state_dict(self.best_model_state_dict)
 
         # Save the model
         if self.model_storage_conf.save_model_to_disk:
-            self.model_storage.save_model(self.model)
+            self.model_storage.save_model(self.model.module)
 
     def _model_training_loop(
         self,
@@ -401,7 +403,7 @@ class TorchTrainer(TransformationBlock):
         :return: Average loss for the epoch.
         """
         losses = []
-        self.model.train()
+        self.model.module.train()
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_train_batches"):
             self.preloaded_train_batches = list(dataloader)
@@ -429,8 +431,8 @@ class TorchTrainer(TransformationBlock):
 
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
-                y_pred = self.model(x_batch)
-                loss = self.model.compute_loss(y_pred, y_batch)
+                y_pred = self.model.forward(x_batch)
+                loss = self.loss(y_pred, y_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -460,7 +462,7 @@ class TorchTrainer(TransformationBlock):
         :return: Average loss for the epoch.
         """
         losses = []
-        self.model.eval()
+        self.model.module.eval()
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_validation_batches"):
             self.preloaded_validation_batches = list(dataloader)
@@ -488,8 +490,8 @@ class TorchTrainer(TransformationBlock):
                     x_batch, y_batch = moveTo(x_batch, y_batch, self.device)
 
                 # Forward pass
-                y_pred = self.model(x_batch)
-                loss = self.model.compute_loss(y_pred, y_batch)
+                y_pred = self.model.forward(x_batch)
+                loss = self.loss(y_pred, y_batch)
 
                 # Print losses
                 losses.append(loss.item())
@@ -505,7 +507,7 @@ class TorchTrainer(TransformationBlock):
         if self.patience != -1:
             if self.last_val_loss < self.lowest_val_loss:
                 self.lowest_val_loss = self.last_val_loss
-                self.best_model_state_dict = copy.deepcopy(self.model.state_dict())
+                self.best_model_state_dict = copy.deepcopy(self.model.module.state_dict())
                 self.early_stopping_counter = 0
             else:
                 self.early_stopping_counter += 1

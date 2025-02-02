@@ -84,6 +84,6 @@ class PipelineInfo:
     data_info: dict[str, Any] | None = None
 
     # Model/Architecture specific information
-    #   This is important for interpreting predictions in the scoring phase
-    model_ds_class: str | None = None  # The dataset used by the architecture
+    #   This is important during training for the TorchTrainer
     model_ti: TensorIndex | None = None  # TensorIndex object for the model
+    model_train_on_discrete: bool = False  # Whether the model should train on discrete data

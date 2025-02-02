@@ -2,6 +2,7 @@ from typing import Any, Union
 
 import torch
 
+
 class TensorIndexSub:
     """Handles indexing for a specific type."""
 
@@ -41,7 +42,7 @@ class TensorIndexSub:
 class TensorIndex:
     """Manages indices as defined in the info dictionary."""
 
-    def __init__(self, info: dict[str, list[tuple[int, int]]]):
+    def __init__(self, info: dict[str, list[tuple[int, int]]], discrete: bool = False):
         required_keys = {"observation", "action", "reward"}
         if not required_keys.issubset(info.keys()):
             raise ValueError(f"TokenIndex must have all keys: {required_keys}")
@@ -53,7 +54,7 @@ class TensorIndex:
         self.info_discrete: dict[str, list[tuple[int, int]]] = {}
 
         # Flags
-        self.discrete: bool = False
+        self.discrete: bool = discrete
         self.seperate: bool = False
 
         # Check if seperate

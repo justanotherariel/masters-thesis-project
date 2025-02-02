@@ -2,12 +2,12 @@ from typing import Any
 
 import torch
 
-from src.modules.training.datasets.two_d_dataset import TwoDDataset
+from src.modules.training.datasets.simple.dataset import SimpleDataset
 from src.typing.pipeline_objects import DatasetGroup, PipelineData
 
 
 def dataset_to_list(data: PipelineData, ds_group: DatasetGroup) -> list[list[Any]]:
-    dataset = TwoDDataset(data, ds_group=ds_group, discretize=False)
+    dataset = SimpleDataset(data, ds_group=ds_group, discretize=False)
 
     res = []
     for i in dataset[0]:

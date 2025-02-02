@@ -151,7 +151,7 @@ class TransformationPipeline(TransformingSystem, Cacher):
         :return: The transformed data.
         """
         logger.log_section_separator(self.title)
-        
+
         if cache_args and self.cache_exists(self.get_hash(), cache_args):
             logger.info(
                 f"Cache exists for {self.title} with hash: {self.get_hash()}. Using the cache.",

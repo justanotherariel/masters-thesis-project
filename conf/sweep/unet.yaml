@@ -1,12 +1,15 @@
 command:
   - python3
   - ${program}
+  - model=unet_extensive
+  # - model.train_sys.steps.0.model.discrete_loss_fn._args_.0.path=src.modules.training.models.loss.rebalance_loss
+  - model.train_sys.steps.0.model.discrete_loss_fn._args_.0.path=torch.nn.functional.cross_entropy
   - ${args_no_hyphens}
 method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: U-Net | rebalance_loss
+name: U-Net | cross_entropy_loss [Mid Term]
 metric:
   name: Train/Accuracy
   goal: maximize
@@ -17,8 +20,8 @@ parameters:
 
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
-    min: 1e-5
-    max: 1e-3
+    min: 1e-4
+    max: 1e-2
 
   model.train_sys.steps.0.scheduler.decay_rate:
     distribution: uniform

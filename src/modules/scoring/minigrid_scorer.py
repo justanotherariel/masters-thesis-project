@@ -2,8 +2,8 @@ import torch
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.modules.training.datasets.two_d_dataset import TwoDDataset
-from src.modules.training.datasets.utils import TokenIndex
+from src.modules.training.datasets.simple import SimpleDatasetDefault
+from src.modules.training.datasets.tensor_index import TensorIndex
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .data_transform import dataset_to_list
@@ -33,14 +33,14 @@ class MinigridScorer(TransformationBlock):
 
         if DatasetGroup.TRAIN in data.predictions:
             raw_data = dataset_to_list(data, DatasetGroup.TRAIN)
-            raw_ti = TwoDDataset.create_ti(self.info)
+            raw_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
             preds = data.predictions[DatasetGroup.TRAIN]
             model_ti = self.info.model_ti
             self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Train")
 
         if DatasetGroup.VALIDATION in data.predictions:
             raw_data = dataset_to_list(data, DatasetGroup.VALIDATION)
-            raw_ti = TwoDDataset.create_ti(self.info)
+            raw_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
             preds = data.predictions[DatasetGroup.VALIDATION]
             model_ti = self.info.model_ti
             self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Validation")
@@ -50,9 +50,9 @@ class MinigridScorer(TransformationBlock):
     def calc_accuracy(
         self,
         raw_data: list[list[torch.Tensor]],
-        raw_ti: TokenIndex,
+        raw_ti: TensorIndex,
         preds: list[torch.Tensor],
-        model_ti: TokenIndex,
+        model_ti: TensorIndex,
         index_pretty_name: str,
     ):
         """Calculate the accuracy of the model.

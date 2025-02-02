@@ -5,14 +5,9 @@ Heavily inspired by:
   Github: https://github.com/milesial/Pytorch-UNet/
 """
 
-import functools
-from typing import Callable
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from src.typing.pipeline_objects import PipelineInfo
 
 
 class DoubleConv(nn.Module):
@@ -87,60 +82,26 @@ class UNet(nn.Module):
 
     def __init__(
         self,
+        obs_shape: tuple[int, int, int],
+        action_dim: int,
         hidden_channels: list[int],
-        obs_loss_weight: float = 0.5,
-        reward_loss_weight: float = 0.5,
-        discrete_loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
     ):
         """Initialize the CNN model structure."""
         super().__init__()
 
         self.hidden_channels = hidden_channels
-        self.obs_loss_weight = obs_loss_weight
-        self.reward_loss_weight = reward_loss_weight
-
-        self.discrete_loss_fn = (
-            F.cross_entropy if discrete_loss_fn is None else discrete_loss_fn
-        )  # Loss function for discrete token_vars
-
-    def setup(self, info: PipelineInfo) -> PipelineInfo:
-        """Setup the model parameters from pipeline info."""
-        self.info = info
-        ti = info.model_ti
-
-        # Store softmax ranges for each grid cell component
-        ti.discrete = True
-        self.softmax_ranges = [
-            ti.observation[0],
-            ti.observation[1],
-            ti.observation[2],
-            ti.observation[3],
-        ]
-
-        # Set observation shape and action dimension from environment info
-        self.obs_dim: tuple[int, int, int] = (*info.data_info["observation_space"].shape[:2], len(ti.observation_))
-        self.action_dim: int = info.data_info["action_space"].n.item()
-
-        # Initialize network architecture
-        self._build_network()
-
-        # info.model_ds_class = "TwoDDataset"
-        return info
-
-    def _build_network(self) -> None:
-        """Build the network architecture based on setup parameters."""
 
         # Down
-        self.down_first = Down(self.obs_dim[-1], self.hidden_channels[0], first=True)
+        self.down_first = Down(obs_shape[-1], self.hidden_channels[0], first=True)
         self.down_layers = nn.ModuleList(
             [Down(self.hidden_channels[i], self.hidden_channels[i + 1]) for i in range(len(self.hidden_channels) - 1)]
         )
 
         # Fusion
-        final_encoder_size_y = self.obs_dim[0] // 2 ** (len(self.hidden_channels) - 1)
-        final_encoder_size_x = self.obs_dim[1] // 2 ** (len(self.hidden_channels) - 1)
+        final_encoder_size_y = obs_shape[0] // 2 ** (len(self.hidden_channels) - 1)
+        final_encoder_size_x = obs_shape[1] // 2 ** (len(self.hidden_channels) - 1)
         final_encode_size_flat = final_encoder_size_y * final_encoder_size_x * self.hidden_channels[-1]
-        self.fusion = nn.Linear(final_encode_size_flat + self.action_dim, final_encode_size_flat)
+        self.fusion = nn.Linear(final_encode_size_flat + action_dim, final_encode_size_flat)
 
         # Reward
         self.reward = nn.Linear(final_encode_size_flat, 1)
@@ -152,120 +113,45 @@ class UNet(nn.Module):
                 for i in range(len(self.hidden_channels) - 1, 0, -1)
             ]
         )
-        self.up_last = OutConv(self.hidden_channels[0], self.obs_dim[-1])
+        self.up_last = OutConv(self.hidden_channels[0], obs_shape[-1])
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the network."""
 
         # Unpack input
-        obs = x[0].float()
-        action = x[1].float()
+        x_obs = x[0].float()
+        x_action = x[1].float()
 
         # Permute to (batch_size, channels, height, width)
-        obs = obs.permute(0, 3, 1, 2)
+        pred_obs = x_obs.permute(0, 3, 1, 2)
 
         # Down
-        obs = self.down_first(obs)
-        down_out = [obs]
+        pred_obs = self.down_first(pred_obs)
+        down_out = [pred_obs]
         for layer in self.down_layers:
-            obs = layer(obs)
-            down_out.append(obs)
+            pred_obs = layer(pred_obs)
+            down_out.append(pred_obs)
         down_out = down_out[:-1]  # Discard last output
 
         # Flatten obs
-        obs_flat = obs.reshape(obs.size(0), -1)
+        obs_flat = pred_obs.reshape(pred_obs.size(0), -1)
 
         # Fuse Action with final up output
-        action = action.view(action.size(0), -1)
-        obs_flat = self.fusion(torch.cat([obs_flat, action], dim=1))
+        x_action = x_action.view(x_action.size(0), -1)
+        obs_flat = self.fusion(torch.cat([obs_flat, x_action], dim=1))
 
         # Calculate Reward
-        reward = self.reward(obs_flat)
+        pred_reward = self.reward(obs_flat)
 
         # Reshape obs back to (batch_size, channels, height, width)
-        obs = obs.view(obs.size(0), self.hidden_channels[-1], obs.size(2), obs.size(3))
+        pred_obs = pred_obs.view(pred_obs.size(0), self.hidden_channels[-1], pred_obs.size(2), pred_obs.size(3))
 
         # Up
         for layer, down in zip(self.up_layers, down_out[::-1]):
-            obs = layer(obs, down)
-        obs = self.up_last(obs)
+            pred_obs = layer(pred_obs, down)
+        pred_obs = self.up_last(pred_obs)
 
         # Permute obs back to (batch_size, height, width, channels)
-        obs = obs.permute(0, 2, 3, 1)
+        pred_obs = pred_obs.permute(0, 2, 3, 1)
 
-        # Apply softmax for discrete values
-        predicted_next_obs = self._apply_softmax_to_grid(obs)
-
-        return predicted_next_obs, reward
-
-    def _apply_softmax_to_grid(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply softmax to each range in the grid cells.
-
-        Args:
-            x: Tensor of shape (batch_size, height, width, channels)
-
-        Returns:
-            Tensor of same shape with softmax applied to appropriate ranges
-        """
-        # Create output tensor
-        output = torch.zeros_like(x)
-
-        # For each softmax range
-        for softmax_range in self.softmax_ranges:
-            if len(softmax_range) > 1:  # Only apply softmax if range has multiple elements
-                # Extract the relevant slice
-                sliced = x[..., softmax_range]
-
-                # Apply softmax along the last dimension
-                softmaxed = F.softmax(sliced, dim=-1)
-
-                # Place back in output
-                output[..., softmax_range] = softmaxed
-            else:
-                # For single values (no softmax needed), just copy
-                output[..., softmax_range] = x[..., softmax_range]
-
-        return output
-
-    def compute_loss(
-        self,
-        x: tuple[torch.Tensor, torch.Tensor],
-        y: tuple[torch.Tensor, torch.Tensor],
-    ) -> tuple[torch.Tensor, dict]:
-        """Compute the combined loss for observation and reward predictions."""
-        # Compute observation loss using cross entropy for softmaxed ranges
-        predicted_next_obs, predicted_reward = x
-        target_next_obs, target_reward = y
-
-        obs_loss = 0
-
-        for softmax_range in self.softmax_ranges:
-            if len(softmax_range) > 1:  # If it's a softmax range
-                # For softmax ranges, use cross entropy loss
-                pred_range = predicted_next_obs[..., softmax_range]
-                target_range = target_next_obs[..., softmax_range]
-                # loss = F.cross_entropy(
-                #     pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
-                # )
-                loss = self.discrete_loss_fn(
-                    pred_range.reshape(-1, len(softmax_range)), target_range.argmax(dim=-1).reshape(-1)
-                )
-            else:
-                # For single values, use MSE
-                pred_range = predicted_next_obs[..., softmax_range]
-                target_range = target_next_obs[..., softmax_range]
-                loss = F.mse_loss(pred_range, target_range)
-            obs_loss += loss / len(softmax_range)
-
-        # Compute reward loss
-        reward_loss = F.mse_loss(predicted_reward, target_reward)
-
-        # Compute weighted total loss
-        total_loss = self.obs_loss_weight * obs_loss + self.reward_loss_weight * reward_loss
-
-        return total_loss
-
-    def get_dataset_cls(self):
-        from ..datasets.simple import SimpleDatasetDefault
-
-        return functools.partial(SimpleDatasetDefault, discretize=True)
+        return pred_obs, pred_reward

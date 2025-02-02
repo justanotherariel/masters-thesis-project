@@ -4,5 +4,8 @@ import functools
 
 
 class partial(functools.partial):
-    def __str__(self):
-        return f"functools.partial(<function {self.func.__name__}>, {', '.join(f'{k}={v}' for k, v in self.keywords.items())})"
+    def __repr__(self):
+        keywords = ', '.join(f'{k}={v}' for k, v in self.keywords.items())
+        keywords = f', {keywords}' if keywords else ''
+        
+        return f"functools.partial(<function {self.func.__name__}>{keywords})"

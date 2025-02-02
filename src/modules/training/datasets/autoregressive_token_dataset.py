@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 from src.modules.environment.gymnasium import flatten_indices
 from src.typing.pipeline_objects import PipelineData, PipelineInfo
 
-from .tensor_index import TokenDiscretizer, TensorIndex, TokenType
+from .tensor_index import TensorIndex, TokenDiscretizer, TokenType
 
 
 class AutoregressiveTokenDataset(Dataset):

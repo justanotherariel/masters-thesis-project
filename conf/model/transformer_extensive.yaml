@@ -22,26 +22,30 @@ train_sys:
       batch_size: 2048
       # patience: 250
       load_all_batches_to_gpu: true
-      validate_every_x_epochs: 50
+      validate_every_x_epochs: 10
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
+      discrete: true
 
       model:
-        _target_: src.modules.training.models.transformer.Transformer
+        _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
         d_model: 256
         n_heads: 4
         n_layers: 1
         d_ff: 1024
         drop_prob: 0.1
+
+      loss:
+        _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:
             - _target_: hydra.utils.get_method
-              # path: torch.nn.CrossEntropyLoss
-              # path: src.modules.training.models.loss.focal_loss
-              # path: src.modules.training.models.loss.adaptive_loss
-              path: src.modules.training.models.loss.rebalance_loss
+              # path: torch.nn.functional.cross_entropy
+              # path: src.modules.training.loss.ce_focal_loss
+              # path: src.modules.training.loss.ce_adaptive_loss
+              path: src.modules.training.loss.ce_rebalance_loss
 
       model_storage_conf:
         save_model_to_disk: true
@@ -74,9 +78,8 @@ train_sys:
 
 pred_sys:
   steps:
-    - _target_: src.modules.scoring.minigrid_prediction_reshape.MinigridPredictionReshape
     - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
-    - _target_: src.modules.scoring.minigrid_heatmap_new.MinigridHeatmap
+    - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
       metric_calculators: 
         - AgentPovCertaintyCalc
         - AgentPovAccuracyCalc
