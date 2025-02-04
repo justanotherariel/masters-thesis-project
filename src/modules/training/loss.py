@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 import torch
 from torch.nn import functional as F
 
@@ -34,7 +35,10 @@ class BaseLoss:
     def __init__(self, **kwargs):
         raise NotImplementedError("BaseLoss is an abstract class and should not be instantiated.")
 
-    def __call__(self, predictions, targets):
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
+        raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
+
+    def __call__(self, predictions: tuple[torch.Tensor, torch.Tensor], targets: tuple[torch.Tensor, torch.Tensor]):
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
 
@@ -43,12 +47,12 @@ class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
     obs_loss_weight: float = 0.5
     reward_loss_weight: float = 0.5
-    
+
     def __init__(self, **kwargs):
-        self.discrete_loss_fn = kwargs.get("discrete_loss_fn", None)
+        self.discrete_loss_fn = kwargs.get("discrete_loss_fn")
         self.obs_loss_weight = kwargs.get("obs_loss_weight", 0.5)
         self.reward_loss_weight = kwargs.get("reward_loss_weight", 0.5)
-        
+
         if self.discrete_loss_fn is None:
             raise ValueError("discrete_loss_fn must be provided")
 

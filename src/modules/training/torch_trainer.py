@@ -24,6 +24,7 @@ from src.modules.training.utils.model_storage import ModelStorage
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .loss import BaseLoss
+from .accuracy import BaseAccuracy
 from .models.base import BaseModel
 
 logger = Logger()
@@ -61,6 +62,7 @@ class TorchTrainer(TransformationBlock):
     # Modules
     model: BaseModel
     loss: BaseLoss
+    accuracy: BaseAccuracy
     optimizer: functools.partial[Optimizer]
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     model_storage_conf: ModelStorageConf = field(default_factory=ModelStorageConf, init=True, repr=False, compare=False)
@@ -123,6 +125,7 @@ class TorchTrainer(TransformationBlock):
         # Setup Model and Loss
         self.model.setup(info)
         self.loss.setup(info)
+        self.accuracy.setup(info)
 
         # Move model to fastest device
         if torch.cuda.is_available():
@@ -215,8 +218,14 @@ class TorchTrainer(TransformationBlock):
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model.forward(X_batch)
                 y_pred = tuple(y.to("cpu") for y in y_pred) if isinstance(y_pred, tuple) else y_pred.to("cpu")
-                predictions.extend(y_pred)
-        return predictions
+                if isinstance(y_pred, tuple):
+                    if predictions == []:
+                        predictions = [[] for _ in range(len(y_pred))]
+                    for idx, pred in enumerate(y_pred):
+                        predictions[idx].extend(pred)
+                else:
+                    predictions.extend(y_pred)
+        return [torch.stack(pred) for pred in predictions]
 
     def get_hash(self) -> str:
         """Get the hash of the block.
@@ -323,8 +332,8 @@ class TorchTrainer(TransformationBlock):
         if fold > -1:
             fold_no = f"_{fold}"
 
-        logger.external_define_metric(f"Train/Loss{fold_no}", "Epoch")
-        logger.external_define_metric(f"Validation/Loss{fold_no}", "Epoch")
+        logger.external_define_metric(f"Train{fold_no}/Loss", "Epoch")
+        logger.external_define_metric(f"Validation{fold_no}/Loss", "Epoch")
 
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
@@ -336,16 +345,17 @@ class TorchTrainer(TransformationBlock):
 
         for epoch in range(start_epoch, self.epochs):
             # Train using train_loader
-            train_loss = self.train_one_epoch(train_loader, epoch)
+            train_loss, accuarcy = self.train_one_epoch(train_loader, epoch)
             logger.debug(f"Epoch {epoch} Train Loss: {train_loss}")
 
             # Log train loss
             logger.log_to_external(
                 message={
-                    f"Train/Loss{fold_no}": train_loss,
+                    f"Train{fold_no}/Loss": train_loss,
                     "Epoch": epoch,
                 },
             )
+            log_dict(accuarcy, epoch, f"Train{fold_no}")
 
             # Step the scheduler
             if self.initialized_scheduler is not None:
@@ -368,17 +378,18 @@ class TorchTrainer(TransformationBlock):
 
             # Compute validation loss
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
-                self.last_val_loss = self.val_one_epoch(
+                self.last_val_loss, accuarcy = self.val_one_epoch(
                     validation_loader,
                     epoch=epoch,
                 )
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
                 logger.log_to_external(
                     message={
-                        f"Validation/Loss{fold_no}": self.last_val_loss,
+                        f"Validation{fold_no}/Loss": self.last_val_loss,
                         "Epoch": epoch,
                     },
                 )
+                log_dict(accuarcy, epoch, f"Validation{fold_no}")
 
                 # Early stopping
                 if self.patience_exceeded():
@@ -395,15 +406,15 @@ class TorchTrainer(TransformationBlock):
         self,
         dataloader: DataLoader[tuple[Tensor, ...]],
         epoch: int,
-    ) -> float:
+    ) -> tuple[float, dict[str, float]]:
         """Train the model for one epoch.
 
         :param dataloader: Dataloader for the training data.
         :param epoch: Epoch number.
         :return: Average loss for the epoch.
         """
-        losses = []
-        self.model.module.train()
+        epoch_loss = []
+        epoch_accuracy: dict[str, list[float]] = {}
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_train_batches"):
             self.preloaded_train_batches = list(dataloader)
@@ -424,6 +435,7 @@ class TorchTrainer(TransformationBlock):
                 desc=f"Epoch {epoch} Train ({self.initialized_optimizer.param_groups[0]['lr']:0.8f})",
             )
 
+        self.model.module.train()
         for batch in pbar:
             x_batch, y_batch = batch
             if not self.load_all_batches_to_gpu:
@@ -433,6 +445,7 @@ class TorchTrainer(TransformationBlock):
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
                 loss = self.loss(y_pred, y_batch)
+                acc = self.accuracy(y_pred, y_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -444,11 +457,12 @@ class TorchTrainer(TransformationBlock):
                 loss.backward()
                 self.initialized_optimizer.step()
 
-            # Print tqdm
-            losses.append(loss.item())
-            pbar.set_postfix(loss=sum(losses) / len(losses))
+            # Save metrics
+            epoch_loss.append(loss.item())
+            append_to_dict(epoch_accuracy, acc)
+            pbar.set_postfix(loss=sum(epoch_loss) / len(epoch_loss))
 
-        return sum(losses) / len(losses)
+        return sum(epoch_loss) / len(epoch_loss), average_dict(epoch_accuracy)
 
     def val_one_epoch(
         self,
@@ -461,8 +475,8 @@ class TorchTrainer(TransformationBlock):
         :param desc: Description for the tqdm progress bar.
         :return: Average loss for the epoch.
         """
-        losses = []
-        self.model.module.eval()
+        epoch_loss = []
+        epoch_accuracy: dict[str, list[float]] = {}
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_validation_batches"):
             self.preloaded_validation_batches = list(dataloader)
@@ -483,6 +497,7 @@ class TorchTrainer(TransformationBlock):
                 desc=f"Epoch {epoch} Valid",
             )
 
+        self.model.module.eval()
         with torch.no_grad():
             for batch in pbar:
                 x_batch, y_batch = batch
@@ -492,11 +507,13 @@ class TorchTrainer(TransformationBlock):
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
                 loss = self.loss(y_pred, y_batch)
+                acc = self.accuracy(y_pred, y_batch)
 
-                # Print losses
-                losses.append(loss.item())
-                pbar.set_postfix(loss=sum(losses) / len(losses))
-        return sum(losses) / len(losses)
+                # Save metrics
+                epoch_loss.append(loss.item())
+                append_to_dict(epoch_accuracy, acc)
+                pbar.set_postfix(loss=sum(epoch_loss) / len(epoch_loss))
+        return sum(epoch_loss) / len(epoch_loss), average_dict(epoch_accuracy)
 
     def patience_exceeded(self) -> bool:
         """Check if early stopping should be performed.
@@ -530,3 +547,34 @@ def moveTo(
     y_batch = tuple(y.to(device) for y in y_batch) if isinstance(y_batch, tuple) else y_batch.to(device)
 
     return x_batch, y_batch
+
+def append_to_dict(
+    target: dict[str, Any],
+    source: dict[str, Any],
+) -> dict[str, Any]:
+    """Append the values of source to target."""
+    for key, value in source.items():
+        if key not in target:
+            target[key] = []
+        target[key].append(value)
+    return target
+
+def average_dict(
+    target: dict[str, list[float]],
+) -> dict[str, float]:
+    """Average the values of target."""
+    return {key: sum(value) / len(value) for key, value in target.items()}
+
+def log_dict(
+    target: dict[str, float],
+    epoch: int,
+    prefix: str,
+) -> None:
+    """Log the values of target."""
+    for key, value in target.items():
+        logger.log_to_external(
+                message={
+                    f"{prefix}/{key}": value,
+                    "Epoch": epoch,
+                },
+            )

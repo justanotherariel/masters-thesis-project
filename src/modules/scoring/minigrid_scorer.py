@@ -32,82 +32,82 @@ class MinigridScorer(TransformationBlock):
         """
 
         if DatasetGroup.TRAIN in data.predictions:
-            raw_data = dataset_to_list(data, DatasetGroup.TRAIN)
-            raw_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
+            targets = dataset_to_list(data, DatasetGroup.TRAIN)[1]
+            target_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
             preds = data.predictions[DatasetGroup.TRAIN]
-            model_ti = self.info.model_ti
-            self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Train")
+            pred_ti = self.info.model_ti
+            calc_accuracy(targets, target_ti, preds, pred_ti, "Train")
 
         if DatasetGroup.VALIDATION in data.predictions:
-            raw_data = dataset_to_list(data, DatasetGroup.VALIDATION)
-            raw_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
+            targets = dataset_to_list(data, DatasetGroup.VALIDATION)[1]
+            target_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
             preds = data.predictions[DatasetGroup.VALIDATION]
-            model_ti = self.info.model_ti
-            self.calc_accuracy(raw_data, raw_ti, preds, model_ti, "Validation")
+            pred_ti = self.info.model_ti
+            calc_accuracy(targets, target_ti, preds, pred_ti, "Validation")
 
         return data
 
-    def calc_accuracy(
-        self,
-        raw_data: list[list[torch.Tensor]],
-        raw_ti: TensorIndex,
-        preds: list[torch.Tensor],
-        model_ti: TensorIndex,
-        index_pretty_name: str,
-    ):
-        """Calculate the accuracy of the model.
 
-        :param index_name: The name of the indice.
-        :param index_pretty_name: The pretty name of the indice.
-        """
-        y_obs, y_reward = raw_data[1]
-        pred_obs, pred_reward = preds
+def calc_accuracy(
+    targets: list[list[torch.Tensor]],
+    target_ti: TensorIndex,
+    preds: list[torch.Tensor],
+    pred_ti: TensorIndex,
+    index_pretty_name: str,
+):
+    """Calculate the accuracy of the model.
 
-        accuracy = torch.zeros(*y_obs.shape[:3], len(raw_ti.observation))
-        for obs_idx in range(len(model_ti.observation)):
-            y_obs_tmp = y_obs[..., raw_ti.observation[obs_idx]].squeeze()
-            pred_obs_tmp = torch.argmax(pred_obs[..., model_ti.observation[obs_idx]], dim=3)
-            accuracy[..., obs_idx] = (pred_obs_tmp == y_obs_tmp).float()
+    :param index_name: The name of the indice.
+    :param index_pretty_name: The pretty name of the indice.
+    """
+    y_obs, y_reward = targets
+    pred_obs, pred_reward = preds
 
-        # Check if the whole resulting observation is correct for each sample
-        obs_whole_acc = accuracy.prod(dim=-1).prod(dim=-1).prod(dim=-1).mean()
+    accuracy = torch.zeros(*y_obs.shape[:3], len(target_ti.observation))
+    for obs_idx in range(len(pred_ti.observation)):
+        y_obs_tmp = y_obs[..., target_ti.observation[obs_idx]].squeeze()
+        pred_obs_tmp = torch.argmax(pred_obs[..., pred_ti.observation[obs_idx]], dim=3)
+        accuracy[..., obs_idx] = (pred_obs_tmp == y_obs_tmp).float()
 
-        # Calculate the mean accuracy over all fields for each sample
-        obs_field_acc = accuracy.prod(dim=-1).mean(dim=[0, 1, 2])
+    # Check if the whole resulting observation is correct for each sample
+    obs_whole_acc = accuracy.prod(dim=-1).prod(dim=-1).prod(dim=-1).mean()
 
-        # Check if the agent is predicted correctly
-        obs_agent_pos = y_obs[..., raw_ti.observation[3]].squeeze().nonzero()
-        obs_agent_acc = accuracy[
-            obs_agent_pos[:, 0], obs_agent_pos[:, 1], obs_agent_pos[:, 2], raw_ti.observation[3]
-        ].mean()
+    # Calculate the mean accuracy over all fields for each sample
+    obs_field_acc = accuracy.prod(dim=-1).mean(dim=[0, 1, 2])
 
-        # For all fields, where the agent shouldn't be, check if the agent is not predicted
-        obs_non_agent_pos = torch.nonzero(y_obs[..., raw_ti.observation[3]].squeeze() == 0)
-        obs_non_agent_acc = accuracy[
-            obs_non_agent_pos[:, 0], obs_non_agent_pos[:, 1], obs_non_agent_pos[:, 2], raw_ti.observation[3]
-        ].mean()
+    # Check if the agent is predicted correctly
+    obs_agent_pos = y_obs[..., target_ti.observation[3]].squeeze().nonzero()
+    obs_agent_acc = accuracy[
+        obs_agent_pos[:, 0], obs_agent_pos[:, 1], obs_agent_pos[:, 2], target_ti.observation[3]
+    ].mean()
 
-        # Check Reward accuracy
-        reward_acc = torch.isclose(y_reward, pred_reward, atol=0.1).sum() / len(y_reward)
+    # For all fields, where the agent shouldn't be, check if the agent is not predicted
+    obs_non_agent_pos = torch.nonzero(y_obs[..., target_ti.observation[3]].squeeze() == 0)
+    obs_non_agent_acc = accuracy[
+        obs_non_agent_pos[:, 0], obs_non_agent_pos[:, 1], obs_non_agent_pos[:, 2], target_ti.observation[3]
+    ].mean()
 
-        # Average all accuracies
-        acc = (obs_whole_acc + obs_field_acc + obs_agent_acc + obs_non_agent_acc + reward_acc) / 5
+    # Check Reward accuracy
+    reward_acc = torch.isclose(y_reward, pred_reward, atol=0.1).sum() / len(y_reward)
 
-        # Log the results
-        logger.info(f"{index_pretty_name}: Accuracy: {acc}")
-        logger.info(f"{index_pretty_name}: Observation Whole Accuracy: {obs_whole_acc}")
-        logger.info(f"{index_pretty_name}: Observation Field Accuracy: {obs_field_acc}")
-        logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_acc}")
-        logger.info(f"{index_pretty_name}: Observation Non-Agent Accuracy: {obs_non_agent_acc}")
-        logger.info(f"{index_pretty_name}: Reward Accuracy: {reward_acc}")
+    # Average all accuracies
+    acc = (obs_whole_acc + obs_field_acc + obs_agent_acc + obs_non_agent_acc + reward_acc) / 5
 
-        logger.log_to_external(
-            message={
-                f"{index_pretty_name}/Accuracy": acc,
-                f"{index_pretty_name}/Observation Whole Accuracy": obs_whole_acc,
-                f"{index_pretty_name}/Observation Field Accuracy": obs_field_acc,
-                f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_acc,
-                f"{index_pretty_name}/Observation Non-Agent Accuracy": obs_non_agent_acc,
-                f"{index_pretty_name}/Reward Accuracy": reward_acc,
-            },
-        )
+    # Log the results
+    logger.info(f"{index_pretty_name}: Accuracy: {acc}")
+    logger.info(f"{index_pretty_name}: Observation Whole Accuracy: {obs_whole_acc}")
+    logger.info(f"{index_pretty_name}: Observation Field Accuracy: {obs_field_acc}")
+    logger.info(f"{index_pretty_name}: Observation Agent Accuracy: {obs_agent_acc}")
+    logger.info(f"{index_pretty_name}: Observation Non-Agent Accuracy: {obs_non_agent_acc}")
+    logger.info(f"{index_pretty_name}: Reward Accuracy: {reward_acc}")
+
+    logger.log_to_external(
+        message={
+            f"{index_pretty_name}/Accuracy": acc,
+            f"{index_pretty_name}/Observation Whole Accuracy": obs_whole_acc,
+            f"{index_pretty_name}/Observation Field Accuracy": obs_field_acc,
+            f"{index_pretty_name}/Observation Agent Accuracy": obs_agent_acc,
+            f"{index_pretty_name}/Observation Non-Agent Accuracy": obs_non_agent_acc,
+            f"{index_pretty_name}/Reward Accuracy": reward_acc,
+        },
+    )

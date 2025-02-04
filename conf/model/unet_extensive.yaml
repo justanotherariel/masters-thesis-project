@@ -42,6 +42,9 @@ train_sys:
               # path: src.modules.training.loss.ce_adaptive_loss
               path: src.modules.training.loss.ce_rebalance_loss
 
+      accuracy:
+        _target_: src.modules.training.accuracy.MinigridAccuracy
+
       model_storage_conf:
         save_model_to_disk: true
         save_model_to_wandb: true
