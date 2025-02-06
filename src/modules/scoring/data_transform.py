@@ -6,7 +6,7 @@ from src.modules.training.datasets.simple.dataset import SimpleDataset
 from src.typing.pipeline_objects import DatasetGroup, PipelineData
 
 
-def dataset_to_list(data: PipelineData, ds_group: DatasetGroup) -> list[list[Any]]:
+def dataset_to_list(data: PipelineData, ds_group: DatasetGroup) -> list[list[torch.Tensor]]:
     dataset = SimpleDataset(data, ds_group=ds_group, discretize=False)
 
     res = []

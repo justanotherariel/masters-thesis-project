@@ -20,10 +20,10 @@ from .minigrid_wrappers import FullyObsWrapper
 logger = Logger()
 
 
-def flatten_indices(indices: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+def flatten_indices(indices: list[npt.NDArray[np.int32]]) -> npt.NDArray[np.int32]:
     """Flatten the indices for the dataset (remove the trajectory idx dimension) and remove padding."""
-    indices_flat = indices.reshape(-1, 3)
-    return indices_flat[indices_flat[:, 0] != -1]
+    indices = [ind.reshape(-1, 3) for ind in indices]
+    return np.concatenate(indices, axis=0)
 
 
 @dataclass
@@ -211,15 +211,15 @@ class MinigridSamplerExtensive(TransformationBlock):
             List of (x, y) coordinates where the agent can be placed
         """
         valid_positions = []
-        grid = env.unwrapped.grid.encode()
+        grid = env.unwrapped.grid
 
         # Iterate through all positions in the grid
-        for i in range(env.unwrapped.width):
-            for j in range(env.unwrapped.height):
-                # Check if the agent can overlap with the object at this position
-                # .venv/lib/python3.11/site-packages/minigrid/core/world_object.py#L46
-                if grid[i, j, 0] in [OBJECT_TO_IDX["empty"], OBJECT_TO_IDX["goal"]]:
-                    valid_positions.append((i, j))
+        for y in range(grid.height):
+            for x in range(grid.width):
+                field = grid.get(x, y)
+                # TODO: Doors will need to be treated differently
+                if field is None or field.can_overlap():
+                    valid_positions.append((x, y))
 
         return valid_positions
 
@@ -231,9 +231,9 @@ class MinigridSamplerExtensive(TransformationBlock):
             pos: (x, y) position to place the agent
             dir: Direction to face (0: right, 1: down, 2: left, 3: up)
         """
-        env.unwrapped.agent_pos = pos
+        env.unwrapped.agent_pos = np.array(pos)
         env.unwrapped.agent_dir = dir
-        env.unwrapped.step_count = 0  # Reward, if any, is 1
+        env.unwrapped.step_count = 0  # Reward, should be 1
 
     def _sample_pos(
         self,
@@ -264,6 +264,9 @@ class MinigridSamplerExtensive(TransformationBlock):
 
             # For each possible action
             for action in range(env.action_space.n):
+                # Place agent at position and direction
+                self._place_agent(env, pos, dir)
+                
                 # Take action and get new observation
                 new_obs, reward, _terminated, _truncated, _info = env.step(action)
 
@@ -345,9 +348,9 @@ class MinigridSamplerExtensive(TransformationBlock):
 
         # Store Metadata
         data.indices = {
-            DatasetGroup.TRAIN: np.array(train_indices),
-            DatasetGroup.VALIDATION: np.array(validation_indices),
-            DatasetGroup.ALL: np.array(train_indices + validation_indices),
+            DatasetGroup.TRAIN: [np.array(env_indices) for env_indices in train_indices],
+            DatasetGroup.VALIDATION: [np.array(env_indices) for env_indices in validation_indices],
+            DatasetGroup.ALL: [np.array(env_indices) for env_indices in train_indices + validation_indices],
         }
         data.grids = {
             DatasetGroup.TRAIN: train_grids,
