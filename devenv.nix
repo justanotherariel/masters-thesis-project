@@ -16,6 +16,7 @@
     pkgs.ruff
     pkgs.zstd
     pkgs.libdrm
+    pkgs.zlib
   ];
 
   # Disable Automatic Cache Management

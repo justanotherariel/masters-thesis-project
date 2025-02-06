@@ -1,4 +1,3 @@
-from minigrid.core.world_object import Goal, Wall
 from minigrid.manual_control import ManualControl
 import minigrid
 import gymnasium as gym
@@ -10,7 +9,6 @@ env_name = "MiniGrid-KeyCorridorS6R3-v0"
 pygame.init()
 
 # Create the environment
-minigrid.register_minigrid_envs()
 env = gym.make(env_name, render_mode="human")
 
 # Start manual control
