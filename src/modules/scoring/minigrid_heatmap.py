@@ -17,6 +17,7 @@ from src.modules.training.datasets.tensor_index import TensorIndex
 from src.typing.minigrid_objects import GridPosition, GridSize
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
+logger = Logger()
 
 class MetricType(Enum):
     AGENT_POV_CERTAINTY = auto()
@@ -223,6 +224,8 @@ class MinigridHeatmap(TransformationBlock):
         return info
 
     def custom_transform(self, data: PipelineData, **kwargs) -> PipelineData:
+        logger.info("Generating heatmaps...")
+        
         output_dir = self.info.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -241,6 +244,7 @@ class MinigridHeatmap(TransformationBlock):
                 grid_metrics = self._calc_grid_metrics(grid, raw_data, preds)
                 self._log_grid_metrics(grid, grid_img, grid_name, grid_metrics)
 
+        logger.info("Heatmaps generated.")
         return data
 
     def _calc_grid_metrics(
@@ -279,4 +283,4 @@ class MinigridHeatmap(TransformationBlock):
                 "mask_data": np.all(np_overlay == colors[metric_type], axis=-1),
             }
 
-        Logger().log_to_external({f"Grid '{grid_name}'": wandb.Image(grid_img, masks=wandb_masks)})
+        logger.log_to_external({f"Grid '{grid_name}'": wandb.Image(grid_img, masks=wandb_masks)})

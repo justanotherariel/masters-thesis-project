@@ -31,17 +31,12 @@ class MinigridScorer(TransformationBlock):
         :return: The transformed data
         """
 
-        if DatasetGroup.TRAIN in data.predictions:
-            targets = dataset_to_list(data, DatasetGroup.TRAIN)[1]
+        for dataset_group in data.grids:
+            if dataset_group == DatasetGroup.ALL:
+                continue
+            targets = dataset_to_list(data, dataset_group)[1]
             target_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
-            preds = data.predictions[DatasetGroup.TRAIN]
-            pred_ti = self.info.model_ti
-            calc_accuracy(targets, target_ti, preds, pred_ti, "Train")
-
-        if DatasetGroup.VALIDATION in data.predictions:
-            targets = dataset_to_list(data, DatasetGroup.VALIDATION)[1]
-            target_ti = SimpleDatasetDefault.create_ti(self.info, discrete=False)
-            preds = data.predictions[DatasetGroup.VALIDATION]
+            preds = data.predictions[dataset_group]
             pred_ti = self.info.model_ti
             calc_accuracy(targets, target_ti, preds, pred_ti, "Validation")
 

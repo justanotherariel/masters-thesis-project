@@ -79,6 +79,7 @@ pred_sys:
     - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
     - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
       metric_calculators: 
-        - AgentPovCertaintyCalc
-        - AgentPovAccuracyCalc
+        # - AgentPovCertaintyCalc
+        # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
