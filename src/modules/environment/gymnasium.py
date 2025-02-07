@@ -10,6 +10,8 @@ import numpy as np
 import numpy.typing as npt
 from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
 from tqdm import tqdm
+from gymnasium import spaces
+
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
@@ -54,7 +56,6 @@ class GymnasiumBuilder(TransformationBlock):
         """
 
         info.data_info = {
-            "action_space": self.env.action_space,
             "observation_space": self.env.observation_space,
             "observation_info": [
                 (0, len(OBJECT_TO_IDX) - 1),  # Remove agent idx, represented by the last dimension
@@ -62,9 +63,16 @@ class GymnasiumBuilder(TransformationBlock):
                 (2, len(STATE_TO_IDX)),
                 (3, 5),  # 0: agent not present, 1-4: agent direction
             ],
+            
+            # "action_space": self.env.action_space,
+            # "action_info": [ (0, self.env.action_space.n.item()) ],
+            
+            # Only Left/Right/Forward actions
+            "action_space": spaces.Discrete(3),
             "action_info": [
-                (0, self.env.action_space.n.item()),
+                (0, 3)
             ],
+            
             "reward_info": [
                 (0, 0),
             ],
@@ -263,7 +271,7 @@ class MinigridSamplerExtensive(TransformationBlock):
                 x_idx = len(observations_list) - 1
 
             # For each possible action
-            for action in range(env.action_space.n):
+            for action in range(self._info.data_info["action_space"].n.item()):
                 # Place agent at position and direction
                 self._place_agent(env, pos, dir)
                 
@@ -360,3 +368,7 @@ class MinigridSamplerExtensive(TransformationBlock):
 
         env.close()
         return data
+
+    def setup(self, info: PipelineInfo):
+        self._info = info
+        return info
