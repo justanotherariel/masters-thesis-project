@@ -1,10 +1,17 @@
 defaults:
+  - _self_
+
   - base_train
   - hydra/logging
+
+  # Testing Models
   - model: unet_extensive
   # - model: transformer_extensive
+  
+  # Downloaded Models
+  # - model_download/bumbling-sweep-23@model
+
   - wandb: train
-  - _self_
 
 ###############
 #    CONF     #
