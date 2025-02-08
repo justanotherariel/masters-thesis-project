@@ -42,7 +42,7 @@ class TransformerWrapped(BaseModel):
         )
         self._token_output_dim: tuple[int, int] = (
             math.prod(self.obs_shape[:2]) + 1,
-            self.obs_shape[2] + self._ti.reward_.shape[0],
+            self._ti.observation[3].shape[0] + self._ti.reward_.shape[0],
         )
 
         self.module = Transformer(
@@ -52,7 +52,7 @@ class TransformerWrapped(BaseModel):
             **self._model_args,
         )
 
-        self._tensor_values = [self._ti.observation[i] for i in range(len(self._ti.observation))]
+        self._tensor_values = [self._ti.observation[3]]
 
         return info
 
@@ -75,8 +75,9 @@ class TransformerWrapped(BaseModel):
         x = self.module.forward(x)
 
         # Reshape the output to a model-independent format
-        pred_obs = x[:, :-1, self._ti.observation_].reshape(*x_obs.shape[:-1], self.obs_shape[2])
-        pred_reward = x[:, -1, self._ti.reward_]
+        pred_obs = x_obs.float()
+        pred_obs[..., self._ti.observation[3]] = x[:, :-1, :-1].reshape(*x_obs.shape[:-1], -1)
+        pred_reward = x[:, -1, self._ti.observation[3].shape[0]].unsqueeze(dim=-1)
 
         # Softmax the observation
         for values in self._tensor_values:
