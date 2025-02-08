@@ -1,5 +1,4 @@
 defaults:
-  - _self_
 
   - base_train
   - hydra/logging
@@ -12,6 +11,8 @@ defaults:
   # - model_download/bumbling-sweep-23@model
 
   - wandb: train
+
+  - _self_
 
 ###############
 #    CONF     #

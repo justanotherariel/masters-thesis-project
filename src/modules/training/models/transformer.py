@@ -226,6 +226,7 @@ class Transformer(nn.Module):
         self,
         input_dim: tuple[int, int],
         output_dim: tuple[int, int],
+        token_value_dims: list[int] | None,
         d_model: int,
         n_heads: int,
         n_layers: int,
@@ -250,17 +251,25 @@ class Transformer(nn.Module):
         self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_dim[0], self.d_model))
 
         # Transformer layers
-        self.layers = nn.ModuleList(
-            [
-                TransformerLayer(
-                    d_model=self.d_model, ffn_hidden=self.d_ff, n_head=self.n_heads, drop_prob=self.drop_prob
-                )
-                for _ in range(self.n_layers)
-            ]
-        )
-
+        self.layers = nn.ModuleList([
+            TransformerLayer(
+                d_model=self.d_model, ffn_hidden=self.d_ff, n_head=self.n_heads, drop_prob=self.drop_prob
+            )
+            for _ in range(self.n_layers)
+        ])
+        
         # Output projection
-        self.output_linear = nn.Linear(self.d_model, self.output_dim[1])
+        if token_value_dims is None:
+            self.output_linear = nn.Linear(self.d_model, self.output_dim[1])
+        else:
+            self.output_layers = nn.ModuleList([
+                nn.Sequential(
+                    TransformerLayer(
+                        d_model=self.d_model, ffn_hidden=self.d_ff, n_head=self.n_heads, drop_prob=self.drop_prob
+                    ),
+                    nn.Linear(self.d_model, value_dim)
+                ) for value_dim in token_value_dims
+            ])
 
     def forward(self, x):
         x = x.float()
@@ -272,8 +281,12 @@ class Transformer(nn.Module):
         # Apply transformer layers
         for layer in self.layers:
             x = layer(x)
-
+            
         # Project to output size
-        x = self.output_linear(x)  # [batch, output_len, output_size]
+        if hasattr(self, "output_linear"):
+            x = self.output_linear(x)
+        else:
+            x = [layer(x) for layer in self.output_layers]
+            x = torch.concat(x, dim=-1)
 
         return x

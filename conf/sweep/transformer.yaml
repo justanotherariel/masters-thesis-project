@@ -6,7 +6,7 @@ method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: Transformer | cross_entropy_loss [Mid Term]
+name: Transformer | ce_rebalance_loss [Fixed DS]
 metric:
   name: Train/Agent Accuracy
   goal: maximize
@@ -30,7 +30,7 @@ parameters:
 
   model.train_sys.steps.0.scheduler.decay_t:
     distribution: int_uniform
-    min: 100
+    min: 50
     max: 300
 
   # Model parameters

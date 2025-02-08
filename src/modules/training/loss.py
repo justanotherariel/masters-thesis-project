@@ -55,8 +55,9 @@ class BaseLoss:
 @dataclass
 class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
-    obs_loss_weight: float = 0.5
-    reward_loss_weight: float = 0.5
+    obs_loss_weight: float = 0.7
+    reward_loss_weight: float = 0.2
+    agent_consistency_weight: float = 0.1
 
     def __init__(self, **kwargs):
         self.discrete_loss_fn = kwargs.get("discrete_loss_fn")
@@ -101,8 +102,49 @@ class MinigridLoss(BaseLoss):
 
         # Compute reward loss
         reward_loss = F.mse_loss(predicted_reward, target_reward)
-
-        # Compute weighted total loss
-        total_loss = self.obs_loss_weight * obs_loss + self.reward_loss_weight * reward_loss
-
+        
+        # agent_consistency_loss = self.agent_consistency_loss(predicted_next_obs[..., self._ti.observation[3]]) if self.agent_consistency_weight > 0 else 0
+        
+        # Final loss combining original and consistency terms
+        total_loss = (
+            self.obs_loss_weight * obs_loss
+            + self.reward_loss_weight * reward_loss
+            # + self.agent_consistency_weight * agent_consistency_loss
+        )
         return total_loss
+
+    @staticmethod
+    def agent_consistency_loss(predictions: torch.Tensor) -> torch.Tensor:
+        """
+        Compute a loss term that encourages exactly one agent to be present in the grid.
+        
+        Args:
+            predictions: Tensor of shape [n_samples, grid_width, grid_height, 5] containing
+                        agent predictions (no_agent + 4 orientations) for each cell
+        
+        Returns:
+            Loss term that is minimized when exactly one agent is present
+        """
+        # First, let's separate the "no agent" probability from the agent orientations
+        no_agent_probs = predictions[..., 0]  # Shape: [n_samples, grid_width, grid_height]
+        agent_probs = predictions[..., 1:]    # Shape: [n_samples, grid_width, grid_height, 4]
+        
+        # Sum all agent orientation probabilities for each cell
+        # This gives us the probability of an agent being present in each cell (any orientation)
+        agent_presence_probs = agent_probs.sum(dim=-1)  # Shape: [n_samples, grid_width, grid_height]
+        
+        # Flatten the spatial dimensions to treat each cell as a categorical choice
+        # Shape: [n_samples, grid_width * grid_height]
+        flat_presence_probs = agent_presence_probs.reshape(agent_presence_probs.shape[0], -1)
+        
+        # The target distribution should have exactly one cell with an agent
+        # We can create this by computing negative log likelihood of the distribution
+        # Plus an L2 penalty on deviation from sum=1
+        presence_sum = flat_presence_probs.sum(dim=-1)  # Shape: [n_samples]
+        sum_penalty = F.mse_loss(presence_sum, torch.ones_like(presence_sum))
+        
+        # Also add entropy regularization to encourage confidence
+        # We want the model to be very certain about agent placement
+        entropy = -(flat_presence_probs * torch.log(flat_presence_probs + 1e-10)).sum(dim=-1).mean()
+        
+        return sum_penalty + 0.1 * entropy

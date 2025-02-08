@@ -24,6 +24,7 @@ train_sys:
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 10
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
+      discrete: true
 
       model:
         _target_: src.modules.training.models.unet_wrapped.UNetWrapped
@@ -33,6 +34,7 @@ train_sys:
         _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
+        agent_consistency_weight: 0
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:
@@ -82,4 +84,5 @@ pred_sys:
         # - AgentPovCertaintyCalc
         # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
-    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
+    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage

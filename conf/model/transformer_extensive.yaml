@@ -28,16 +28,17 @@ train_sys:
 
       model:
         _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
-        d_model: 256
+        d_model: 128
         n_heads: 4
         n_layers: 1
-        d_ff: 1024
+        d_ff: 512
         drop_prob: 0.1
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss
-        obs_loss_weight: 0.8
-        reward_loss_weight: 0.2
+        obs_loss_weight: 0.7
+        reward_loss_weight: 0.3
+        agent_consistency_weight: 0
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:
@@ -46,6 +47,8 @@ train_sys:
               # path: src.modules.training.loss.ce_focal_loss
               # path: src.modules.training.loss.ce_adaptive_loss
               path: src.modules.training.loss.ce_rebalance_loss
+              # path: src.modules.training.loss.ce_rebalanced_focal_loss
+          # gamma: 5.0
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
@@ -76,7 +79,7 @@ train_sys:
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 150
+        decay_t: 75
         decay_rate: 0.5
 
 pred_sys:
@@ -87,5 +90,5 @@ pred_sys:
         # - AgentPovCertaintyCalc
         # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
-    - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
-    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
+    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
