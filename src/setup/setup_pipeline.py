@@ -34,6 +34,7 @@ def setup_pipeline(cfg: DictConfig, output_dir: Path) -> tuple[ModelPipeline, Pi
     info = PipelineInfo(
         debug=cfg.debug,
         output_dir=output_dir,
+        trial_idx=cfg.trial_idx,
     )
     info = model_pipeline.setup(info)
 

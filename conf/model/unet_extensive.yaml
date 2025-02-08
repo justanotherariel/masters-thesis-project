@@ -21,10 +21,13 @@ train_sys:
       epochs: 500
       batch_size: 2048
       # patience: 200
+
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 10
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
       discrete: true
+
+      n_folds: ${n_trials}
 
       model:
         _target_: src.modules.training.models.unet_wrapped.UNetWrapped

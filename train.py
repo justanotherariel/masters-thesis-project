@@ -15,7 +15,7 @@ from omegaconf import DictConfig
 from src.config.train_config import TrainConfig
 from src.setup.setup_pipeline import setup_pipeline
 from src.setup.setup_runtime_args import setup_transform_args
-from src.setup.setup_wandb import setup_wandb
+from src.setup.setup_wandb import setup_wandb, reset_wandb_env
 from src.utils.lock import Lock
 from src.utils.set_torch_seed import set_torch_seed
 from src.framework.logging import Logger
@@ -34,14 +34,21 @@ def main(cfg: DictConfig) -> None:
     
     # Install coloredlogs
     coloredlogs.install()
-            
-    # Run the train config with an optional lock
-    optional_lock = Lock if not cfg.allow_multiple_instances else nullcontext
-    with optional_lock():
-        run_train(cfg)
+    
+    # Check if Monte Carlo Initialization is enabled
+    n_trials = 1 if (cfg.n_trials is None or cfg.n_trials < 1) else cfg.n_trials
+    if n_trials > 1:
+        job_type = "train-mc"
+        group_id = wandb.util.generate_id()
+    else:
+        job_type = "train"
+        group_id = None
+    
+    for idx in range(n_trials):
+        reset_wandb_env()
+        run_train(cfg, job_type, group_id, idx)
 
-
-def run_train(cfg: DictConfig) -> None:
+def run_train(cfg: DictConfig, job_type: str, group_id: str, idx: int) -> None:
     """Run the model pipeline."""
     logger.log_section_separator("Thesis: Sparse Transformer")
     
@@ -49,13 +56,20 @@ def run_train(cfg: DictConfig) -> None:
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
     # Set seed
-    set_torch_seed()
+    cfg.trial_idx = idx
+    cfg.seed = 42 + idx
+    set_torch_seed(cfg.seed)
     
     if cfg.debug:
         cfg.wandb.enabled = False
 
     if cfg.wandb.enabled:
-        setup_wandb(cfg, "train", output_dir)
+        setup_wandb(
+            cfg=cfg,
+            job_type=job_type,
+            output_dir=output_dir,
+            group=group_id,
+        )
 
     # Setup the pipeline
     logger.info("Setting up the pipeline")
@@ -70,7 +84,8 @@ def run_train(cfg: DictConfig) -> None:
         "storage_path": f"{cache_data_path}",
     }
 
-    transform_args = setup_transform_args(model_pipeline, cache_args)
+    fold = idx if cfg.n_trials > 1 else -1
+    transform_args = setup_transform_args(model_pipeline, cache_args, fold=fold)
     _ = model_pipeline.transform(**transform_args)
 
     wandb.finish()

@@ -26,8 +26,16 @@ class TrainConfig:
 
     model: Any
 
+    # Cache Path - for sampled environemnts
     cache_path: str
+    
+    # Debug Parameter disables wandb and multi-threading
     debug: bool = False
-    allow_multiple_instances: bool = True
-
+    
+    # Additional data for sweeps
     sweep_data: Any = None
+    
+    # Monte Carlo Initialization
+    seed: int = 42
+    trial_idx: int = -1             # Set during execution
+    n_trials: int | None = None

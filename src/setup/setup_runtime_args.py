@@ -20,7 +20,6 @@ def setup_transform_args(
     :param test_indices: Test indices
     :param fold: Fold number if it exists
     :param save_model: Whether to save the model to File
-    :param save_model_preds: Whether to save the model predictions
     :return: Dictionary containing arguments
     """
 

@@ -83,7 +83,7 @@ class PipelineInfo:
     # Metadata about the observation, action, and reward data provided by the sampler
     data_info: dict[str, Any] | None = None
 
-    # Model/Architecture specific information
-    #   This is important during training for the TorchTrainer
-    model_ti: TensorIndex | None = None  # TensorIndex object for the model
-    model_train_on_discrete: bool = False  # Whether the model should train on discrete data
+    # Model/Architecture specific information (TorchTrainer)
+    trial_idx: int = -1  # The trial index during Monte Carlo Initialization
+    model_ti: TensorIndex | None = None     # TensorIndex object for the model
+    model_train_on_discrete: bool = False   # Whether the model should train on discrete data

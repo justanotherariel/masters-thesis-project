@@ -21,13 +21,19 @@ train_sys:
       epochs: 500
       batch_size: 2048
       # patience: 250
+
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 10
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
       discrete: true
 
+      n_folds: ${n_trials}
+
       model:
         _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
+        # _target_: src.modules.training.models.transformer_wrapped_agent_only.TransformerWrapped
+        seperate_output_layers: false
+
         d_model: 128
         n_heads: 4
         n_layers: 1

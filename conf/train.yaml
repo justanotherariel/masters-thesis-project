@@ -17,9 +17,10 @@ defaults:
 ###############
 #    CONF     #
 ###############
+n_trials: 5
+
 cache_path: data/cache
 debug: false
-allow_multiple_instances: true
 
 sweep_data:
   model_sizes:

@@ -109,7 +109,7 @@ class TorchTrainer(TransformationBlock):
         self._setup_info = info
 
         # Setup Fold
-        self.current_fold = -1
+        self.current_fold = info.trial_idx
 
         # Setup ModelStorage (wait until self._hash is set)
         ms = self.model_storage_conf
@@ -235,8 +235,8 @@ class TorchTrainer(TransformationBlock):
         :return: The hash of the block.
         """
         result = f"{self._hash}_{self.n_folds}"
-        # if self.current_fold != -1:
-        #     result += f"_f{self.current_fold}"
+        if hasattr(self, 'current_fold') and self.current_fold != -1:
+            result += f"_f{self.current_fold}"
         return result
 
     def create_dataloader(

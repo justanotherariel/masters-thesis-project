@@ -9,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 from src.framework.logging import Logger
+import os
 
 logger = Logger()
 
@@ -61,23 +62,15 @@ def setup_wandb(
         logger.debug("Uploading config files to Weights & Biases")
 
         # Get the config file name
-        if job_type == "sweep":
-            job_type = "cv"
-        curr_config = "conf/" + job_type + ".yaml"
+        curr_config = "conf/train.yaml"
 
         # Get the model file name
         if "model" in cfg:
             model_name = OmegaConf.load(curr_config).defaults[2].model
             model_path = f"conf/model/{model_name}.yaml"
-        elif "ensemble" in cfg:
-            model_name = OmegaConf.load(curr_config).defaults[2].ensemble
-            model_path = f"conf/ensemble/{model_name}.yaml"
-        elif "post_ensemble" in cfg:
-            model_name = OmegaConf.load(curr_config).defaults[2].post_ensemble
-            model_path = f"conf/post_ensemble/{model_name}.yaml"
 
         # Store the config as an artefact of W&B
-        artifact = wandb.Artifact(job_type + "_config", type="config")
+        artifact = wandb.Artifact("train_config", type="config")
         config_path = output_dir / ".hydra/config.yaml"
         artifact.add_file(str(config_path), "config.yaml")
         artifact.add_file(curr_config)
@@ -102,6 +95,15 @@ def setup_wandb(
     logger.info("Done initializing Weights & Biases")
     return run
 
+def reset_wandb_env():
+    exclude = {
+        "WANDB_PROJECT",
+        "WANDB_ENTITY",
+        "WANDB_API_KEY",
+    }
+    for k, v in os.environ.items():
+        if k.startswith("WANDB_") and k not in exclude:
+            del os.environ[k]
 
 def replace_list_with_dict(o: object) -> object:
     """Recursively replace lists with integer index dicts.
