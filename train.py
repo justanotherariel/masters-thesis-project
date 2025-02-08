@@ -36,15 +36,14 @@ def main(cfg: DictConfig) -> None:
     coloredlogs.install()
     
     # Check if Monte Carlo Initialization is enabled
-    n_trials = 1 if (cfg.n_trials is None or cfg.n_trials < 1) else cfg.n_trials
-    if n_trials > 1:
+    if cfg.n_trials > 1:
         job_type = "train-mc"
         group_id = wandb.util.generate_id()
     else:
         job_type = "train"
         group_id = None
     
-    for idx in range(n_trials):
+    for idx in range(cfg.n_trials):
         reset_wandb_env()
         run_train(cfg, job_type, group_id, idx)
 

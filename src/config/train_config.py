@@ -38,4 +38,4 @@ class TrainConfig:
     # Monte Carlo Initialization
     seed: int = 42
     trial_idx: int = -1             # Set during execution
-    n_trials: int | None = None
+    n_trials: int = 1

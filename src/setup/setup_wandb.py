@@ -65,7 +65,10 @@ def setup_wandb(
         curr_config = "conf/train.yaml"
 
         # Get the model file name
-        if "model" in cfg:
+        if isinstance(OmegaConf.load(curr_config).defaults[2], str):
+            model_name = OmegaConf.load(curr_config).defaults[2].split("@")[0]
+            model_path = f"conf/{model_name}.yaml"
+        else:
             model_name = OmegaConf.load(curr_config).defaults[2].model
             model_path = f"conf/model/{model_name}.yaml"
 
