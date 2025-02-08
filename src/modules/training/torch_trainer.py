@@ -81,7 +81,7 @@ class TorchTrainer(TransformationBlock):
     to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
 
     # Parameters relevant for Hashing
-    n_folds: Annotated[int, Ge(0)] = field(default=0, init=True, repr=False, compare=False)
+    n_folds: Annotated[int, Ge(1)] = field(default=1, init=True, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Post init method for the TorchTrainer class."""
@@ -167,7 +167,6 @@ class TorchTrainer(TransformationBlock):
             - train_indices: The indices to train on.
             - validation_indices: The indices to validate on.
             - save_model: Whether to save the model.
-            - fold: Fold number if running cv.
         :return: The input and output of the system.
         """
 
@@ -297,7 +296,6 @@ class TorchTrainer(TransformationBlock):
         self._model_training_loop(
             train_loader,
             validation_loader,
-            self.current_fold,
             start_epoch,
         )
         logger.info(
@@ -319,7 +317,6 @@ class TorchTrainer(TransformationBlock):
         self,
         train_loader: DataLoader[tuple[Tensor, ...]],
         validation_loader: DataLoader[tuple[Tensor, ...]],
-        fold: int = -1,
         start_epoch: int = 0,
     ) -> None:
         """Training loop for the model.
@@ -327,13 +324,9 @@ class TorchTrainer(TransformationBlock):
         :param train_loader: Dataloader for the validation data.
         :param validation_loader: Dataloader for the training data. (can be empty)
         """
-        fold_no = ""
 
-        if fold > -1:
-            fold_no = f"_{fold}"
-
-        logger.external_define_metric(f"Train{fold_no}/Loss", "Epoch")
-        logger.external_define_metric(f"Validation{fold_no}/Loss", "Epoch")
+        logger.external_define_metric(f"Train/Loss", "Epoch")
+        logger.external_define_metric(f"Validation/Loss", "Epoch")
 
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
@@ -351,11 +344,11 @@ class TorchTrainer(TransformationBlock):
             # Log train loss
             logger.log_to_external(
                 message={
-                    f"Train{fold_no}/Loss": train_loss,
+                    f"Train/Loss": train_loss,
                     "Epoch": epoch,
                 },
             )
-            log_dict(accuarcy, epoch, f"Train{fold_no}")
+            log_dict(accuarcy, epoch, f"Train")
 
             # Step the scheduler
             if self.initialized_scheduler is not None:
@@ -385,22 +378,22 @@ class TorchTrainer(TransformationBlock):
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
                 logger.log_to_external(
                     message={
-                        f"Validation{fold_no}/Loss": self.last_val_loss,
+                        f"Validation/Loss": self.last_val_loss,
                         "Epoch": epoch,
                     },
                 )
-                log_dict(accuarcy, epoch, f"Validation{fold_no}")
+                log_dict(accuarcy, epoch, f"Validation")
 
                 # Early stopping
                 if self.patience_exceeded():
                     logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
                     logger.log_to_external(
-                        message={f"Epochs{fold_no}": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
+                        message={f"Epochs": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
                     )
                     break
 
             # Log the trained epochs to wandb if we finished training
-            logger.log_to_external(message={f"Epochs{fold_no}": epoch + 1})
+            logger.log_to_external(message={f"Epochs": epoch + 1})
 
     def train_one_epoch(
         self,
@@ -445,7 +438,7 @@ class TorchTrainer(TransformationBlock):
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
                 loss = self.loss(y_pred, y_batch)
-                acc = self.accuracy(y_pred, y_batch)
+                acc = self.accuracy(y_pred, y_batch, x_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -507,7 +500,7 @@ class TorchTrainer(TransformationBlock):
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
                 loss = self.loss(y_pred, y_batch)
-                acc = self.accuracy(y_pred, y_batch)
+                acc = self.accuracy(y_pred, y_batch, x_batch)
 
                 # Save metrics
                 epoch_loss.append(loss.item())
