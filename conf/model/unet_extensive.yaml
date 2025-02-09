@@ -11,7 +11,7 @@ env_sys:
       # environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
-      train_envs: 1
+      train_envs: 5
       validation_envs: 1
 
 train_sys:
@@ -81,7 +81,6 @@ train_sys:
 
 pred_sys:
   steps:
-    - _target_: src.modules.scoring.minigrid_scorer.MinigridScorer
     - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
       metric_calculators: 
         # - AgentPovCertaintyCalc
