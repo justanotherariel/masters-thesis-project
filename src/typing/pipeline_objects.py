@@ -85,5 +85,5 @@ class PipelineInfo:
 
     # Model/Architecture specific information (TorchTrainer)
     trial_idx: int = -1  # The trial index during Monte Carlo Initialization
-    model_ti: TensorIndex | None = None     # TensorIndex object for the model
-    model_train_on_discrete: bool = False   # Whether the model should train on discrete data
+    model_ti: TensorIndex | None = None  # TensorIndex object for the model
+    model_train_on_discrete: bool = False  # Whether the model should train on discrete data

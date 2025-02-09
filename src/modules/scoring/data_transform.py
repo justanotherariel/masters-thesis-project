@@ -1,5 +1,3 @@
-from typing import Any
-
 import torch
 
 from src.modules.training.datasets.simple.dataset import SimpleDataset

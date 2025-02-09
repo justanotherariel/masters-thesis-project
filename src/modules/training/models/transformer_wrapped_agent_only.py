@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from src.typing.pipeline_objects import PipelineInfo
 
 from .base import BaseModel
-from .transformer import Transformer, TransformerLayer
+from .transformer import Transformer
 
 
 class TransformerWrapped(BaseModel):
@@ -19,7 +19,7 @@ class TransformerWrapped(BaseModel):
         **model_args,
     ):
         self._seperate_output_layers = seperate_output_layers
-        
+
         # Transformer parameters
         self._model_args = model_args
 
@@ -48,7 +48,9 @@ class TransformerWrapped(BaseModel):
         self.module = Transformer(
             input_dim=self._token_input_dim,
             output_dim=self._token_output_dim,
-            token_value_dims=[len(token_indices) for token_indices in self._ti.observation] if self._seperate_output_layers else None,
+            token_value_dims=[len(token_indices) for token_indices in self._ti.observation]
+            if self._seperate_output_layers
+            else None,
             **self._model_args,
         )
 

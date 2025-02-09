@@ -8,10 +8,9 @@ import minigrid.core
 import minigrid.core.grid
 import numpy as np
 import numpy.typing as npt
+from gymnasium import spaces
 from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
 from tqdm import tqdm
-from gymnasium import spaces
-
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
@@ -63,16 +62,11 @@ class GymnasiumBuilder(TransformationBlock):
                 (2, len(STATE_TO_IDX)),
                 (3, 5),  # 0: agent not present, 1-4: agent direction
             ],
-            
             # "action_space": self.env.action_space,
             # "action_info": [ (0, self.env.action_space.n.item()) ],
-            
             # Only Left/Right/Forward actions
             "action_space": spaces.Discrete(3),
-            "action_info": [
-                (0, 3)
-            ],
-            
+            "action_info": [(0, 3)],
             "reward_info": [
                 (0, 0),
             ],
@@ -198,8 +192,9 @@ class GymnasiumSamplerRandom(TransformationBlock):
 
 @dataclass
 class MinigridSamplerExtensive(TransformationBlock):
-    """Block to extensively sample a MiniGrid Environment by placing the agent at each valid position and executing each possible action.
-    Requires the environment to be a MiniGrid environment and that the last wrapper provides the function getObservation(), which returns the current observation without taking a step.
+    """Block to extensively sample a MiniGrid Environment by placing the agent at each valid position and executing
+    each possible action. Requires the environment to be a MiniGrid environment and that the last wrapper provides
+    the function getObservation(), which returns the current observation without taking a step.
 
     Args:
         train_envs (int): Number of environments to sample for training
@@ -274,7 +269,7 @@ class MinigridSamplerExtensive(TransformationBlock):
             for action in range(self._info.data_info["action_space"].n.item()):
                 # Place agent at position and direction
                 self._place_agent(env, pos, dir)
-                
+
                 # Take action and get new observation
                 new_obs, reward, _terminated, _truncated, _info = env.step(action)
 

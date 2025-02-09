@@ -23,8 +23,8 @@ from src.framework.transforming import TransformationBlock
 from src.modules.training.utils.model_storage import ModelStorage
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
-from .loss import BaseLoss
 from .accuracy import BaseAccuracy
+from .loss import BaseLoss
 from .models.base import BaseModel
 
 logger = Logger()
@@ -234,7 +234,7 @@ class TorchTrainer(TransformationBlock):
         :return: The hash of the block.
         """
         result = f"{self._hash}_{self.n_folds}"
-        if hasattr(self, 'current_fold') and self.current_fold != -1:
+        if hasattr(self, "current_fold") and self.current_fold != -1:
             result += f"_f{self.current_fold}"
         return result
 
@@ -325,8 +325,8 @@ class TorchTrainer(TransformationBlock):
         :param validation_loader: Dataloader for the training data. (can be empty)
         """
 
-        logger.external_define_metric(f"Train/Loss", "Epoch")
-        logger.external_define_metric(f"Validation/Loss", "Epoch")
+        logger.external_define_metric("Train/Loss", "Epoch")
+        logger.external_define_metric("Validation/Loss", "Epoch")
 
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
@@ -344,11 +344,11 @@ class TorchTrainer(TransformationBlock):
             # Log train loss
             logger.log_to_external(
                 message={
-                    f"Train/Loss": train_loss,
+                    "Train/Loss": train_loss,
                     "Epoch": epoch,
                 },
             )
-            log_dict(accuarcy, epoch, f"Train")
+            log_dict(accuarcy, epoch, "Train")
 
             # Step the scheduler
             if self.initialized_scheduler is not None:
@@ -378,22 +378,22 @@ class TorchTrainer(TransformationBlock):
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
                 logger.log_to_external(
                     message={
-                        f"Validation/Loss": self.last_val_loss,
+                        "Validation/Loss": self.last_val_loss,
                         "Epoch": epoch,
                     },
                 )
-                log_dict(accuarcy, epoch, f"Validation")
+                log_dict(accuarcy, epoch, "Validation")
 
                 # Early stopping
                 if self.patience_exceeded():
                     logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
                     logger.log_to_external(
-                        message={f"Epochs": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
+                        message={"Epochs": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
                     )
                     break
 
             # Log the trained epochs to wandb if we finished training
-            logger.log_to_external(message={f"Epochs": epoch + 1})
+            logger.log_to_external(message={"Epochs": epoch + 1})
 
     def train_one_epoch(
         self,
@@ -541,6 +541,7 @@ def moveTo(
 
     return x_batch, y_batch
 
+
 def append_to_dict(
     target: dict[str, Any],
     source: dict[str, Any],
@@ -552,11 +553,13 @@ def append_to_dict(
         target[key].append(value)
     return target
 
+
 def average_dict(
     target: dict[str, list[float]],
 ) -> dict[str, float]:
     """Average the values of target."""
     return {key: sum(value) / len(value) for key, value in target.items()}
+
 
 def log_dict(
     target: dict[str, float],
@@ -566,8 +569,8 @@ def log_dict(
     """Log the values of target."""
     for key, value in target.items():
         logger.log_to_external(
-                message={
-                    f"{prefix}/{key}": value,
-                    "Epoch": epoch,
-                },
-            )
+            message={
+                f"{prefix}/{key}": value,
+                "Epoch": epoch,
+            },
+        )

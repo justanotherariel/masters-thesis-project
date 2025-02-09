@@ -1,5 +1,6 @@
 """File containing functions related to setting up Weights and Biases."""
 
+import os
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -9,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 
 import wandb
 from src.framework.logging import Logger
-import os
 
 logger = Logger()
 
@@ -98,15 +98,17 @@ def setup_wandb(
     logger.info("Done initializing Weights & Biases")
     return run
 
+
 def reset_wandb_env():
     exclude = {
         "WANDB_PROJECT",
         "WANDB_ENTITY",
         "WANDB_API_KEY",
     }
-    for k, v in os.environ.items():
+    for k, _v in os.environ.items():
         if k.startswith("WANDB_") and k not in exclude:
             del os.environ[k]
+
 
 def replace_list_with_dict(o: object) -> object:
     """Recursively replace lists with integer index dicts.

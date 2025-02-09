@@ -38,12 +38,14 @@ class ModelStorage:
             if not wandb.run:
                 return path
 
-            # If we do want to log the current run to wandb, we need to check if the model was saved to the local db with a valid name
+            # If we do want to log the current run to wandb, we need to check if the model was saved
+            # to the local db with a valid name
             if (name := self.db.get_name()) and name != "":
                 return path
 
         # If we reach this point, the cached model (if there is one) was not saved to wandb
-        # We thus want to delete the cached model (if there is one) and (re)train, so the the training process is logged to wandb
+        # We thus want to delete the cached model (if there is one) and (re)train, so the the training process
+        # is logged to wandb
         path.unlink(missing_ok=True)  # DB will be gc'd later
         return None
 

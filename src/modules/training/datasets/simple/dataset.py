@@ -121,7 +121,6 @@ class SimpleDataset(Dataset):
         reward_info = info.data_info["reward_info"]
 
         token_info = {}
-
         token_info.update({"observation": observation_info})
         token_info.update({"action": action_info})
         token_info.update({"reward": reward_info})

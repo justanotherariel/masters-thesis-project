@@ -19,6 +19,7 @@ from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 logger = Logger()
 
+
 class MetricType(Enum):
     AGENT_POV_CERTAINTY = auto()
     AGENT_POV_ACCURACY_ALL = auto()
@@ -179,7 +180,10 @@ class GridRenderer:
         return self.grid_img
 
     def create_heatmap_overlay(self, data: np.ndarray, color: tuple[float, ...]) -> tuple[Image.Image, Image.Image]:
-        """Create a heatmap overlay for the given data. Returns the raw overlay and the overlay applied to the grid image."""
+        """
+        Create a heatmap overlay for the given data. Returns the raw overlay and the overlay applied to the grid
+        image.
+        """
 
         img_size = self.grid_size.to_pixel_size(self.config.tile_size)
         num_bars = data.shape[2]
@@ -219,13 +223,13 @@ class MinigridHeatmap(TransformationBlock):
             try:
                 cls = getattr(sys.modules[__name__], metric)
                 self._metric_calculators.append(cls())
-            except AttributeError:
-                raise ValueError(f"Metric {metric} not found.")
+            except AttributeError as e:
+                raise ValueError(f"Metric {metric} not found.") from e
         return info
 
     def custom_transform(self, data: PipelineData, **kwargs) -> PipelineData:
         logger.info("Generating heatmaps...")
-        
+
         output_dir = self.info.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
