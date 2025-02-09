@@ -437,7 +437,7 @@ class TorchTrainer(TransformationBlock):
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
-                loss = self.loss(y_pred, y_batch)
+                loss = self.loss(y_pred, y_batch, x_batch)
                 acc = self.accuracy(y_pred, y_batch, x_batch)
 
             # Backward pass
@@ -499,7 +499,7 @@ class TorchTrainer(TransformationBlock):
 
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
-                loss = self.loss(y_pred, y_batch)
+                loss = self.loss(y_pred, y_batch, x_batch)
                 acc = self.accuracy(y_pred, y_batch, x_batch)
 
                 # Save metrics

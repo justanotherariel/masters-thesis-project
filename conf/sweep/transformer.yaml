@@ -33,21 +33,30 @@ parameters:
     min: 50
     max: 300
 
+  model.train_sys.steps.0.loss.obs_loss_weight:
+    distribution: uniform
+    min: 0.5
+    max: 0.9
+  
+  model.train_sys.steps.0.loss.dynamic_var_weight:
+    distribution: uniform
+    min: 0.5
+    max: 15.0
+
   # Model parameters
   model.train_sys.steps.0.model.d_model:
-    values: [128, 256, 512]
+    values: [128, 256]
 
   model.train_sys.steps.0.model.n_heads:
-    values: [2, 4, 8]
+    values: [4, 8]
 
   model.train_sys.steps.0.model.n_layers:
     values: [1, 2]
 
   model.train_sys.steps.0.model.d_ff:
-    values: [256, 512, 1024, 2048]
+    values: [256, 512, 1024]
 
-  model.train_sys.steps.0.model.drop_prob:
-    distribution: uniform
-    min: 0.05
-    max: 0.3
-
+  # model.train_sys.steps.0.model.drop_prob:
+  #   distribution: uniform
+  #   min: 0.05
+  #   max: 0.3
