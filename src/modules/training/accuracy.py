@@ -17,7 +17,7 @@ class BaseAccuracy:
         predictions: tuple[torch.Tensor, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: torch.Tensor,
-    ):
+    ) -> dict[str, float]:
         raise NotImplementedError("BaseAccuracy is an abstract class and should not be called.")
 
 
@@ -37,7 +37,7 @@ class MinigridAccuracy(BaseAccuracy):
         predictions: tuple[torch.Tensor, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: torch.Tensor,
-    ):
+    ) -> dict[str, float]:
         pred_obs, pred_reward = predictions
         target_obs, target_reward = targets
         feature_obs, feature_action = features
@@ -101,7 +101,7 @@ class MinigridAccuracy(BaseAccuracy):
         pred_class_counts = torch.bincount(targets[..., 1][truth_mask], minlength=self._ti.info["observation"][1][1])
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
-        return (pred_class_counts / org_target_class_counts).mean().item()
+        return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
 
     def _calc_state_acc(self, predictions: torch.Tensor, targets: torch.Tensor):
         """
@@ -124,7 +124,7 @@ class MinigridAccuracy(BaseAccuracy):
         pred_class_counts = torch.bincount(targets[..., 2][truth_mask], minlength=self._ti.info["observation"][2][1])
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
-        return (pred_class_counts / org_target_class_counts).mean().item()
+        return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
 
     def _calc_agent_acc(self, predictions: torch.Tensor, targets: torch.Tensor, features: torch.Tensor):
         # How often was only one agent in the observation tensor?
@@ -145,23 +145,20 @@ class MinigridAccuracy(BaseAccuracy):
 
         # Find samples where the agent was supposed to stay
         samples_stay_mask = (features[..., 3] == targets[..., 3]).all(dim=[1, 2])
-        samples_stay_mask_ = samples_stay_mask & samples_one_agent_pred
         perc_samples_agent_stay_correct = agent_correct_perc(
-            predictions, targets, samples_stay_mask_, samples_stay_mask.sum()
+            predictions, targets, samples_stay_mask & samples_one_agent_pred, samples_stay_mask.sum().item()
         )
 
         # Find samples where the agent was supposed to rotate
-        samples_same_field_mask = ((features[..., 3] != 0) == (targets[..., 3] != 0)).all(dim=[1, 2])
-        samples_rotated_mask_ = ~samples_stay_mask & samples_same_field_mask
+        samples_same_field_mask = ((features[..., 3] != 0) == (targets[..., 3] != 0)).all(dim=[1, 2]) & ~samples_stay_mask
         perc_samples_agent_rotated_correct = agent_correct_perc(
-            predictions, targets, samples_rotated_mask_, samples_rotated_mask_.sum()
+            predictions, targets, samples_same_field_mask & samples_one_agent_pred, samples_same_field_mask.sum().item()
         )
 
         # Find samples where the agent was supposed to move
-        samples_moved_mask = ((features[..., 3] != 0) != (targets[..., 3] != 0)).sum(dim=[1, 2]) == 2
-        samples_moved_mask_ = ~samples_stay_mask & ~samples_same_field_mask & samples_moved_mask
+        samples_moved_mask = (((features[..., 3] != 0) != (targets[..., 3] != 0)).sum(dim=[1, 2]) == 2) & ~samples_stay_mask & ~samples_same_field_mask
         perc_samples_agent_moved_correct = agent_correct_perc(
-            predictions, targets, samples_moved_mask_, samples_moved_mask_.sum()
+            predictions, targets, samples_moved_mask & samples_one_agent_pred, samples_moved_mask.sum().item()
         )
 
         return {
