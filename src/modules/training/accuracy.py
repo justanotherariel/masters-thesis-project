@@ -150,13 +150,19 @@ class MinigridAccuracy(BaseAccuracy):
         )
 
         # Find samples where the agent was supposed to rotate
-        samples_same_field_mask = ((features[..., 3] != 0) == (targets[..., 3] != 0)).all(dim=[1, 2]) & ~samples_stay_mask
+        samples_same_field_mask = ((features[..., 3] != 0) == (targets[..., 3] != 0)).all(
+            dim=[1, 2]
+        ) & ~samples_stay_mask
         perc_samples_agent_rotated_correct = agent_correct_perc(
             predictions, targets, samples_same_field_mask & samples_one_agent_pred, samples_same_field_mask.sum().item()
         )
 
         # Find samples where the agent was supposed to move
-        samples_moved_mask = (((features[..., 3] != 0) != (targets[..., 3] != 0)).sum(dim=[1, 2]) == 2) & ~samples_stay_mask & ~samples_same_field_mask
+        samples_moved_mask = (
+            (((features[..., 3] != 0) != (targets[..., 3] != 0)).sum(dim=[1, 2]) == 2)
+            & ~samples_stay_mask
+            & ~samples_same_field_mask
+        )
         perc_samples_agent_moved_correct = agent_correct_perc(
             predictions, targets, samples_moved_mask & samples_one_agent_pred, samples_moved_mask.sum().item()
         )
