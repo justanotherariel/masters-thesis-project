@@ -30,24 +30,24 @@ class SDDefault(SimpleDataset):
                 - y_obs_batch: shape (batch_size, height, width, channels)
                 - reward_batch: shape (batch_size, 1) or (batch_size, num_classes)
         """
-        # Unzip the batch into separate lists
-        x_obs_list = []
-        action_list = []
-        y_obs_list = []
-        reward_list = []
+        batch_size = len(batch)
+        
+        x_obs_dim = batch[0][0][0].shape
+        x_obs_batch = torch.empty(batch_size, *x_obs_dim, dtype=batch[0][0][0].dtype)
+        
+        action_dim = batch[0][0][1].shape
+        action_batch = torch.empty(batch_size, *action_dim, dtype=batch[0][0][1].dtype)
 
-        for (x_obs, action), (y_obs, reward) in batch:
-            x_obs_list.append(x_obs)
-            action_list.append(action)
-            y_obs_list.append(y_obs)
-            reward_list.append(reward)
-
-        # Stack the observations
-        x_obs_batch = torch.stack(x_obs_list)  # (B, H, W, C)
-        y_obs_batch = torch.stack(y_obs_list)  # (B, H, W, C)
-
-        # Stack actions and rewards
-        action_batch = torch.stack(action_list)  # (B, A) or (B, num_classes)
-        reward_batch = torch.stack(reward_list)  # (B, 1) or (B, num_classes)
+        y_obs_dim = batch[0][1][0].shape
+        y_obs_batch = torch.empty(batch_size, *y_obs_dim, dtype=batch[0][1][0].dtype)
+        
+        reward_dim = batch[0][1][1].shape
+        reward_batch = torch.empty(batch_size, *reward_dim, dtype=batch[0][1][1].dtype)
+        
+        for idx, ((x_obs, action), (y_obs, reward)) in enumerate(batch):
+            x_obs_batch[idx] = x_obs        # (B, H, W, C)
+            action_batch[idx] = action      # (B, A) or (B, num_classes)
+            y_obs_batch[idx] = y_obs        # (B, H, W, C)
+            reward_batch[idx] = reward      # (B, 1) or (B, num_classes)
 
         return (x_obs_batch, action_batch), (y_obs_batch, reward_batch)
