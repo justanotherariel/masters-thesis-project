@@ -37,5 +37,5 @@ class TrainConfig:
 
     # Monte Carlo Initialization
     seed: int = 42
-    trial_idx: int = -1  # Set during execution
+    trial_idx: int = -1  # Set during execution, but can be overridden
     n_trials: int = 1

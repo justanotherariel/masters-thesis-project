@@ -43,6 +43,10 @@ def main(cfg: DictConfig) -> None:
         job_type = "train"
         group_id = None
     
+    if cfg.trial_idx != -1:
+        run_train(cfg, job_type, group_id, cfg.trial_idx)
+        return
+    
     for idx in range(cfg.n_trials):
         reset_wandb_env()
         run_train(cfg, job_type, group_id, idx)
