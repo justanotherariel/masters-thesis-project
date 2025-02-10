@@ -2,4 +2,4 @@ enabled: True
 log_config: True
 log_code:
   enabled: True
-  exclude: ^(.devenv/|.vscode/|data/|notebooks/|tests/|tm/|wandb/|venv.*/|.venv.*/)
+  exclude: ^(.devenv/|venv.*/|.venv.*/|.vscode/|data/|notebooks/|outputs/|tests/|tm/|wandb/)
