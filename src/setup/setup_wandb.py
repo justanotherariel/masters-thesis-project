@@ -36,8 +36,8 @@ def setup_wandb(
     # Get the model name
     model_target = get_nested_value(config, "model.train_sys.steps.0.model._target_")
     if model_target:
-        model_name = model_target.split(".")[-1]
-        config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_name
+        model_config_name = model_target.split(".")[-1]
+        config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_config_name
 
     run = wandb.init(
         config=replace_list_with_dict(config),  # type: ignore[arg-type]
@@ -61,23 +61,25 @@ def setup_wandb(
     if cfg.wandb.log_config:
         logger.debug("Uploading config files to Weights & Biases")
 
-        # Get the config file name
-        curr_config = "conf/train.yaml"
+        # Get the human-readable main config file path
+        main_config_path = "conf/train.yaml"
 
-        # Get the model file name
-        if isinstance(OmegaConf.load(curr_config).defaults[2], str):
-            model_name = OmegaConf.load(curr_config).defaults[2].split("@")[0]
-            model_path = f"conf/{model_name}.yaml"
+        # Get the human-readable model config file path
+        if isinstance(OmegaConf.load(main_config_path).defaults[2], str):
+            model_config_name = OmegaConf.load(main_config_path).defaults[2].split("@")[0]
+            model_config_path = f"conf/{model_config_name}.yaml"
         else:
-            model_name = OmegaConf.load(curr_config).defaults[2].model
-            model_path = f"conf/model/{model_name}.yaml"
+            model_config_name = OmegaConf.load(main_config_path).defaults[2].model
+            model_config_path = f"conf/model/{model_config_name}.yaml"
+
+        # Get the complete config file path
+        complete_config_path = str(output_dir / ".hydra/config.yaml")
 
         # Store the config as an artefact of W&B
         artifact = wandb.Artifact("train_config", type="config")
-        config_path = output_dir / ".hydra/config.yaml"
-        artifact.add_file(str(config_path), "config.yaml")
-        artifact.add_file(curr_config)
-        artifact.add_file(model_path)
+        artifact.add_file(complete_config_path)
+        artifact.add_file(main_config_path)
+        artifact.add_file(model_config_path)
         wandb.log_artifact(artifact)
 
     if cfg.wandb.log_code.enabled:
@@ -105,8 +107,9 @@ def reset_wandb_env():
         "WANDB_ENTITY",
         "WANDB_API_KEY",
     }
-    for k, _v in os.environ.items():
+    for k, v in os.environ.items():
         if k.startswith("WANDB_") and k not in exclude:
+            logger.info(f"Removing {k}={v} from environment")
             del os.environ[k]
 
 

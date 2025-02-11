@@ -48,7 +48,8 @@ def main(cfg: DictConfig) -> None:
         return
     
     for idx in range(cfg.n_trials):
-        reset_wandb_env()
+        if idx != 0:
+            reset_wandb_env()
         run_train(cfg, job_type, group_id, idx)
 
 def run_train(cfg: DictConfig, job_type: str, group_id: str, idx: int) -> None:
