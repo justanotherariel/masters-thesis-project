@@ -9,7 +9,7 @@ from src.typing.pipeline_objects import PipelineInfo
 def ce_focal_loss(predictions, targets, weight=None, gamma=2.0):
     ce_loss = F.cross_entropy(predictions, targets, weight=weight, reduction="none")
     pt = torch.exp(-ce_loss)
-    focal_loss = (1 - pt) ** gamma * ce_loss
+    focal_loss = ((1 - pt) ** gamma * ce_loss).mean()
     return focal_loss
 
 
@@ -17,16 +17,18 @@ def ce_adaptive_loss(predictions, targets, beta=0.3):
     losses = F.cross_entropy(predictions, targets, reduction="none")
     k = int(beta * len(losses))
     _, indices = torch.topk(losses, k)
-    return losses[indices]
+    return losses[indices].mean()
 
 
 def ce_rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
     num_classes = predictions.size(1)
     class_counts = torch.bincount(targets, minlength=num_classes)
 
-    weight = torch.where(class_counts > 0, torch.max(class_counts) / class_counts, torch.zeros_like(class_counts))
+    weight = torch.where(
+        class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
+    )
 
-    return F.cross_entropy(predictions, targets, weight=weight, reduction="none")
+    return F.cross_entropy(predictions, targets, weight=weight)
 
 
 def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, gamma=2.0):
@@ -37,7 +39,7 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
         class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
     )
 
-    return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma, reduction="none")
+    return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
 
 
 class BaseLoss:
@@ -47,12 +49,7 @@ class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
-    def __call__(
-        self,
-        predictions: tuple[torch.Tensor, torch.Tensor],
-        targets: tuple[torch.Tensor, torch.Tensor],
-        features: torch.Tensor,
-    ) -> torch.Tensor:
+    def __call__(self, predictions: tuple[torch.Tensor, torch.Tensor], targets: tuple[torch.Tensor, torch.Tensor], features: tuple[torch.Tensor, torch.Tensor]):
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
 
@@ -60,14 +57,12 @@ class BaseLoss:
 class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
     obs_loss_weight: float = 0.7
-    reward_loss_weight: float | None = None
-    dynamic_var_weight: float = 1.0
+    reward_loss_weight: float = 0.2
 
     def __init__(self, **kwargs):
         self.discrete_loss_fn = kwargs.get("discrete_loss_fn")
         self.obs_loss_weight = kwargs.get("obs_loss_weight", 0.5)
-        self.reward_loss_weight = kwargs.get("reward_loss_weight", 1 - self.obs_loss_weight)
-        self.dynamic_var_weight = kwargs.get("dynamic_var_weight", 10.0)
+        self.reward_loss_weight = kwargs.get("reward_loss_weight", 0.5)
 
         if self.discrete_loss_fn is None:
             raise ValueError("discrete_loss_fn must be provided")
@@ -82,41 +77,29 @@ class MinigridLoss(BaseLoss):
         self,
         predictions: tuple[torch.Tensor, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
-        features: torch.Tensor,
-    ) -> torch.Tensor:
+        features: tuple[torch.Tensor, torch.Tensor],
+    ) -> tuple[torch.Tensor, dict]:
         """Compute the combined loss for observation and reward predictions."""
-        predicted_obs, predicted_reward = predictions
-        target_obs, target_reward = targets
-        feature_obs, feature_action = features
+        predicted_next_obs, predicted_reward = predictions
+        target_next_obs, target_reward = targets
 
-        # Compute observation loss
-        # Assume that all observation variables are discrete
-        obs_loss = torch.empty(*predicted_obs.shape[:3], len(self._tensor_values), device=predicted_obs.device)
-        feature_obs_argmax = torch.empty(
-            *feature_obs.shape[:3], len(self._tensor_values), dtype=torch.uint8, device=feature_obs.device
-        )
-        target_obs_argmax = torch.empty(
-            *target_obs.shape[:3], len(self._tensor_values), dtype=torch.uint8, device=target_obs.device
-        )
-        for value_idx, value_range in enumerate(self._tensor_values):
-            pred_range = predicted_obs[..., value_range]
-            target_range = target_obs[..., value_range]
-            loss = self.discrete_loss_fn(
-                predictions=pred_range.reshape(-1, len(value_range)),
-                targets=target_range.argmax(dim=-1).reshape(-1),
-            )
-            obs_loss[..., value_idx] = loss.reshape(obs_loss[..., value_idx].shape)
-
-            feature_obs_argmax[..., value_idx] = feature_obs[..., value_range].argmax(dim=-1)
-            target_obs_argmax[..., value_idx] = target_obs[..., value_range].argmax(dim=-1)
-        obs_loss /= len(self._tensor_values)  # Normalize loss by number of observation variables
-
-        # Incentivize learning fields and variables of that field that change instead of focusing on static fields
-        changed_field_variables = feature_obs_argmax != target_obs_argmax
-        # obs_loss[changed_field_variables] *= obs_loss.numel() / changed_field_variables.sum()
-        # obs_loss[~changed_field_variables] *= changed_field_variables.sum() / obs_loss.numel()
-        obs_loss[changed_field_variables] *= self.dynamic_var_weight
-        obs_loss = obs_loss.mean()
+        # Compute observation loss using cross entropy for softmaxed ranges
+        obs_loss = 0
+        for value_range in self._tensor_values:
+            # If it's a discrete value - more than one element, use cross entropy loss
+            if len(value_range) > 1:
+                pred_range = predicted_next_obs[..., value_range]
+                target_range = target_next_obs[..., value_range]
+                loss = self.discrete_loss_fn(
+                    predictions=pred_range.reshape(-1, len(value_range)),
+                    targets=target_range.argmax(dim=-1).reshape(-1),
+                )
+            else:  # One element means it's a continuous value
+                # For continuous values, use MSE
+                pred_range = predicted_next_obs[..., value_range]
+                target_range = target_next_obs[..., value_range]
+                loss = F.mse_loss(pred_range, target_range)
+            obs_loss += loss / len(self._tensor_values)
 
         # Compute reward loss
         reward_loss = F.mse_loss(predicted_reward, target_reward)
