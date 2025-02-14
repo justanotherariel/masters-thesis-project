@@ -1,4 +1,8 @@
 enabled: True
+project: Thesis
+entity: a-ebersberger-tu-delft
+job_type: train
+
 log_config: True
 log_code:
   enabled: True

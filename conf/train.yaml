@@ -1,30 +1,37 @@
 defaults:
-
   - base_train
   - hydra/logging
+  - wandb: train
 
   # Testing Models
   - model: unet_extensive
   # - model: transformer_extensive
   
   # Downloaded Models
-  # - model_download/bumbling-sweep-23@model
-
-  - wandb: train
+  # - model_download/bumbling-sweep-23@model    # Transformer - best param before bugfixes
+  # - model_download/jolly-forest-1320@model    # Transformer - best param after bugfixes
+  # - model_download/divine-sweep-43@model       # Transformer - agent only
+  # - model_download/fearless-sweep-22@model     # U-Net - agent only
 
   - _self_
 
 ###############
 #    CONF     #
 ###############
-# n_trials: 5
+# n_trials: 2
+# trial_idx: 0
 
 cache_path: data/cache
 debug: false
 
 sweep_data:
   model_sizes:
-    - [32, 64]
-    - [64, 128]
+    - [32, 32, 64, 64]
+    - [16, 16, 32, 32]
+    - [16, 32, 64, 128]
     - [16, 32, 64]
+    - [32, 64]
     - [32, 64, 128]
+    - [64, 128]
+    - [48, 96, 192]
+    - [48, 96, 192, 384]

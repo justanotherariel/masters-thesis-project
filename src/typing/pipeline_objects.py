@@ -36,6 +36,8 @@ class PipelineData:
 
     # Predictions
     predictions: dict[DatasetGroup, list[Any]] = field(default_factory=lambda: {})
+    logged_accuracies_to_wandb: bool = False
+    accuracies: dict[DatasetGroup, dict[str, float]] = field(default_factory=lambda: {})
 
     def check_data(self) -> None:
         """Check if the data is valid. Can raise Errors."""
@@ -84,6 +86,6 @@ class PipelineInfo:
     data_info: dict[str, Any] | None = None
 
     # Model/Architecture specific information (TorchTrainer)
-    trial_idx: int = -1  # The trial index during Monte Carlo Initialization
+    trial_idx: int = -1  # The trial index during Random Seeds Initialization
     model_ti: TensorIndex | None = None  # TensorIndex object for the model
     model_train_on_discrete: bool = False  # Whether the model should train on discrete data

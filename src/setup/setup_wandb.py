@@ -16,7 +16,6 @@ logger = Logger()
 
 def setup_wandb(
     cfg: DictConfig,
-    job_type: str,
     output_dir: Path,
     name: str | None = None,
     group: str | None = None,
@@ -32,25 +31,22 @@ def setup_wandb(
     logger.debug("Initializing Weights & Biases")
 
     config = OmegaConf.to_container(cfg, resolve=True)
-
+    
     # Get the model name
-    model_target = get_nested_value(config, "model.train_sys.steps.0.model._target_")
+    model_target = cfg.model.train_sys.steps[0].model._target_
     if model_target:
         model_config_name = model_target.split(".")[-1]
         config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_config_name
 
     run = wandb.init(
-        config=replace_list_with_dict(config),  # type: ignore[arg-type]
-        project="Thesis",
-        entity="a-ebersberger-tu-delft",
+        config=replace_list_with_dict(config),
+        project=cfg.wandb.project,
+        entity=cfg.wandb.entity,
         name=name,
         group=group,
-        job_type=job_type,
-        tags=cfg.wandb.tags,
-        notes=cfg.wandb.notes,
-        settings=wandb.Settings(start_method="thread", code_dir="."),
+        job_type=cfg.wandb.job_type,
+        settings=wandb.Settings(code_dir="."),
         dir=str(output_dir),
-        reinit=True,
     )
 
     if (
@@ -65,11 +61,11 @@ def setup_wandb(
         main_config_path = "conf/train.yaml"
 
         # Get the human-readable model config file path
-        if isinstance(OmegaConf.load(main_config_path).defaults[2], str):
-            model_config_name = OmegaConf.load(main_config_path).defaults[2].split("@")[0]
+        if isinstance(OmegaConf.load(main_config_path).defaults[3], str):
+            model_config_name = OmegaConf.load(main_config_path).defaults[3].split("@")[0]
             model_config_path = f"conf/{model_config_name}.yaml"
         else:
-            model_config_name = OmegaConf.load(main_config_path).defaults[2].model
+            model_config_name = OmegaConf.load(main_config_path).defaults[3].model
             model_config_path = f"conf/model/{model_config_name}.yaml"
 
         # Get the complete config file path
@@ -77,9 +73,14 @@ def setup_wandb(
 
         # Store the config as an artefact of W&B
         artifact = wandb.Artifact("train_config", type="config")
-        artifact.add_file(complete_config_path)
+        artifact.add_file(complete_config_path, name="complete_config.yaml")
         artifact.add_file(main_config_path)
         artifact.add_file(model_config_path)
+        
+        if cfg.wandb.sweep_param_path:
+            sweep_param_path = os.environ.get("WANDB_SWEEP_PARAM_PATH", None)
+            artifact.add_file(sweep_param_path, name="sweep_param.yaml")
+        
         wandb.log_artifact(artifact)
 
     if cfg.wandb.log_code.enabled:
@@ -96,8 +97,6 @@ def setup_wandb(
                 is not None,
             ),
         )
-
-    logger.info("Done initializing Weights & Biases")
     return run
 
 
@@ -111,7 +110,6 @@ def reset_wandb_env():
         if k.startswith("WANDB_") and k not in exclude:
             logger.info(f"Removing {k}={v} from environment")
             del os.environ[k]
-
 
 def replace_list_with_dict(o: object) -> object:
     """Recursively replace lists with integer index dicts.
@@ -127,33 +125,3 @@ def replace_list_with_dict(o: object) -> object:
     elif isinstance(o, list):
         o = {i: replace_list_with_dict(v) for i, v in enumerate(o)}
     return o
-
-
-def get_nested_value(dictionary, path, default=None):
-    """
-    Safely access nested dictionary values using a list of keys or dot notation string.
-    Returns default value if path doesn't exist.
-
-    Args:
-        dictionary (dict): The dictionary to search in
-        path (str|list): Path to value, either as a dot-separated string or list of keys
-        default: Value to return if path doesn't exist (default: None)
-
-    Examples:
-        get_nested_value(config, 'model.train_sys.steps.0.model._target_')
-        get_nested_value(config, ['model', 'train_sys', 'steps', 0, 'model', '_target_'])
-    """
-    keys = path.split(".") if isinstance(path, str) else path
-
-    current = dictionary
-    for key in keys:
-        try:
-            key = int(key) if isinstance(key, str) and key.isdigit() else key
-            if isinstance(current, (dict, list)):
-                current = current[key] if isinstance(current, dict) else current[int(key)]
-            else:
-                return default
-        except (KeyError, IndexError, TypeError, ValueError):
-            return default
-
-    return current

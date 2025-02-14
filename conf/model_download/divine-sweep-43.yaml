@@ -1,0 +1,75 @@
+_target_: src.framework.pipeline.ModelPipeline
+_convert_: partial
+env_sys:
+  _target_: src.framework.pipeline.TransformationPipeline
+  title: Environment pipeline
+  steps:
+  - _target_: src.modules.environment.gymnasium.GymnasiumBuilder
+    environment: MiniGrid-LavaCrossingS9N3-v0
+  - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
+    train_envs: 5
+    validation_envs: 1
+train_sys:
+  _target_: src.framework.pipeline.TransformationPipeline
+  title: Training pipeline
+  steps:
+  - _target_: src.modules.training.torch_trainer.TorchTrainer
+    epochs: 500
+    batch_size: 2048
+    load_all_batches_to_gpu: true
+    validate_every_x_epochs: 10
+    to_predict: ALL
+    discrete: true
+    n_folds: ${n_trials}
+    model:
+      _target_: src.modules.training.models.transformer_wrapped_agent_only.TransformerWrappedAgentOnly
+      seperate_output_layers: false
+      d_model: 256
+      n_heads: 32
+      n_layers: 3
+      d_ff: 512
+      drop_prob: 0.18945568745776775
+    loss:
+      _target_: src.modules.training.loss.MinigridLoss
+      obs_loss_weight: 0.8
+      reward_loss_weight: 0.2
+      discrete_loss_fn:
+        _target_: src.utils.functools.partial
+        _args_:
+        - _target_: hydra.utils.get_method
+          path: src.modules.training.loss.ce_rebalance_loss
+    accuracy:
+      _target_: src.modules.training.accuracy.MinigridAccuracy
+    model_storage_conf:
+      save_model_to_disk: true
+      save_model_to_wandb: true
+      save_checkpoints_to_disk: false
+      save_checkpoint_every_x_epochs: 1
+      resume_training_from_checkpoint: false
+      save_directory: !!python/object/apply:pathlib.PosixPath
+      - tm
+    dataloader_conf:
+      num_workers: 8
+      prefetch_factor: 4
+      persistent_workers: true
+    optimizer:
+      _target_: functools.partial
+      _args_:
+      - _target_: hydra.utils.get_class
+        path: torch.optim.AdamW
+      lr: 0.001124931488399664
+    scheduler:
+      _target_: functools.partial
+      _args_:
+      - _target_: hydra.utils.get_class
+        path: timm.scheduler.step_lr.StepLRScheduler
+      decay_t: 297
+      decay_rate: 0.6260686257982679
+pred_sys:
+  _target_: src.framework.pipeline.TransformationPipeline
+  title: Postprocessing pipeline
+  steps:
+  - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
+    metric_calculators:
+    - FieldPovAccuracyCalc
+  - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage

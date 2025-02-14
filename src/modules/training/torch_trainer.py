@@ -186,6 +186,8 @@ class TorchTrainer(TransformationBlock):
             min_str = "minutes" if mins != 1 else "minute"
             sec_str = "seconds" if secs != 1.0 else "second"
             logger.info(f"Training took {f'{mins} {min_str} and ' if mins > 0 else ''}{secs:.2f} {sec_str}")
+            
+            data.logged_accuracies_to_wandb = True
 
         # Evaluate the model
         if DatasetGroup.TRAIN in self.to_predict:
@@ -568,9 +570,10 @@ def log_dict(
 ) -> None:
     """Log the values of target."""
     for key, value in target.items():
-        logger.log_to_external(
-            message={
-                f"{prefix}/{key}": value,
-                "Epoch": epoch,
-            },
-        )
+        message = {
+            f"{prefix}/{key}": value,
+        }
+        if epoch >= 0:
+            message["Epoch"] = epoch
+
+        logger.log_to_external(message)

@@ -35,7 +35,7 @@ class TrainConfig:
     # Additional data for sweeps
     sweep_data: Any = None
 
-    # Monte Carlo Initialization
+    # Random Seeds Initialization
     seed: int = 42
-    trial_idx: int = -1  # Set during execution, but can be overridden
+    trial_idx: int = 0  # Keep at 0 for normal runs
     n_trials: int = 1

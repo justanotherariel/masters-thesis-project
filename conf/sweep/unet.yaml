@@ -6,7 +6,7 @@ method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: U-Net | ce_rebalance_loss [Fixed DS]
+name: U-Net | AgentOnly
 metric:
   name: Train/Agent Accuracy
   goal: maximize
@@ -40,3 +40,8 @@ parameters:
       - ${sweep_data.model_sizes.1}
       - ${sweep_data.model_sizes.2}
       - ${sweep_data.model_sizes.3}
+      - ${sweep_data.model_sizes.4}
+      - ${sweep_data.model_sizes.5}
+      - ${sweep_data.model_sizes.6}
+      - ${sweep_data.model_sizes.7}
+      - ${sweep_data.model_sizes.8}

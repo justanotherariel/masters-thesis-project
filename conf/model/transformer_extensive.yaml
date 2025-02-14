@@ -23,7 +23,7 @@ train_sys:
       # patience: 250
 
       load_all_batches_to_gpu: true
-      validate_every_x_epochs: 10
+      validate_every_x_epochs: 5
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
       discrete: true
 
@@ -90,6 +90,8 @@ train_sys:
 
 pred_sys:
   steps:
+    - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
+      accuarcy_calc: ${model.train_sys.steps[0].accuracy}
     - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
       metric_calculators: 
         # - AgentPovCertaintyCalc
