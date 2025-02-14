@@ -7,7 +7,7 @@ from .base import BaseModel
 from .unet import UNet
 
 
-class UNetWrapped(BaseModel):
+class UNetWrappedAgentOnly(BaseModel):
     module: None | nn.Module
 
     def __init__(
@@ -34,7 +34,7 @@ class UNetWrapped(BaseModel):
 
         self.module = UNet(
             in_obs_shape=obs_shape,
-            out_obs_shape=obs_shape,
+            out_obs_shape=(*obs_shape[:-1], len(self._ti.observation[3])),
             action_dim=action_dim,
             **self._model_args,
         )
@@ -51,7 +51,10 @@ class UNetWrapped(BaseModel):
 
     def forward(self, x):
         # Forward pass through the model
-        pred_obs, pred_reward = self.module.forward(x)
+        pred_obs_agent, pred_reward = self.module.forward(x)
+        
+        pred_obs = x[0].float()
+        pred_obs[..., self._ti.observation[3]] = pred_obs_agent.reshape(*pred_obs_agent.shape[:-1], -1)
 
         # Softmax the observation
         for values in self._tensor_values:

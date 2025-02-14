@@ -82,24 +82,28 @@ class UNet(nn.Module):
 
     def __init__(
         self,
-        obs_shape: tuple[int, int, int],
+        in_obs_shape: tuple[int, int, int],
+        out_obs_shape: tuple[int, int, int],
         action_dim: int,
         hidden_channels: list[int],
     ):
         """Initialize the CNN model structure."""
         super().__init__()
+        
+        if in_obs_shape[:2] != out_obs_shape[:2]:
+            raise ValueError("Input and output observation shapes must have the same height and width.")
 
         self.hidden_channels = hidden_channels
 
         # Down
-        self.down_first = Down(obs_shape[-1], self.hidden_channels[0], first=True)
+        self.down_first = Down(in_obs_shape[-1], self.hidden_channels[0], first=True)
         self.down_layers = nn.ModuleList(
             [Down(self.hidden_channels[i], self.hidden_channels[i + 1]) for i in range(len(self.hidden_channels) - 1)]
         )
 
         # Fusion
-        final_encoder_size_y = obs_shape[0] // 2 ** (len(self.hidden_channels) - 1)
-        final_encoder_size_x = obs_shape[1] // 2 ** (len(self.hidden_channels) - 1)
+        final_encoder_size_y = in_obs_shape[0] // 2 ** (len(self.hidden_channels) - 1)
+        final_encoder_size_x = in_obs_shape[1] // 2 ** (len(self.hidden_channels) - 1)
         final_encode_size_flat = final_encoder_size_y * final_encoder_size_x * self.hidden_channels[-1]
         self.fusion = nn.Linear(final_encode_size_flat + action_dim, final_encode_size_flat)
 
@@ -113,7 +117,7 @@ class UNet(nn.Module):
                 for i in range(len(self.hidden_channels) - 1, 0, -1)
             ]
         )
-        self.up_last = OutConv(self.hidden_channels[0], obs_shape[-1])
+        self.up_last = OutConv(self.hidden_channels[0], out_obs_shape[-1])
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the network."""

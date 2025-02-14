@@ -10,7 +10,7 @@ from .base import BaseModel
 from .transformer import Transformer
 
 
-class TransformerWrapped(BaseModel):
+class TransformerWrappedAgentOnly(BaseModel):
     module: None | nn.Module
 
     def __init__(
