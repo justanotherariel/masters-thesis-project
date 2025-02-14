@@ -4,10 +4,12 @@ from src.modules.training.datasets.simple import SimpleDatasetDefault
 from src.typing.pipeline_objects import DatasetGroup, PipelineData
 
 
-def dataset_to_list(data: PipelineData, ds_group: DatasetGroup, discretize=False, info=None) -> list[list[torch.Tensor]]:
+def dataset_to_list(
+    data: PipelineData, ds_group: DatasetGroup, discretize=False, info=None
+) -> list[list[torch.Tensor]]:
     if discretize and not info:
         raise ValueError("Discretization requires info to be passed.")
-    
+
     dataset = SimpleDatasetDefault(data, ds_group=ds_group, discretize=discretize)
     if info is not None:
         dataset.setup(info)

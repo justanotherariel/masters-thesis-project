@@ -52,7 +52,7 @@ class UNetWrappedAgentOnly(BaseModel):
     def forward(self, x):
         # Forward pass through the model
         pred_obs_agent, pred_reward = self.module.forward(x)
-        
+
         pred_obs = x[0].float()
         pred_obs[..., self._ti.observation[3]] = pred_obs_agent.reshape(*pred_obs_agent.shape[:-1], -1)
 

@@ -89,7 +89,7 @@ class UNet(nn.Module):
     ):
         """Initialize the CNN model structure."""
         super().__init__()
-        
+
         if in_obs_shape[:2] != out_obs_shape[:2]:
             raise ValueError("Input and output observation shapes must have the same height and width.")
 

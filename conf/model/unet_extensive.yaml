@@ -30,14 +30,15 @@ train_sys:
       n_folds: ${n_trials}
 
       model:
-        _target_: src.modules.training.models.unet_wrapped.UNetWrapped
-        hidden_channels: [32, 64]
+        # _target_: src.modules.training.models.unet_wrapped.UNetWrapped
+        _target_: src.modules.training.models.unet_wrapped_agent_only.UNetWrappedAgentOnly
+        hidden_channels: [48, 96, 192, 384]
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
-        # reward_loss_weight: 1 - obs_loss_weight by default
-        dynamic_var_weight: 1.0
+        reward_loss_weight: 0.2
+        # dynamic_var_weight: 1.0
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:

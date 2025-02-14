@@ -31,7 +31,7 @@ def setup_wandb(
     logger.debug("Initializing Weights & Biases")
 
     config = OmegaConf.to_container(cfg, resolve=True)
-    
+
     # Get the model name
     model_target = cfg.model.train_sys.steps[0].model._target_
     if model_target:
@@ -76,11 +76,11 @@ def setup_wandb(
         artifact.add_file(complete_config_path, name="complete_config.yaml")
         artifact.add_file(main_config_path)
         artifact.add_file(model_config_path)
-        
+
         if cfg.wandb.sweep_param_path:
             sweep_param_path = os.environ.get("WANDB_SWEEP_PARAM_PATH", None)
             artifact.add_file(sweep_param_path, name="sweep_param.yaml")
-        
+
         wandb.log_artifact(artifact)
 
     if cfg.wandb.log_code.enabled:
@@ -110,6 +110,7 @@ def reset_wandb_env():
         if k.startswith("WANDB_") and k not in exclude:
             logger.info(f"Removing {k}={v} from environment")
             del os.environ[k]
+
 
 def replace_list_with_dict(o: object) -> object:
     """Recursively replace lists with integer index dicts.

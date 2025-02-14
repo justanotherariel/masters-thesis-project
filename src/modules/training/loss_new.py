@@ -24,7 +24,9 @@ def ce_rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
     num_classes = predictions.size(1)
     class_counts = torch.bincount(targets, minlength=num_classes)
 
-    weight = torch.where(class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts))
+    weight = torch.where(
+        class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
+    )
 
     # (F.cross_entropy(predictions, targets, weight=weight, reduction="none").sum() / weight[targets].sum())
     return F.cross_entropy(predictions, targets, weight=weight, reduction="none")
@@ -69,7 +71,7 @@ class MinigridLoss(BaseLoss):
         self.obs_loss_weight = kwargs.get("obs_loss_weight", 0.5)
         self.reward_loss_weight = kwargs.get("reward_loss_weight", 1 - self.obs_loss_weight)
         self.dynamic_var_weight = kwargs.get("dynamic_var_weight", 10.0)
-        
+
         if self.discrete_loss_fn is None:
             raise ValueError("discrete_loss_fn must be provided")
 
@@ -77,7 +79,7 @@ class MinigridLoss(BaseLoss):
         # Store softmax ranges for each grid cell component
         self._ti = info.model_ti
         self._tensor_values = [self._ti.observation[i] for i in range(len(self._ti.observation))]
-                
+
         return info
 
     def __call__(
@@ -90,7 +92,7 @@ class MinigridLoss(BaseLoss):
         predicted_obs, predicted_reward = predictions
         target_obs, target_reward = targets
         feature_obs, feature_action = features
-        
+
         # Compute observation loss
         # Assume that all observation variables are discrete
         obs_loss = torch.empty(*predicted_obs.shape[:3], len(self._tensor_values), device=predicted_obs.device)
@@ -101,7 +103,7 @@ class MinigridLoss(BaseLoss):
                 predictions=pred_range.reshape(-1, len(value_range)),
                 targets=target_range.argmax(dim=-1).reshape(-1),
             )
-            
+
             obs_loss[..., value_idx] = loss.reshape(obs_loss[..., value_idx].shape)
         obs_loss /= len(self._tensor_values)  # Normalize loss
 

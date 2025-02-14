@@ -49,7 +49,12 @@ class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
-    def __call__(self, predictions: tuple[torch.Tensor, torch.Tensor], targets: tuple[torch.Tensor, torch.Tensor], features: tuple[torch.Tensor, torch.Tensor]):
+    def __call__(
+        self,
+        predictions: tuple[torch.Tensor, torch.Tensor],
+        targets: tuple[torch.Tensor, torch.Tensor],
+        features: tuple[torch.Tensor, torch.Tensor],
+    ):
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
 

@@ -86,11 +86,7 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
         cfg.wandb.sweep_param_path = os.environ.get("WANDB_SWEEP_PARAM_PATH", None)
         logger.info("Done Initializing W&B Average Run\n\n")
     
-    # Create the processes and execute one process after another
-    # Each process should execute the 'run_train' function.
-    # Adjust the cfg.trial_idx to the current trial index
-    # Save the accuracies of each trial in a list
-    
+    # Create the processes and execute one process after another    
     accuracies = {}
     for trial_idx in range(cfg.n_trials):
         cfg.trial_idx = trial_idx

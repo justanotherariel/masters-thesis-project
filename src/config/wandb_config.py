@@ -27,15 +27,15 @@ class WandBConfig:
     """
 
     enabled: bool
-    
+
     project: str
     entity: str
     job_type: str
-    
-    run_name_base: str | None = None    # Runtime parameter
-    group_id: str | None = None         # Runtime parameter
-    sweep_id: str | None = None         # Runtime parameter
-    sweep_param_path: str | None = None # Runtime parameter
-    
+
+    run_name_base: str | None = None  # Runtime parameter
+    group_id: str | None = None  # Runtime parameter
+    sweep_id: str | None = None  # Runtime parameter
+    sweep_param_path: str | None = None  # Runtime parameter
+
     log_config: bool = False
     log_code: WandBLogCodeConfig = field(default_factory=lambda: WandBLogCodeConfig())
