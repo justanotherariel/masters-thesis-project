@@ -30,8 +30,8 @@ train_sys:
       n_folds: ${n_trials}
 
       model:
-        # _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
-        _target_: src.modules.training.models.transformer_wrapped_agent_only.TransformerWrappedAgentOnly
+        _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
+        # _target_: src.modules.training.models.transformer_wrapped_agent_only.TransformerWrappedAgentOnly
         seperate_output_layers: false
 
         d_model: 128
@@ -43,8 +43,8 @@ train_sys:
       loss:
         _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
-        reward_loss_weight: 0.2
-        # dynamic_var_weight: 1.0
+        reward_loss_weight: 0.1
+        two_agent_penalty_loss_weight: 0.1
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:

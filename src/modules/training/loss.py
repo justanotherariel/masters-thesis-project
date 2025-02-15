@@ -43,9 +43,6 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
 
 
 class BaseLoss:
-    def __init__(self, **kwargs):
-        raise NotImplementedError("BaseLoss is an abstract class and should not be instantiated.")
-
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
@@ -61,13 +58,11 @@ class BaseLoss:
 @dataclass
 class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
-    obs_loss_weight: float = 0.7
+    obs_loss_weight: float = 0.8
     reward_loss_weight: float = 0.2
+    two_agent_penalty_loss_weight: float = 0.0
 
-    def __init__(self, **kwargs):
-        self.discrete_loss_fn = kwargs.get("discrete_loss_fn")
-        self.obs_loss_weight = kwargs.get("obs_loss_weight", 0.5)
-        self.reward_loss_weight = kwargs.get("reward_loss_weight", 0.5)
+    def __post_init__(self):
 
         if self.discrete_loss_fn is None:
             raise ValueError("discrete_loss_fn must be provided")
@@ -106,20 +101,42 @@ class MinigridLoss(BaseLoss):
                 loss = F.mse_loss(pred_range, target_range)
             obs_loss[value_idx] = loss
 
+        # Compute Two Agent Penalty Loss
+        two_agent_penalty_loss = torch.tensor(0.0, device=predicted_next_obs.device)
+        if self.two_agent_penalty_loss_weight > 0:
+            two_agent_penalty_loss = self.two_agent_penalty_loss(predicted_next_obs)
+
         # Compute reward loss
         reward_loss = F.mse_loss(predicted_reward, target_reward)
 
         # Final loss combining original and consistency terms
-        total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss
+        total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss + self.two_agent_penalty_loss_weight * two_agent_penalty_loss
         
         # Logging
         losses = {
             "Loss": total_loss.item(),
-            "Observation Loss": obs_loss.mean().item(),
-            "Observation Loss - Object": obs_loss[0].item(),
-            "Observation Loss - Color": obs_loss[1].item(),
-            "Observation Loss - State": obs_loss[2].item(),
-            "Observation Loss - Agent": obs_loss[3].item(),
-            "Reward Loss": reward_loss.item(),
+            "Observation Loss": obs_loss.mean().item() * self.obs_loss_weight,
+            "Observation Loss - Object": obs_loss[0].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
+            "Observation Loss - Color": obs_loss[1].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
+            "Observation Loss - State": obs_loss[2].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
+            "Observation Loss - Agent": obs_loss[3].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
+            "Observation Loss - Two Agent Penalty": two_agent_penalty_loss.item() * self.two_agent_penalty_loss_weight,
+            "Reward Loss": reward_loss.item() * self.reward_loss_weight,
         }
         return total_loss, losses
+    
+    def two_agent_penalty_loss(self, predicted_next_obs: torch.Tensor) -> torch.Tensor:        
+        # Get the model certainty of there being an agent in each grid cell
+        agent_certainty = (1-predicted_next_obs[..., self._ti.observation[3][0]]).view(predicted_next_obs.shape[0], -1)
+        
+        # Calculate certainty of having two agents in different locations
+        joint_agent_certainty = torch.einsum('bi,bj->bij', agent_certainty, agent_certainty)
+        
+        # Zero out the main diagonal as we don't want to penalize the model for predicting an agent on the same location
+        main_diag_mask = ~torch.eye(joint_agent_certainty.shape[1], dtype=bool, device=joint_agent_certainty.device)
+        joint_agent_certainty = joint_agent_certainty * main_diag_mask
+        
+        # Calculate the penalty
+        penalty = joint_agent_certainty.sum(dim=[1, 2]) / (joint_agent_certainty.shape[1]**2)
+        
+        return penalty.mean()
