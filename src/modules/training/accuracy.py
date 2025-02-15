@@ -49,6 +49,7 @@ class MinigridAccuracy(BaseAccuracy):
         color_acc = self._calc_color_acc(pred_obs_argmax, target_obs_argmax)
         state_acc = self._calc_state_acc(pred_obs_argmax, target_obs_argmax)
         agent_acc = self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax)
+        reward_acc = self._calc_reward_acc(pred_reward, target_reward)
 
         accuracies = {
             "Object Accuracy": object_acc,
@@ -56,6 +57,7 @@ class MinigridAccuracy(BaseAccuracy):
             "State Accuracy": state_acc,
         }
         accuracies.update(agent_acc)
+        accuracies.update(reward_acc)
         return accuracies
 
     def _calc_object_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
@@ -167,6 +169,18 @@ class MinigridAccuracy(BaseAccuracy):
             "Agent Stay Accuracy": perc_samples_agent_stay_correct,
             "Agent Rotate Accuracy": perc_samples_agent_rotated_correct,
             "Agent Move Accuracy": perc_samples_agent_moved_correct,
+        }
+        
+    def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
+        reward_mask = target_reward != 0
+        
+        reward_predicted_correct = (pred_reward[reward_mask] == target_reward[reward_mask]).sum().item()
+        
+        no_reward_predicted_correct = (pred_reward[~reward_mask] == target_reward[~reward_mask]).sum().item()
+        
+        return {
+            "Reward Accuracy": reward_predicted_correct / reward_mask.sum().item(),
+            "No Reward Accuracy": no_reward_predicted_correct / (~reward_mask).sum().item(),
         }
 
 def obs_argmax(obs, ti, *, constrain_to_one_agent: bool = False):
