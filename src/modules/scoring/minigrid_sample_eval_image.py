@@ -16,6 +16,9 @@ from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.datasets.simple import SimpleDatasetDefault
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
+from src.modules.training.accuracy import obs_argmax
+
+from dataclasses import dataclass
 
 from .data_transform import dataset_to_list
 
@@ -23,9 +26,11 @@ logger = Logger()
 
 ACTION_STR = [actions.Actions(i).name for i in range(7)]
 
-
+@dataclass
 class MinigridSampleEvalImage(TransformationBlock):
     """Score the predictions of the model."""
+    
+    constrain_to_one_agent: bool = False
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
@@ -48,7 +53,7 @@ class MinigridSampleEvalImage(TransformationBlock):
         for dataset_group in data.grids:
             if dataset_group == DatasetGroup.ALL:
                 continue
-            find_errors(data, self.info, dataset_group, self.info.output_dir)
+            find_errors(data, self.info, dataset_group, self.info.output_dir, constrain_to_one_agent=self.constrain_to_one_agent, prefix="constrained" if self.constrain_to_one_agent else "")
 
         logger.info("Sample evaluation (image) complete.")
         return data
@@ -59,11 +64,16 @@ def find_errors(
     info: PipelineInfo,
     dataset_group: DatasetGroup,
     output_dir: Path,
+    *,
+    prefix: str = "",
+    constrain_to_one_agent: bool = False,
 ):
     """Calculate the accuracy of the model.
 
     :param index_name: The name of the indice.
     """
+    prefix = f"{prefix}_" if prefix else ""
+    
     indices = data.indices[dataset_group]
     target_data = dataset_to_list(data, dataset_group)
     x_obs, x_action = target_data[0]
@@ -73,16 +83,13 @@ def find_errors(
     pred_ti = info.model_ti
 
     # Argmax the predictions
-    pred_obs_argmax = torch.empty_like(x_obs)
-    for obs_idx in range(len(pred_ti.observation)):
-        pred_obs_argmax[..., obs_idx] = torch.argmax(pred_obs[..., pred_ti.observation[obs_idx]], dim=3)
-    pred_obs = pred_obs_argmax
+    pred_obs = obs_argmax(pred_obs, pred_ti, constrain_to_one_agent=constrain_to_one_agent)
 
     # Go through each grid
     grid_idx_start = 0
     # for grid_idx in tqdm(range(len(indices)), desc=f"Dataset {dataset_group.name.lower()}"):
     for grid_idx in tqdm(range(1), desc=f"Dataset {dataset_group.name.lower()}"):
-        with PDFFileWriter(output_dir, f"sample_eval_{dataset_group.name.lower()}_{grid_idx}.pdf") as writer:
+        with PDFFileWriter(output_dir, f"sample_eval_{prefix}{dataset_group.name.lower()}_{grid_idx}.pdf") as writer:
             grid_index_len = len(indices[grid_idx])
             x_action_grid = x_action[grid_idx_start : grid_idx_start + grid_index_len]
             x_obs_grid = x_obs[grid_idx_start : grid_idx_start + grid_index_len]

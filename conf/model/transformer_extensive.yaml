@@ -58,6 +58,7 @@ train_sys:
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
+        # constrain_to_one_agent: true
 
       model_storage_conf:
         save_model_to_disk: true
@@ -99,3 +100,5 @@ pred_sys:
         - FieldPovAccuracyCalc
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    #   constrain_to_one_agent: true

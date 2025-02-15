@@ -57,7 +57,6 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
-        # print(x1.size(), x2.size())
 
         # Pad x1 to match x2 size
         diffY = x2.size()[2] - x1.size()[2]
