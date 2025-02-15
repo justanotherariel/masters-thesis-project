@@ -340,16 +340,11 @@ class TorchTrainer(TransformationBlock):
 
         for epoch in range(start_epoch, self.epochs):
             # Train using train_loader
-            train_loss, accuarcy = self.train_one_epoch(train_loader, epoch)
-            logger.debug(f"Epoch {epoch} Train Loss: {train_loss}")
+            loss, accuarcy = self.train_one_epoch(train_loader, epoch)
+            logger.debug(f"Epoch {epoch} Train Loss: {loss['Loss']}")
 
             # Log train loss
-            logger.log_to_external(
-                message={
-                    "Train/Loss": train_loss,
-                    "Epoch": epoch,
-                },
-            )
+            log_dict(loss, epoch, "Train")
             log_dict(accuarcy, epoch, "Train")
 
             # Step the scheduler
@@ -373,17 +368,14 @@ class TorchTrainer(TransformationBlock):
 
             # Compute validation loss
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
-                self.last_val_loss, accuarcy = self.val_one_epoch(
+                loss, accuarcy = self.val_one_epoch(
                     validation_loader,
                     epoch=epoch,
                 )
+                self.last_val_loss = loss['Loss']
+                
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
-                logger.log_to_external(
-                    message={
-                        "Validation/Loss": self.last_val_loss,
-                        "Epoch": epoch,
-                    },
-                )
+                log_dict(loss, epoch, "Validation")
                 log_dict(accuarcy, epoch, "Validation")
 
                 # Early stopping
@@ -394,7 +386,8 @@ class TorchTrainer(TransformationBlock):
                     )
                     break
 
-            # Log the trained epochs to wandb if we finished training
+            # Log the trained epochs to wandb after finishing training
+            # Marks the true Epochs trained when early stopping is used
             logger.log_to_external(message={"Epochs": epoch + 1})
 
     def train_one_epoch(
@@ -408,7 +401,7 @@ class TorchTrainer(TransformationBlock):
         :param epoch: Epoch number.
         :return: Average loss for the epoch.
         """
-        epoch_loss = []
+        epoch_loss: dict[str, list[float]] = {}
         epoch_accuracy: dict[str, list[float]] = {}
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_train_batches"):
@@ -439,8 +432,8 @@ class TorchTrainer(TransformationBlock):
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
-                loss = self.loss(y_pred, y_batch, x_batch)
-                acc = self.accuracy(y_pred, y_batch, x_batch)
+                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -453,11 +446,11 @@ class TorchTrainer(TransformationBlock):
                 self.initialized_optimizer.step()
 
             # Save metrics
-            epoch_loss.append(loss.item())
-            append_to_dict(epoch_accuracy, acc)
-            pbar.set_postfix(loss=sum(epoch_loss) / len(epoch_loss))
+            append_to_dict(epoch_loss, loss_dict)
+            append_to_dict(epoch_accuracy, acc_dict)
+            pbar.set_postfix(loss=sum(epoch_loss['Loss']) / len(epoch_loss['Loss']))
 
-        return sum(epoch_loss) / len(epoch_loss), average_dict(epoch_accuracy)
+        return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
     def val_one_epoch(
         self,
@@ -470,7 +463,7 @@ class TorchTrainer(TransformationBlock):
         :param desc: Description for the tqdm progress bar.
         :return: Average loss for the epoch.
         """
-        epoch_loss = []
+        epoch_loss: dict[str, list[float]] = {}
         epoch_accuracy: dict[str, list[float]] = {}
 
         if self.load_all_batches_to_gpu and not hasattr(self, "preloaded_validation_batches"):
@@ -501,14 +494,14 @@ class TorchTrainer(TransformationBlock):
 
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
-                loss = self.loss(y_pred, y_batch, x_batch)
-                acc = self.accuracy(y_pred, y_batch, x_batch)
+                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
 
                 # Save metrics
-                epoch_loss.append(loss.item())
-                append_to_dict(epoch_accuracy, acc)
-                pbar.set_postfix(loss=sum(epoch_loss) / len(epoch_loss))
-        return sum(epoch_loss) / len(epoch_loss), average_dict(epoch_accuracy)
+                append_to_dict(epoch_loss, loss_dict)
+                append_to_dict(epoch_accuracy, acc_dict)
+                pbar.set_postfix(loss=sum(epoch_loss['Loss']) / len(epoch_loss['Loss']))
+        return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
     def patience_exceeded(self) -> bool:
         """Check if early stopping should be performed.

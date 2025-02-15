@@ -91,4 +91,6 @@ pred_sys:
         # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
     # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    #   constrain_to_one_agent: true

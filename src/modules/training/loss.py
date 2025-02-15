@@ -54,7 +54,7 @@ class BaseLoss:
         predictions: tuple[torch.Tensor, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: tuple[torch.Tensor, torch.Tensor],
-    ):
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
 
 
@@ -83,14 +83,14 @@ class MinigridLoss(BaseLoss):
         predictions: tuple[torch.Tensor, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: tuple[torch.Tensor, torch.Tensor],
-    ) -> tuple[torch.Tensor, dict]:
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute the combined loss for observation and reward predictions."""
         predicted_next_obs, predicted_reward = predictions
         target_next_obs, target_reward = targets
 
         # Compute observation loss using cross entropy for softmaxed ranges
-        obs_loss = 0
-        for value_range in self._tensor_values:
+        obs_loss = torch.empty(len(self._tensor_values), device=predicted_next_obs.device)
+        for value_idx, value_range in enumerate(self._tensor_values):
             # If it's a discrete value - more than one element, use cross entropy loss
             if len(value_range) > 1:
                 pred_range = predicted_next_obs[..., value_range]
@@ -104,11 +104,22 @@ class MinigridLoss(BaseLoss):
                 pred_range = predicted_next_obs[..., value_range]
                 target_range = target_next_obs[..., value_range]
                 loss = F.mse_loss(pred_range, target_range)
-            obs_loss += loss / len(self._tensor_values)
+            obs_loss[value_idx] = loss
 
         # Compute reward loss
         reward_loss = F.mse_loss(predicted_reward, target_reward)
 
         # Final loss combining original and consistency terms
-        total_loss = self.obs_loss_weight * obs_loss + self.reward_loss_weight * reward_loss
-        return total_loss
+        total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss
+        
+        # Logging
+        losses = {
+            "Loss": total_loss.item(),
+            "Observation Loss": obs_loss.mean().item(),
+            "Observation Loss - Object": obs_loss[0].item(),
+            "Observation Loss - Color": obs_loss[1].item(),
+            "Observation Loss - State": obs_loss[2].item(),
+            "Observation Loss - Agent": obs_loss[3].item(),
+            "Reward Loss": reward_loss.item(),
+        }
+        return total_loss, losses
