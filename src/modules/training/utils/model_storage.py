@@ -101,7 +101,6 @@ class ModelStorage:
         location = self._get_model_checkpoint_path(epoch)
         location.parent.mkdir(exist_ok=True, parents=True)
 
-        logger.info(f"Saving model checkpoint to {location}")
         torch.save(model, location)
 
     def get_model(self, location: Path | None = None) -> Any:

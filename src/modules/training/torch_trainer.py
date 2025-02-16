@@ -47,9 +47,9 @@ def custom_collate(batch: list[Tensor]) -> tuple[Tensor, Tensor]:
 class ModelStorageConf:
     save_model_to_disk: bool = field(default=True, repr=False, compare=False)
     save_model_to_wandb: bool = field(default=True, repr=False, compare=False)
-    save_checkpoints_to_disk: bool = field(default=True, repr=False, compare=False)
 
-    save_checkpoint_every_x_epochs: Annotated[int, Gt(0)] = field(default=0, repr=False, compare=False)
+    save_checkpoints_to_disk: bool = field(default=True, repr=False, compare=False)
+    save_checkpoints_keep_every_x_epochs: Annotated[int, Gt(0)] = field(default=0, repr=False, compare=False)
     resume_training_from_checkpoint: bool = field(default=True, repr=False, compare=False)
 
     save_directory: Path = field(default=Path("tm/"), repr=False, compare=False)
@@ -354,17 +354,16 @@ class TorchTrainer(TransformationBlock):
             # Checkpointing
             if self.model_storage_conf.save_checkpoints_to_disk:
                 # Save checkpoint
-                self._save_model(
-                    self.get_model_checkpoint_path(epoch),
-                    save_to_external=False,
-                    quiet=True,
+                self.model_storage.save_model_checkpoint(
+                    self.model.module,
+                    epoch,
                 )
 
                 # Remove old checkpoints
                 if (
-                    self.checkpointing_keep_every == 0 or epoch % self.checkpointing_keep_every != 0
-                ) and self.get_model_checkpoint_path(epoch - 1).exists():
-                    self.get_model_checkpoint_path(epoch - 1).unlink()
+                    self.model_storage_conf.save_checkpoints_keep_every_x_epochs == 0 or epoch % self.model_storage_conf.save_checkpoints_keep_every_x_epochs != 0
+                ) and self.model_storage.get_model_checkpoint_path(epoch - 1).exists():
+                    self.model_storage.get_model_checkpoint_path(epoch - 1).unlink()
 
             # Compute validation loss
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:

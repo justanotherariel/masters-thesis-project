@@ -20,7 +20,7 @@ train_sys:
 
       epochs: 500
       batch_size: 2048
-      # patience: 200
+      # patience: 250
 
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 5
@@ -56,7 +56,7 @@ train_sys:
         save_model_to_disk: true
         save_model_to_wandb: true
         save_checkpoints_to_disk: false
-        save_checkpoint_every_x_epochs: 1
+        save_checkpoints_keep_every_x_epochs: 50
         resume_training_from_checkpoint: false
         save_directory: !!python/object/apply:pathlib.PosixPath
           - 'tm/'
