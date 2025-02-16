@@ -56,17 +56,4 @@ class UNetWrappedAgentOnly(BaseModel):
         pred_obs = x[0].float()
         pred_obs[..., self._ti.observation[3]] = pred_obs_agent.reshape(*pred_obs_agent.shape[:-1], -1)
 
-        # Softmax the observation
-        for values in self._tensor_values:
-            # Only apply softmax if range has multiple elements
-            if len(values) > 1:
-                # Extract the relevant slice
-                sliced = pred_obs[..., values]
-
-                # Apply softmax along the last dimension
-                softmaxed = F.softmax(sliced, dim=-1)
-
-                # Place back in output
-                pred_obs[..., values] = softmaxed
-
         return pred_obs, pred_reward

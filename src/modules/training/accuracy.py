@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import torch
 
 from src.typing.pipeline_objects import PipelineInfo
+from torch.nn import functional as F
 
 
 class BaseAccuracy:
@@ -192,7 +193,10 @@ def obs_argmax(obs, ti, *, constrain_to_one_agent: bool = False):
         obs_argmax[..., idx] = obs[..., values].argmax(dim=-1)
 
     if constrain_to_one_agent:
-        min_values, min_indices = obs[..., ti.observation[3][0]].view(obs[..., ti.observation[3][0]].shape[0], -1).min(dim=1)
+        
+        # Softmax the logits and find the most probable agent location
+        agent_softmax = F.softmax(obs[..., ti.observation[3]], dim=-1)
+        min_values, min_indices = agent_softmax[..., 0].view(obs.shape[0], -1).min(dim=1)
 
         # Find the agent in the observation tensor
         x_coords = min_indices // obs.shape[2]

@@ -71,7 +71,7 @@ class MinigridLoss(BaseLoss):
             raise ValueError("discrete_loss_fn must be provided")
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
-        # Store softmax ranges for each grid cell component
+        # Store value ranges for each grid cell component
         self._ti = info.model_ti
         self._tensor_values = [self._ti.observation[i] for i in range(len(self._ti.observation))]
         return info
@@ -86,7 +86,7 @@ class MinigridLoss(BaseLoss):
         predicted_next_obs, predicted_reward = predictions
         target_next_obs, target_reward = targets
 
-        # Compute observation loss using cross entropy for softmaxed ranges
+        # Compute observation loss using cross entropy for value ranges (logits)
         obs_loss = torch.empty(len(self._tensor_values), device=predicted_next_obs.device)
         for value_idx, value_range in enumerate(self._tensor_values):
             # If it's a discrete value - more than one element, use cross entropy loss

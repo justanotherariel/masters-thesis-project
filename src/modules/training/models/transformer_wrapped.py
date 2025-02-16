@@ -80,17 +80,4 @@ class TransformerWrapped(BaseModel):
         pred_obs = x[:, :-1, self._ti.observation_].reshape(*x_obs.shape[:-1], self.obs_shape[2])
         pred_reward = x[:, -1, self._ti.reward_]
 
-        # Softmax the observation
-        for values in self._tensor_values:
-            # Only apply softmax if range has multiple elements
-            if len(values) > 1:
-                # Extract the relevant slice
-                sliced = pred_obs[..., values]
-
-                # Apply softmax along the last dimension
-                softmaxed = F.softmax(sliced, dim=-1)
-
-                # Place back in output
-                pred_obs[..., values] = softmaxed
-
         return pred_obs, pred_reward
