@@ -94,20 +94,19 @@ class UNet(nn.Module):
 
         self.hidden_channels = hidden_channels
 
-        # Down
-        self.down_first = Down(in_obs_shape[-1], self.hidden_channels[0], first=True)
+        # Spatial Action
+        n_fields = in_obs_shape[0] * in_obs_shape[1]
+        self.spatial_action = nn.Sequential(
+            nn.Linear(action_dim, n_fields),
+            nn.ReLU(),
+            nn.Linear(n_fields, n_fields)
+        )
+
+        # Down | First +1 channel for spatial action
+        self.down_first = Down(in_obs_shape[-1] + 1, self.hidden_channels[0], first=True)
         self.down_layers = nn.ModuleList(
             [Down(self.hidden_channels[i], self.hidden_channels[i + 1]) for i in range(len(self.hidden_channels) - 1)]
         )
-
-        # Fusion
-        final_encoder_size_y = in_obs_shape[0] // 2 ** (len(self.hidden_channels) - 1)
-        final_encoder_size_x = in_obs_shape[1] // 2 ** (len(self.hidden_channels) - 1)
-        final_encode_size_flat = final_encoder_size_y * final_encoder_size_x * self.hidden_channels[-1]
-        self.fusion = nn.Linear(final_encode_size_flat + action_dim, final_encode_size_flat)
-
-        # Reward
-        self.reward = nn.Linear(final_encode_size_flat, 1)
 
         # Up
         self.up_layers = nn.ModuleList(
@@ -117,6 +116,14 @@ class UNet(nn.Module):
             ]
         )
         self.up_last = OutConv(self.hidden_channels[0], out_obs_shape[-1])
+        
+        # Reward
+        self.reward = nn.Sequential(
+            nn.Linear(out_obs_shape[0] * out_obs_shape[1] * out_obs_shape[2], 256),
+            nn.ReLU(),
+            nn.Linear(256, 1)
+        )
+
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the network."""
@@ -124,6 +131,10 @@ class UNet(nn.Module):
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
+        
+        # Concatenate spatial action to observation
+        x_action = self.spatial_action(x_action).reshape(x_action.shape[0], x_obs.shape[1], x_obs.shape[2]).unsqueeze(-1)
+        x_obs = torch.cat([x_obs, x_action], dim=-1)
 
         # Permute to (batch_size, channels, height, width)
         pred_obs = x_obs.permute(0, 3, 1, 2)
@@ -136,19 +147,6 @@ class UNet(nn.Module):
             down_out.append(pred_obs)
         down_out = down_out[:-1]  # Discard last output
 
-        # Flatten obs
-        obs_flat = pred_obs.reshape(pred_obs.size(0), -1)
-
-        # Fuse Action with final up output
-        x_action = x_action.view(x_action.size(0), -1)
-        obs_flat = self.fusion(torch.cat([obs_flat, x_action], dim=1))
-
-        # Calculate Reward
-        pred_reward = self.reward(obs_flat)
-
-        # Reshape obs back to (batch_size, channels, height, width)
-        pred_obs = pred_obs.view(pred_obs.size(0), self.hidden_channels[-1], pred_obs.size(2), pred_obs.size(3))
-
         # Up
         for layer, down in zip(self.up_layers, down_out[::-1]):
             pred_obs = layer(pred_obs, down)
@@ -156,5 +154,8 @@ class UNet(nn.Module):
 
         # Permute obs back to (batch_size, height, width, channels)
         pred_obs = pred_obs.permute(0, 2, 3, 1)
+        
+        # Calculate Reward
+        pred_reward = self.reward(pred_obs.reshape(pred_obs.size(0), -1))
 
         return pred_obs, pred_reward
