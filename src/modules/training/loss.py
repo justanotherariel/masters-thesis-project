@@ -60,9 +60,12 @@ class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
     obs_loss_weight: float = 0.8
     reward_loss_weight: float = 0.2
-    two_agent_penalty_loss_weight: float = 0.0
+    two_agent_penalty_loss_weight: float | None = None
 
     def __post_init__(self):
+        
+        if self.two_agent_penalty_loss_weight is None:
+            self.two_agent_penalty_loss_weight = max(1 - self.obs_loss_weight - self.reward_loss_weight, 0)
 
         if self.discrete_loss_fn is None:
             raise ValueError("discrete_loss_fn must be provided")
@@ -120,7 +123,7 @@ class MinigridLoss(BaseLoss):
             "Observation Loss - Color": obs_loss[1].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
             "Observation Loss - State": obs_loss[2].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
             "Observation Loss - Agent": obs_loss[3].item() * self.obs_loss_weight * (1 / len(self._tensor_values)),
-            "Observation Loss - Two Agent Penalty": two_agent_penalty_loss.item() * self.two_agent_penalty_loss_weight,
+            "Two Agent Penalty": two_agent_penalty_loss.item() * self.two_agent_penalty_loss_weight,
             "Reward Loss": reward_loss.item() * self.reward_loss_weight,
         }
         return total_loss, losses
