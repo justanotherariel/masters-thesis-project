@@ -55,7 +55,7 @@ def download_models():
     else:
         # download the file called config.yaml from the artifact, which includes sweep parameters
         for file in config_artefact.files():
-            if file.name == "config.yaml":
+            if file.name == "complete_config.yaml" or file.name == "config.yaml":
                 print(f"Downloading {file.name} from {config_artefact.name}")
                 file.download(root=downloaded_conf_path, replace=True)
 
