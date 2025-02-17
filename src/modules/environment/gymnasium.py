@@ -260,6 +260,7 @@ class MinigridSamplerExtensive(TransformationBlock):
             for i in range(len(observations_list)):
                 if np.array_equal(initial_obs, observations_list[i]):
                     x_idx = i
+                    self._deduplicated_observations += 1
                     break
             if not x_idx:
                 observations_list.append(initial_obs)
@@ -278,6 +279,7 @@ class MinigridSamplerExtensive(TransformationBlock):
                 for i in range(len(observations_list)):
                     if np.array_equal(new_obs, observations_list[i]):
                         y_idx = i
+                        self._deduplicated_observations += 1
                         break
                 if not y_idx:
                     observations_list.append(new_obs)
@@ -314,6 +316,8 @@ class MinigridSamplerExtensive(TransformationBlock):
         validation_grids: list[minigrid.core.grid.Grid] = []
 
         current_env = 0
+        
+        self._deduplicated_observations = 0
 
         while current_env < total_envs:
             # Reset environment to get a new layout
@@ -360,6 +364,9 @@ class MinigridSamplerExtensive(TransformationBlock):
             DatasetGroup.VALIDATION: validation_grids,
             DatasetGroup.ALL: train_grids + validation_grids,
         }
+        
+        len_indices = sum([ind.shape[0] for ind in data.indices[DatasetGroup.ALL]])
+        logger.info(f"Deduplicated {self._deduplicated_observations} observations out of {len_indices} ({self._deduplicated_observations / len_indices:.2}%).")
 
         env.close()
         return data
