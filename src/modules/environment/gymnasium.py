@@ -9,6 +9,7 @@ import minigrid.core.grid
 import numpy as np
 import numpy.typing as npt
 from gymnasium import spaces
+from minigrid.wrappers import NoDeath
 from minigrid.core.constants import COLORS, OBJECT_TO_IDX, STATE_TO_IDX
 from tqdm import tqdm
 
@@ -43,6 +44,9 @@ class GymnasiumBuilder(TransformationBlock):
         # Check if the environment is a minigrid environment
         if not issubclass(type(self.env.unwrapped), minigrid.minigrid_env.MiniGridEnv):
             raise ValueError("Currently only MiniGrid environments are supported.")
+
+        # Make Lava give negative rewards instead of termintating the episode
+        self.env = NoDeath(self.env, no_death_types=("lava",), death_cost=-1.0)
 
         self.env = FullyObsWrapper(self.env)  # Output fully observable grid as numpy array
         self.env.reset(seed=42)  # Seed the environment
