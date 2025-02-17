@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 
-# Function to run a command for specified duration (in hours)
+# Function to run a command for specified duration (in hours and optional minutes)
 run_command() {
-    local cmd="$1"
-    local duration_hours="$2"
+    local id="$1"
+    local hours="$2"
+    local minutes="${3:-0}"
+    
+    # Convert time to seconds unless in test mode
+    if [[ $test_mode == true ]]; then
+        duration=60
+    else
+        duration=$((hours * 3600 + minutes * 60))
+    fi
     
     # Start the command in background
-    eval "$cmd" &
+    eval "$base_command$id" &
     local pid=$!
     
-    # Sleep for specified duration (convert hours to seconds)
-    sleep $(($duration_hours * 3600))
-    # sleep 60
+    # Sleep for specified duration
+    sleep $duration
     
     # Kill all python processes
     pkill -f python
@@ -20,13 +27,27 @@ run_command() {
     kill -9 $pid 2>/dev/null
     
     # Wait a bit to ensure cleanup
-    sleep 5
+    sleep 10
 }
 
-# List of commands with their durations (in hours)
-run_command "wandb agent a-ebersberger-tu-delft/Thesis/ok9mfhxm" 3    # U-Net Rebalance Loss
-run_command "wandb agent a-ebersberger-tu-delft/Thesis/fkinrfy0" 2    # U-Net CE Loss
-run_command "wandb agent a-ebersberger-tu-delft/Thesis/mubff62j" 3    # Transformer Rebalance Loss
-run_command "wandb agent a-ebersberger-tu-delft/Thesis/r5n2mxex" 3    # Transformer CE Loss
+# Create
+if [[ $1 == "create" ]]; then
+    wandb sweep conf/sweep/unet.yaml
+    wandb sweep conf/sweep/transformer.yaml
+    exit
+fi
+
+# Set test mode based on argument
+test_mode=false
+if [[ $1 == "test" ]]; then
+    test_mode=true
+fi
+
+# Base command to run
+base_command="wandb agent a-ebersberger-tu-delft/Thesis/"
+
+# List of commands with their durations
+run_command "ypo2nbbv" 5    # Transformer
+run_command "miu2s9va" 5    # U-Net
 
 echo "All commands completed"
