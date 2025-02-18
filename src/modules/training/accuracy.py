@@ -46,22 +46,34 @@ class MinigridAccuracy(BaseAccuracy):
         target_obs_argmax = obs_argmax(target_obs, self._ti)
         feature_obs_argmax = obs_argmax(feature_obs, self._ti)
 
-        object_acc = self._calc_object_color_acc(pred_obs_argmax, target_obs_argmax)
-        color_acc = self._calc_color_acc(pred_obs_argmax, target_obs_argmax)
-        state_acc = self._calc_state_acc(pred_obs_argmax, target_obs_argmax)
-        agent_acc = self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax)
-        reward_acc = self._calc_reward_acc(pred_reward, target_reward)
+        accuracies = {}
+        accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward))
+        
+        accuracies.update(self._calc_object_acc(pred_obs_argmax, target_obs_argmax))
+        accuracies.update(self._calc_color_acc(pred_obs_argmax, target_obs_argmax))
+        accuracies.update(self._calc_state_acc(pred_obs_argmax, target_obs_argmax))
+        accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax))
+        accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
 
-        accuracies = {
-            "Object Accuracy": object_acc,
-            "Color Accuracy": color_acc,
-            "State Accuracy": state_acc,
-        }
-        accuracies.update(agent_acc)
-        accuracies.update(reward_acc)
         return accuracies
 
-    def _calc_object_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
+    def _calc_transition_acc(
+        self,
+        pred_obs_argmax: torch.Tensor,
+        pred_reward: torch.Tensor,
+        target_obs_argmax: torch.Tensor,
+        target_reward: torch.Tensor,
+    ):
+        observation_correct = (pred_obs_argmax == target_obs_argmax).all(dim=[1, 2, 3])
+        reward_correct = torch.isclose(pred_reward, target_reward, atol=0.1).squeeze()
+        total_correct = (observation_correct & reward_correct).sum().item()
+        n_samples = target_obs_argmax.shape[0]
+
+        return {
+            "Transition Accuracy": total_correct / n_samples,
+        }
+
+    def _calc_object_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
         Calculate the accuracy of the object component of the observation tensor. Each object class is weighted
         equally.
@@ -78,8 +90,9 @@ class MinigridAccuracy(BaseAccuracy):
             target_obs_argmax[..., 0][truth_mask], minlength=self._ti.info["observation"][0][1]
         )
         pred_class_counts = pred_class_counts[~zero_class_counts]
-
-        return (pred_class_counts / target_class_counts).mean().item()
+        
+        acc = (pred_class_counts / target_class_counts).mean().item()
+        return { "Object Accuracy": acc }
 
     def _calc_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -108,7 +121,8 @@ class MinigridAccuracy(BaseAccuracy):
         )
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
-        return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        acc = (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        return { "Color Accuracy": acc }
 
     def _calc_state_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -137,7 +151,8 @@ class MinigridAccuracy(BaseAccuracy):
         )
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
-        return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        acc = (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        return { "State Accuracy": acc }
 
     def _calc_agent_acc(
         self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
