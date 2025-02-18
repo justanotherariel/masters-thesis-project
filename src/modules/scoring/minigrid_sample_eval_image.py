@@ -1,4 +1,5 @@
 import io
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -14,11 +15,9 @@ from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
+from src.modules.training.accuracy import obs_argmax
 from src.modules.training.datasets.simple import SimpleDatasetDefault
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
-from src.modules.training.accuracy import obs_argmax
-
-from dataclasses import dataclass
 
 from .data_transform import dataset_to_list
 
@@ -26,10 +25,11 @@ logger = Logger()
 
 ACTION_STR = [actions.Actions(i).name for i in range(7)]
 
+
 @dataclass
 class MinigridSampleEvalImage(TransformationBlock):
     """Score the predictions of the model."""
-    
+
     constrain_to_one_agent: bool = False
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
@@ -53,7 +53,14 @@ class MinigridSampleEvalImage(TransformationBlock):
         for dataset_group in data.grids:
             if dataset_group == DatasetGroup.ALL:
                 continue
-            find_errors(data, self.info, dataset_group, self.info.output_dir, constrain_to_one_agent=self.constrain_to_one_agent, prefix="constrained" if self.constrain_to_one_agent else "")
+            find_errors(
+                data,
+                self.info,
+                dataset_group,
+                self.info.output_dir,
+                constrain_to_one_agent=self.constrain_to_one_agent,
+                prefix="constrained" if self.constrain_to_one_agent else "",
+            )
 
         logger.info("Sample evaluation (image) complete.")
         return data
@@ -73,7 +80,7 @@ def find_errors(
     :param index_name: The name of the indice.
     """
     prefix = f"{prefix}_" if prefix else ""
-    
+
     indices = data.indices[dataset_group]
     target_data = dataset_to_list(data, dataset_group)
     x_obs, x_action = target_data[0]

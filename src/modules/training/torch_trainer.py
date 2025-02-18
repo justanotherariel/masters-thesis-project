@@ -361,7 +361,8 @@ class TorchTrainer(TransformationBlock):
 
                 # Remove old checkpoints
                 if (
-                    self.model_storage_conf.save_checkpoints_keep_every_x_epochs == 0 or epoch % self.model_storage_conf.save_checkpoints_keep_every_x_epochs != 0
+                    self.model_storage_conf.save_checkpoints_keep_every_x_epochs == 0
+                    or epoch % self.model_storage_conf.save_checkpoints_keep_every_x_epochs != 0
                 ) and self.model_storage.get_model_checkpoint_path(epoch - 1).exists():
                     self.model_storage.get_model_checkpoint_path(epoch - 1).unlink()
 
@@ -371,8 +372,8 @@ class TorchTrainer(TransformationBlock):
                     validation_loader,
                     epoch=epoch,
                 )
-                self.last_val_loss = loss['Loss']
-                
+                self.last_val_loss = loss["Loss"]
+
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
                 log_dict(loss, epoch, "Validation")
                 log_dict(accuarcy, epoch, "Validation")
@@ -447,7 +448,7 @@ class TorchTrainer(TransformationBlock):
             # Save metrics
             append_to_dict(epoch_loss, loss_dict)
             append_to_dict(epoch_accuracy, acc_dict)
-            pbar.set_postfix(loss=sum(epoch_loss['Loss']) / len(epoch_loss['Loss']))
+            pbar.set_postfix(loss=sum(epoch_loss["Loss"]) / len(epoch_loss["Loss"]))
 
         return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
@@ -499,7 +500,7 @@ class TorchTrainer(TransformationBlock):
                 # Save metrics
                 append_to_dict(epoch_loss, loss_dict)
                 append_to_dict(epoch_accuracy, acc_dict)
-                pbar.set_postfix(loss=sum(epoch_loss['Loss']) / len(epoch_loss['Loss']))
+                pbar.set_postfix(loss=sum(epoch_loss["Loss"]) / len(epoch_loss["Loss"]))
         return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
     def patience_exceeded(self) -> bool:

@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 
 import torch
+from torch.nn import functional as F
 
 from src.typing.pipeline_objects import PipelineInfo
-from torch.nn import functional as F
 
 
 class BaseAccuracy:
@@ -25,7 +25,7 @@ class BaseAccuracy:
 @dataclass
 class MinigridAccuracy(BaseAccuracy):
     constrain_to_one_agent: bool = field(default=False, repr=False)
-    
+
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         self._into = info
         self._ti = info.model_ti
@@ -67,12 +67,16 @@ class MinigridAccuracy(BaseAccuracy):
         equally.
         """
 
-        target_class_counts = torch.bincount(target_obs_argmax[..., 0].view(-1), minlength=self._ti.info["observation"][0][1])
+        target_class_counts = torch.bincount(
+            target_obs_argmax[..., 0].view(-1), minlength=self._ti.info["observation"][0][1]
+        )
         zero_class_counts = target_class_counts == 0
         target_class_counts = target_class_counts[~zero_class_counts]
 
         truth_mask = target_obs_argmax[..., 0] == pred_obs_argmax[..., 0]
-        pred_class_counts = torch.bincount(target_obs_argmax[..., 0][truth_mask], minlength=self._ti.info["observation"][0][1])
+        pred_class_counts = torch.bincount(
+            target_obs_argmax[..., 0][truth_mask], minlength=self._ti.info["observation"][0][1]
+        )
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
         return (pred_class_counts / target_class_counts).mean().item()
@@ -82,7 +86,9 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the color component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        org_target_class_counts = torch.bincount(target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1])
+        org_target_class_counts = torch.bincount(
+            target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1]
+        )
         zero_class_counts = org_target_class_counts == 0
         org_target_class_counts = org_target_class_counts[~zero_class_counts]
 
@@ -90,12 +96,16 @@ class MinigridAccuracy(BaseAccuracy):
         pred_obs_argmax = pred_obs_argmax[object_truth_mask]
         target_obs_argmax = target_obs_argmax[object_truth_mask]
 
-        target_class_counts = torch.bincount(target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1])
+        target_class_counts = torch.bincount(
+            target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1]
+        )
         zero_class_counts = target_class_counts == 0
         target_class_counts = target_class_counts[~zero_class_counts]
 
         truth_mask = target_obs_argmax[..., 1] == pred_obs_argmax[..., 1]
-        pred_class_counts = torch.bincount(target_obs_argmax[..., 1][truth_mask], minlength=self._ti.info["observation"][1][1])
+        pred_class_counts = torch.bincount(
+            target_obs_argmax[..., 1][truth_mask], minlength=self._ti.info["observation"][1][1]
+        )
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
         return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
@@ -105,7 +115,9 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the state component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        org_target_class_counts = torch.bincount(target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1])
+        org_target_class_counts = torch.bincount(
+            target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1]
+        )
         zero_class_counts = org_target_class_counts == 0
         org_target_class_counts = org_target_class_counts[~zero_class_counts]
 
@@ -113,17 +125,23 @@ class MinigridAccuracy(BaseAccuracy):
         pred_obs_argmax = pred_obs_argmax[object_truth_mask]
         target_obs_argmax = target_obs_argmax[object_truth_mask]
 
-        target_class_counts = torch.bincount(target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1])
+        target_class_counts = torch.bincount(
+            target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1]
+        )
         zero_class_counts = target_class_counts == 0
         target_class_counts = target_class_counts[~zero_class_counts]
 
         truth_mask = target_obs_argmax[..., 2] == pred_obs_argmax[..., 2]
-        pred_class_counts = torch.bincount(target_obs_argmax[..., 2][truth_mask], minlength=self._ti.info["observation"][2][1])
+        pred_class_counts = torch.bincount(
+            target_obs_argmax[..., 2][truth_mask], minlength=self._ti.info["observation"][2][1]
+        )
         pred_class_counts = pred_class_counts[~zero_class_counts]
 
         return (pred_class_counts.sum() / org_target_class_counts.sum()).item()
 
-    def _calc_agent_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor):
+    def _calc_agent_acc(
+        self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
+    ):
         # How often was only one agent in the observation tensor?
         samples_one_agent_pred = (
             pred_obs_argmax[..., 3].view(-1, pred_obs_argmax.shape[1] * pred_obs_argmax.shape[2]) != 0
@@ -138,12 +156,17 @@ class MinigridAccuracy(BaseAccuracy):
             return correct.sum().item() / max_correct_samples
 
         # For the samples with only one agent, how often was the agent correctly predicted?
-        perc_samples_agent_correct = agent_correct_perc(pred_obs_argmax, target_obs_argmax, samples_one_agent_pred, target_obs_argmax.shape[0])
+        perc_samples_agent_correct = agent_correct_perc(
+            pred_obs_argmax, target_obs_argmax, samples_one_agent_pred, target_obs_argmax.shape[0]
+        )
 
         # Find samples where the agent was supposed to stay
         samples_stay_mask = (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
         perc_samples_agent_stay_correct = agent_correct_perc(
-            pred_obs_argmax, target_obs_argmax, samples_stay_mask & samples_one_agent_pred, samples_stay_mask.sum().item()
+            pred_obs_argmax,
+            target_obs_argmax,
+            samples_stay_mask & samples_one_agent_pred,
+            samples_stay_mask.sum().item(),
         )
 
         # Find samples where the agent was supposed to rotate
@@ -151,7 +174,10 @@ class MinigridAccuracy(BaseAccuracy):
             dim=[1, 2]
         ) & ~samples_stay_mask
         perc_samples_agent_rotated_correct = agent_correct_perc(
-            pred_obs_argmax, target_obs_argmax, samples_same_field_mask & samples_one_agent_pred, samples_same_field_mask.sum().item()
+            pred_obs_argmax,
+            target_obs_argmax,
+            samples_same_field_mask & samples_one_agent_pred,
+            samples_same_field_mask.sum().item(),
         )
 
         # Find samples where the agent was supposed to move
@@ -161,7 +187,10 @@ class MinigridAccuracy(BaseAccuracy):
             & ~samples_same_field_mask
         )
         perc_samples_agent_moved_correct = agent_correct_perc(
-            pred_obs_argmax, target_obs_argmax, samples_moved_mask & samples_one_agent_pred, samples_moved_mask.sum().item()
+            pred_obs_argmax,
+            target_obs_argmax,
+            samples_moved_mask & samples_one_agent_pred,
+            samples_moved_mask.sum().item(),
         )
 
         return {
@@ -171,29 +200,29 @@ class MinigridAccuracy(BaseAccuracy):
             "Agent Rotate Accuracy": perc_samples_agent_rotated_correct,
             "Agent Move Accuracy": perc_samples_agent_moved_correct,
         }
-        
+
     def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
         reward_mask = target_reward != 0
-        
+
         reward_predicted_correct = (pred_reward[reward_mask] == target_reward[reward_mask]).sum().item()
-        
+
         no_reward_predicted_correct = (pred_reward[~reward_mask] == target_reward[~reward_mask]).sum().item()
-        
+
         return {
             "Reward Accuracy": reward_predicted_correct / reward_mask.sum().item(),
             "No Reward Accuracy": no_reward_predicted_correct / (~reward_mask).sum().item(),
         }
 
+
 def obs_argmax(obs, ti, *, constrain_to_one_agent: bool = False):
     tensor_values = [ti.observation[i] for i in range(len(ti.observation))]
     tensor_values = tensor_values[:-1] if constrain_to_one_agent else tensor_values
-    
+
     obs_argmax = torch.zeros(*obs.shape[:3], len(ti.observation), dtype=torch.uint8, device=obs.device)
     for idx, values in enumerate(tensor_values):
         obs_argmax[..., idx] = obs[..., values].argmax(dim=-1)
 
     if constrain_to_one_agent:
-        
         # Softmax the logits and find the most probable agent location
         agent_softmax = F.softmax(obs[..., ti.observation[3]], dim=-1)
         min_values, min_indices = agent_softmax[..., 0].view(obs.shape[0], -1).min(dim=1)
@@ -201,10 +230,10 @@ def obs_argmax(obs, ti, *, constrain_to_one_agent: bool = False):
         # Find the agent in the observation tensor
         x_coords = min_indices // obs.shape[2]
         y_coords = min_indices % obs.shape[2]
-        
+
         batch_indices = torch.arange(obs.shape[0])
         agent_values = obs[batch_indices, x_coords, y_coords][..., ti.observation[3]].argmax(dim=-1).to(torch.uint8)
 
         obs_argmax[batch_indices, x_coords, y_coords, 3] = agent_values
-    
+
     return obs_argmax

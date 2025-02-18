@@ -6,15 +6,10 @@ Heavily inspired by
 """
 
 import math
-from typing import Optional, Tuple
 
 import torch
 from torch import nn
 
-from typing import Optional, Tuple
-import torch
-import torch.nn as nn
-import math
 
 class ScaledDotProductAttention(nn.Module):
     """
@@ -49,6 +44,7 @@ class ScaledDotProductAttention(nn.Module):
         v = score @ v
 
         return v, score
+
 
 class MultiHeadedAttention(nn.Module):
     def __init__(self, d_model, n_heads):
@@ -156,11 +152,11 @@ class TransformerSepAction(nn.Module):
         in_obs_shape: tuple[int, int, int],
         out_obs_shape: tuple[int, int, int],
         action_dim: int,
-        d_model: int,    # Internal representation dimension
-        n_heads: int,   # Number of attention heads
+        d_model: int,  # Internal representation dimension
+        n_heads: int,  # Number of attention heads
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
-        drop_prob: float = 0.1, # Dropout probability
+        drop_prob: float = 0.1,  # Dropout probability
     ):
         super().__init__()
 
@@ -174,14 +170,12 @@ class TransformerSepAction(nn.Module):
         # Input Projection and Positional Encoding
         self.obs_in_up = nn.Linear(in_obs_shape[-1], d_model)
         self.action_in_up = nn.Linear(action_dim, d_model)
-        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.obs_token_len +1, d_model))
+        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.obs_token_len + 1, d_model))
 
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(
-                    d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob
-                )
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
                 for _ in range(n_layers)
             ]
         )
@@ -191,7 +185,6 @@ class TransformerSepAction(nn.Module):
         self.reward_out_down = nn.Linear(d_model, 1)
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
@@ -200,7 +193,7 @@ class TransformerSepAction(nn.Module):
         x_obs = x_obs.view(x_obs.shape[0], self.obs_token_len, self.in_obs_shape[-1])
         x_obs = self.obs_in_up(x_obs)
         x_action = self.action_in_up(x_action).unsqueeze(dim=1)
-        
+
         # Concatenate obs and action and add positional encoding
         x = torch.cat([x_obs, x_action], dim=1)
         x = x + self.input_pos_embedding
@@ -215,17 +208,18 @@ class TransformerSepAction(nn.Module):
 
         return pred_obs, pred_reward
 
+
 class TransformerCombAction(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
         out_obs_shape: tuple[int, int, int],
         action_dim: int,
-        d_model: int,    # Internal representation dimension
-        n_heads: int,   # Number of attention heads
+        d_model: int,  # Internal representation dimension
+        n_heads: int,  # Number of attention heads
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
-        drop_prob: float = 0.1, # Dropout probability
+        drop_prob: float = 0.1,  # Dropout probability
     ):
         super().__init__()
 
@@ -235,7 +229,7 @@ class TransformerCombAction(nn.Module):
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
         self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
-        
+
         self.input_token_dim = in_obs_shape[-1] + action_dim
 
         # Input Projection and Positional Encoding
@@ -245,9 +239,7 @@ class TransformerCombAction(nn.Module):
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(
-                    d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob
-                )
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
                 for _ in range(n_layers)
             ]
         )
@@ -256,20 +248,19 @@ class TransformerCombAction(nn.Module):
         self.out_down = nn.Linear(d_model, out_obs_shape[-1])
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
-        
+
         # Vars
         n_samples = x_obs.shape[0]
 
         # Reshape the input to a token sequence
         # Expand action and add to each obs token
         x = torch.zeros(n_samples, self.obs_token_len, self.input_token_dim, device=x_obs.device)
-        x[..., :x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
-        x[..., x_obs.shape[-1]:] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
-        
+        x[..., : x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
+        x[..., x_obs.shape[-1] :] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
+
         # Embed token sequence and add positional encoding
         x = self.in_up(x)
         x = x + self.input_pos_embedding
@@ -279,7 +270,7 @@ class TransformerCombAction(nn.Module):
             x = layer(x)
 
         # Extract obs and reward
-        pred_obs = x[..., :x_obs.shape[-1]].reshape(n_samples, *self.out_obs_shape)
+        pred_obs = x[..., : x_obs.shape[-1]].reshape(n_samples, *self.out_obs_shape)
         pred_reward = x[..., -1].mean(dim=-1, keepdim=True)
 
         return pred_obs, pred_reward

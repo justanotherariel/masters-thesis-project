@@ -96,11 +96,7 @@ class UNet(nn.Module):
 
         # Spatial Action
         n_fields = in_obs_shape[0] * in_obs_shape[1]
-        self.spatial_action = nn.Sequential(
-            nn.Linear(action_dim, n_fields),
-            nn.ReLU(),
-            nn.Linear(n_fields, n_fields)
-        )
+        self.spatial_action = nn.Sequential(nn.Linear(action_dim, n_fields), nn.ReLU(), nn.Linear(n_fields, n_fields))
 
         # Down | First +1 channel for spatial action
         self.down_first = Down(in_obs_shape[-1] + 1, self.hidden_channels[0], first=True)
@@ -116,14 +112,11 @@ class UNet(nn.Module):
             ]
         )
         self.up_last = OutConv(self.hidden_channels[0], out_obs_shape[-1])
-        
+
         # Reward
         self.reward = nn.Sequential(
-            nn.Linear(out_obs_shape[0] * out_obs_shape[1] * out_obs_shape[2], 256),
-            nn.ReLU(),
-            nn.Linear(256, 1)
+            nn.Linear(out_obs_shape[0] * out_obs_shape[1] * out_obs_shape[2], 256), nn.ReLU(), nn.Linear(256, 1)
         )
-
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the network."""
@@ -131,9 +124,11 @@ class UNet(nn.Module):
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
-        
+
         # Concatenate spatial action to observation
-        x_action = self.spatial_action(x_action).reshape(x_action.shape[0], x_obs.shape[1], x_obs.shape[2]).unsqueeze(-1)
+        x_action = (
+            self.spatial_action(x_action).reshape(x_action.shape[0], x_obs.shape[1], x_obs.shape[2]).unsqueeze(-1)
+        )
         x_obs = torch.cat([x_obs, x_action], dim=-1)
 
         # Permute to (batch_size, channels, height, width)
@@ -154,7 +149,7 @@ class UNet(nn.Module):
 
         # Permute obs back to (batch_size, height, width, channels)
         pred_obs = pred_obs.permute(0, 2, 3, 1)
-        
+
         # Calculate Reward
         pred_reward = self.reward(pred_obs.reshape(pred_obs.size(0), -1))
 

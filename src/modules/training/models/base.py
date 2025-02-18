@@ -1,5 +1,7 @@
 from torch import nn
+
 from src.typing.pipeline_objects import PipelineInfo
+
 
 class BaseModel:
     module: nn.Module
@@ -20,6 +22,7 @@ class BaseModel:
     def forward(self, x):
         raise NotImplementedError("BaseModel is an abstract class and should not be called.")
 
+
 class MinigridModel:
     module: None | nn.Module
 
@@ -30,7 +33,7 @@ class MinigridModel:
     ):
         self.model_cls = model_cls
         self.name = model_cls.func.__name__
-        
+
         # Transformer parameters
         self._model_args = model_args
 

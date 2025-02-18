@@ -63,7 +63,6 @@ class MinigridLoss(BaseLoss):
     two_agent_penalty_loss_weight: float | None = None
 
     def __post_init__(self):
-        
         if self.two_agent_penalty_loss_weight is None:
             self.two_agent_penalty_loss_weight = max(1 - self.obs_loss_weight - self.reward_loss_weight, 0)
 
@@ -113,8 +112,12 @@ class MinigridLoss(BaseLoss):
         reward_loss = F.mse_loss(predicted_reward, target_reward)
 
         # Final loss combining original and consistency terms
-        total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss + self.two_agent_penalty_loss_weight * two_agent_penalty_loss
-        
+        total_loss = (
+            self.obs_loss_weight * obs_loss.mean()
+            + self.reward_loss_weight * reward_loss
+            + self.two_agent_penalty_loss_weight * two_agent_penalty_loss
+        )
+
         # Logging
         losses = {
             "Loss": total_loss.item(),
@@ -127,19 +130,21 @@ class MinigridLoss(BaseLoss):
             "Reward Loss": reward_loss.item() * self.reward_loss_weight,
         }
         return total_loss, losses
-    
-    def two_agent_penalty_loss(self, predicted_next_obs: torch.Tensor) -> torch.Tensor:        
+
+    def two_agent_penalty_loss(self, predicted_next_obs: torch.Tensor) -> torch.Tensor:
         # Get the model certainty of there being an agent in each grid cell
-        agent_certainty = (1-predicted_next_obs[..., self._ti.observation[3][0]]).view(predicted_next_obs.shape[0], -1)
-        
+        agent_certainty = (1 - predicted_next_obs[..., self._ti.observation[3][0]]).view(
+            predicted_next_obs.shape[0], -1
+        )
+
         # Calculate certainty of having two agents in different locations
-        joint_agent_certainty = torch.einsum('bi,bj->bij', agent_certainty, agent_certainty)
-        
+        joint_agent_certainty = torch.einsum("bi,bj->bij", agent_certainty, agent_certainty)
+
         # Zero out the main diagonal as we don't want to penalize the model for predicting an agent on the same location
         main_diag_mask = ~torch.eye(joint_agent_certainty.shape[1], dtype=bool, device=joint_agent_certainty.device)
         joint_agent_certainty = joint_agent_certainty * main_diag_mask
-        
+
         # Calculate the penalty
-        penalty = joint_agent_certainty.sum(dim=[1, 2]) / (joint_agent_certainty.shape[1]**2)
-        
+        penalty = joint_agent_certainty.sum(dim=[1, 2]) / (joint_agent_certainty.shape[1] ** 2)
+
         return penalty.mean()
