@@ -37,8 +37,8 @@ class MinigridAccuracy(TransformationBlock):
                 logger.info(f"{key:<{longest_key}}: {value}")
             logger.info("")
 
-            # If the predications are from a cached model, log final accuracies to wandb
-            if not data.logged_accuracies_to_wandb:
-                log_dict(data.accuracies[dg], -1, dg_name)
+            # Log to external logger
+            log_dict(data.accuracies[dg], dg_name)
+        logger.log_to_external({f"Epoch": data.model_last_epoch_recorded+1})
 
         return data

@@ -187,7 +187,7 @@ class TorchTrainer(TransformationBlock):
             sec_str = "seconds" if secs != 1.0 else "second"
             logger.info(f"Training took {f'{mins} {min_str} and ' if mins > 0 else ''}{secs:.2f} {sec_str}")
 
-            data.logged_accuracies_to_wandb = True
+            data.model_last_epoch_recorded = self.last_epoch
 
         # Evaluate the model
         if DatasetGroup.TRAIN in self.to_predict:
@@ -327,9 +327,6 @@ class TorchTrainer(TransformationBlock):
         :param validation_loader: Dataloader for the training data. (can be empty)
         """
 
-        logger.external_define_metric("Train/Loss", "Epoch")
-        logger.external_define_metric("Validation/Loss", "Epoch")
-
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
@@ -337,15 +334,18 @@ class TorchTrainer(TransformationBlock):
         # Track validation loss for early stopping
         self.lowest_val_loss = np.inf
         self.last_val_loss = np.inf
+        
+        # Track the number of epochs trained
+        self.last_epoch = 0
 
-        for epoch in range(start_epoch, self.epochs):
+        for epoch in range(start_epoch, self.epochs):            
             # Train using train_loader
-            loss, accuarcy = self.train_one_epoch(train_loader, epoch)
+            loss, accuracy = self.train_one_epoch(train_loader, epoch)
             logger.debug(f"Epoch {epoch} Train Loss: {loss['Loss']}")
 
             # Log train loss
-            log_dict(loss, epoch, "Train")
-            log_dict(accuarcy, epoch, "Train")
+            log_dict(loss, "Train")
+            log_dict(accuracy, "Train")
 
             # Step the scheduler
             if self.initialized_scheduler is not None:
@@ -368,27 +368,33 @@ class TorchTrainer(TransformationBlock):
 
             # Compute validation loss
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
-                loss, accuarcy = self.val_one_epoch(
+                loss, accuracy = self.val_one_epoch(
                     validation_loader,
                     epoch=epoch,
                 )
                 self.last_val_loss = loss["Loss"]
 
                 logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
-                log_dict(loss, epoch, "Validation")
-                log_dict(accuarcy, epoch, "Validation")
+                log_dict(loss, "Validation")
+                log_dict(accuracy, "Validation")
 
                 # Early stopping
                 if self.patience_exceeded():
                     logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
                     logger.log_to_external(
                         message={"Epochs": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
+                        commit=False
                     )
+                    logger.log_to_external({"Epoch": epoch})
                     break
+                        
+            # Log Epoch and commit Wandb Logs
+            logger.log_to_external({"Epoch": epoch})
+            self.last_epoch = epoch
 
-            # Log the trained epochs to wandb after finishing training
-            # Marks the true Epochs trained when early stopping is used
-            logger.log_to_external(message={"Epochs": epoch + 1})
+        # Log the trained epochs to wandb after finishing training
+        # Marks the true Epochs trained when early stopping is used
+        logger.log_to_external(message={"Epochs": self.last_epoch + 1})
 
     def train_one_epoch(
         self,
@@ -558,15 +564,9 @@ def average_dict(
 
 def log_dict(
     target: dict[str, float],
-    epoch: int,
     prefix: str,
+    commit: bool = False,
 ) -> None:
     """Log the values of target."""
     for key, value in target.items():
-        message = {
-            f"{prefix}/{key}": value,
-        }
-        if epoch >= 0:
-            message["Epoch"] = epoch
-
-        logger.log_to_external(message)
+        logger.log_to_external({ f"{prefix}/{key}": value }, commit=commit)

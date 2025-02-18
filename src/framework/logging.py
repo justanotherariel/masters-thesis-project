@@ -87,15 +87,6 @@ class Logger:
                     title=plot_data["title"],
                     xname=plot_data["xname"],
                 )
-                wandb.log({plot_data["title"]: plot}, commit=False, **kwargs)
+                wandb.log({plot_data["title"]: plot}, **kwargs)
             else:
                 wandb.log(message, **kwargs)
-
-    def external_define_metric(self, metric: str, metric_type: str) -> None:
-        """Define a metric in an external service.
-
-        :param metric: The metric to define
-        :param metric_type: The type of the metric
-        """
-        if wandb.run:
-            wandb.define_metric(metric, step_metric=metric_type)

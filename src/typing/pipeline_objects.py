@@ -36,7 +36,7 @@ class PipelineData:
 
     # Predictions
     predictions: dict[DatasetGroup, list[Any]] = field(default_factory=lambda: {})
-    logged_accuracies_to_wandb: bool = False
+    model_last_epoch_recorded: int = 0
     accuracies: dict[DatasetGroup, dict[str, float]] = field(default_factory=lambda: {})
 
     def check_data(self) -> None:
