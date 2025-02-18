@@ -6,7 +6,7 @@ method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: U-Net | AgentOnly
+name: U-Net | fixed loss + arch change
 metric:
   name: Train/Agent Accuracy
   goal: maximize
@@ -15,9 +15,14 @@ parameters:
   model:
     value: unet_extensive
 
-  # model.train_sys.steps.0.epochs:
-  #   values: [500, 600, 700]
+  model.train_sys.steps.0.epochs:
+    value: 500
 
+  # n_trials:
+  #   value: 5
+
+
+  # Optimizer/Scheduler Parameters
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
     min: 1e-4
@@ -33,6 +38,14 @@ parameters:
     min: 50
     max: 300
 
+
+  # # Loss Parameters
+  # model.train_sys.steps.0.loss.obs_loss_weight:
+  #   distribution: uniform
+  #   min: 0.1
+  #   max: 0.9
+
+
   # Model parameters
   model.train_sys.steps.0.model.hidden_channels:
     values:
@@ -44,4 +57,3 @@ parameters:
       - ${sweep_data.model_sizes.5}
       - ${sweep_data.model_sizes.6}
       - ${sweep_data.model_sizes.7}
-      - ${sweep_data.model_sizes.8}

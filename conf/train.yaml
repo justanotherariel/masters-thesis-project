@@ -13,12 +13,15 @@ defaults:
   # - model_download/divine-sweep-43@model       # Transformer - agent only
   # - model_download/fearless-sweep-22@model     # U-Net - agent only
 
+  # - model_download/dazzling-sweep-45@model      # Transformer - best with two_agent_penalty
+  # - model_download/serene-sweep-11@model        # Transformer - best CombAction
+
   - _self_
 
 ###############
 #    CONF     #
 ###############
-# n_trials: 2
+# n_trials: 5
 # trial_idx: 0
 
 cache_path: data/cache
@@ -26,12 +29,11 @@ debug: false
 
 sweep_data:
   model_sizes:
-    - [32, 32, 64, 64]
-    - [16, 16, 32, 32]
-    - [16, 32, 64, 128]
+    - [16, 32]
     - [16, 32, 64]
+    - [16, 32, 64, 128]
     - [32, 64]
     - [32, 64, 128]
-    - [64, 128]
+    - [48, 96]
     - [48, 96, 192]
-    - [48, 96, 192, 384]
+    - [64, 128]

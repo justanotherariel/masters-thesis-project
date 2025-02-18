@@ -8,6 +8,7 @@ env_sys:
       # environment: MiniGrid-Empty-5x5-v0
       # environment: MiniGrid-Fetch-8x8-N3-v0
       environment: MiniGrid-LavaCrossingS9N3-v0
+      # environment: MiniGrid-SimpleCrossingS9N3-v0
       # environment: MiniGrid-LavaCrossingS11N5-v0
 
     - _target_: src.modules.environment.gymnasium.MinigridSamplerExtensive
@@ -30,15 +31,18 @@ train_sys:
       n_folds: ${n_trials}
 
       model:
-        _target_: src.modules.training.models.unet_wrapped.UNetWrapped
-        # _target_: src.modules.training.models.unet_wrapped_agent_only.UNetWrappedAgentOnly
-        hidden_channels: [48, 96, 192, 384]
+        _target_: src.modules.training.models.base.MinigridModel
+        model_cls:
+          _partial_: true
+          _target_: src.modules.training.models.unet.UNet
+
+        hidden_channels: [48, 96, 192]
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
-        reward_loss_weight: 0.1
-        two_agent_penalty_loss_weight: 0.1
+        reward_loss_weight: 0.2
+        two_agent_penalty_loss_weight: 0
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:
@@ -71,15 +75,15 @@ train_sys:
         _args_:
           - _target_: hydra.utils.get_class
             path: torch.optim.AdamW
-        lr: 0.001
+        lr: 0.005
 
       scheduler:
         _target_: src.utils.functools.partial
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 100
-        decay_rate: 0.5
+        decay_t: 150
+        decay_rate: 0.7
 
 pred_sys:
   steps:
@@ -91,6 +95,4 @@ pred_sys:
         # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
-    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
     # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-    #   constrain_to_one_agent: true

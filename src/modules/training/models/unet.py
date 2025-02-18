@@ -86,7 +86,7 @@ class UNet(nn.Module):
         action_dim: int,
         hidden_channels: list[int],
     ):
-        """Initialize the CNN model structure."""
+        """Initialize the U-Net model structure."""
         super().__init__()
 
         if in_obs_shape[:2] != out_obs_shape[:2]:
