@@ -219,9 +219,9 @@ class MinigridAccuracy(BaseAccuracy):
     def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
         reward_mask = target_reward != 0
 
-        reward_predicted_correct = (pred_reward[reward_mask] == target_reward[reward_mask]).sum().item()
+        reward_predicted_correct = torch.isclose(pred_reward[reward_mask], target_reward[reward_mask], atol=0.1).sum().item()
 
-        no_reward_predicted_correct = (pred_reward[~reward_mask] == target_reward[~reward_mask]).sum().item()
+        no_reward_predicted_correct = torch.isclose(pred_reward[~reward_mask], target_reward[~reward_mask], atol=0.1).sum().item()
 
         return {
             "Reward Accuracy": reward_predicted_correct / reward_mask.sum().item(),
