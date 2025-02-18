@@ -33,10 +33,9 @@ def setup_wandb(
     config = OmegaConf.to_container(cfg, resolve=True)
 
     # Get the model name
-    model_target = cfg.model.train_sys.steps[0].model._target_
-    if model_target:
-        model_config_name = model_target.split(".")[-1]
-        config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_config_name
+    model_target = OmegaConf.select(cfg, "model.train_sys.steps[0].model.model_cls._target_")
+    model_config_name = model_target.split(".")[-1] if model_target else 'Unknown'
+    config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_config_name
 
     run = wandb.init(
         config=replace_list_with_dict(config),
