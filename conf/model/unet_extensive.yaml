@@ -94,5 +94,6 @@ pred_sys:
         # - AgentPovCertaintyCalc
         # - AgentPovAccuracyCalc
         - FieldPovAccuracyCalc
+        - RewardAccuracyCalc
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
