@@ -102,3 +102,4 @@ pred_sys:
         - RewardAccuracyCalc
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    #   only_errors: true
