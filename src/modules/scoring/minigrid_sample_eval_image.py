@@ -12,6 +12,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from tqdm import tqdm
+import math
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
@@ -101,7 +102,9 @@ def find_errors(
             x_action_grid = x_action[grid_idx_start : grid_idx_start + grid_index_len]
             x_obs_grid = x_obs[grid_idx_start : grid_idx_start + grid_index_len]
             y_obs_grid = y_obs[grid_idx_start : grid_idx_start + grid_index_len]
+            y_reward_grid = y_reward[grid_idx_start : grid_idx_start + grid_index_len]
             pred_obs_grid = pred_obs[grid_idx_start : grid_idx_start + grid_index_len]
+            pred_reward_grid = pred_reward[grid_idx_start : grid_idx_start + grid_index_len]
 
             # Go through each sample
             for sample_idx in range(grid_index_len):
@@ -132,11 +135,15 @@ def find_errors(
 
                 x_obs_img = render_grid(x_obs_grid[sample_idx], agent_x_obs_pos)
                 y_obs_img = render_grid(y_obs_grid[sample_idx], agent_y_obs_pos)
+                y_reward_val = y_reward_grid[sample_idx].item()
                 pred_obs_img = render_grid(pred_obs_grid[sample_idx], agent_pred_obs_pos)
+                pred_reward_val = pred_reward_grid[sample_idx].item()
+                
+                obs_correct = (y_obs_grid[sample_idx] == pred_obs_grid[sample_idx]).all().item()
+                reward_correct = math.isclose(y_reward_val, pred_reward_val, abs_tol=0.1)
+                prediction_correct = obs_correct and reward_correct
 
-                prediction_correct = (y_obs_grid[sample_idx] == pred_obs_grid[sample_idx]).all()
-
-                writer.add_row(x_obs_img, ACTION_STR[action], y_obs_img, pred_obs_img, prediction_correct)
+                writer.add_row(x_obs_img, ACTION_STR[action], y_obs_img, y_reward_val, pred_obs_img, pred_reward_val, prediction_correct)
 
             grid_idx_start += grid_index_len
 
@@ -221,15 +228,23 @@ class PDFFileWriter:
         self.c.setLineWidth(1)
         self.c.line(x, y, x, y + height)
 
-    def add_row(self, x_obs: Image.Image, x_action: str, y_obs: Image.Image, pred_obs: Image.Image, correct: bool):
+    def _format_reward(self, reward: float) -> str:
+        """Format reward value with sign and fixed decimal places"""
+        sign = "+" if reward >= 0 else "-"
+        return f"{sign} {abs(reward):.2f}"
+
+    def add_row(self, x_obs: Image.Image, x_action: str, y_obs: Image.Image, y_reward: float, pred_obs: Image.Image, pred_reward: float, correct: bool):
         """
-        Add a row with observation images and action text.
+        Add a row with observation images, action text, and rewards.
 
         Args:
             x_obs: Input observation (PIL Image)
             x_action: Action index
             y_obs: Target observation (PIL Image)
+            y_reward: Target reward value
             pred_obs: Predicted observation (PIL Image)
+            pred_reward: Predicted reward value
+            correct: Whether the prediction was correct
         """
         # Check if we need a new page
         if self.current_y - self.row_height < self.margin:
@@ -237,17 +252,17 @@ class PDFFileWriter:
             self.current_y = self.page_height - self.margin
 
         # Calculate positions
-        x_positions = [
-            self.margin,  # x_obs
-            self.margin + self.image_width + 20,  # action text
-            self.margin + (self.image_width + 20) * 2,  # arrow
-            self.margin + (self.image_width + 20) * 3,  # y_obs
-            self.margin + (self.image_width + 20) * 4,  # separator
-            self.margin + (self.image_width + 20) * 4 + 20,  # pred_obs
-        ]
+        x_positions = []
+        x_positions.append(self.margin)  # x_obs
+        x_positions.append(x_positions[-1] + self.image_width)  # action text
+        x_positions.append(x_positions[-1] + self.image_width)  # arrow
+        x_positions.append(x_positions[-1] + 50)  # rewards
+        x_positions.append(x_positions[-1] + self.image_width)  # y_obs
+        x_positions.append(x_positions[-1] + self.image_width + 20)  # separator
+        x_positions.append(x_positions[-1] + 20)  # pred_obs
 
         # Draw images and elements
-        for img, pos in [(x_obs, 0), (y_obs, 3), (pred_obs, 5)]:
+        for img, pos in [(x_obs, 0), (y_obs, 4), (pred_obs, 6)]:
             img_buffer = io.BytesIO()
             img.save(img_buffer, format="PNG")
             img_buffer.seek(0)
@@ -272,8 +287,18 @@ class PDFFileWriter:
         arrow_color = "green" if correct else "red"
         self._add_arrow(x_positions[2], self.current_y - self.image_height / 2, arrow_color)
 
+        # Add reward values
+        self.c.setFont("Courier", 9)  # Use monospace font for aligned numbers
+        reward_x = x_positions[3]
+        # Target reward (top)
+        target_text = f"Target: {self._format_reward(y_reward)}"
+        self.c.drawString(reward_x, self.current_y - self.image_height / 3, target_text)
+        # Predicted reward (bottom)
+        pred_text = f"Pred  : {self._format_reward(pred_reward)}"
+        self.c.drawString(reward_x, self.current_y - self.image_height * 2/3, pred_text)
+
         # Add vertical separator
-        self._add_vertical_separator(x_positions[4], self.current_y - self.image_height, self.image_height)
+        self._add_vertical_separator(x_positions[5], self.current_y - self.image_height, self.image_height)
 
         # Update current_y position
         self.current_y -= self.row_height
