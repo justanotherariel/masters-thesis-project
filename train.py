@@ -48,13 +48,13 @@ def main(cfg: DictConfig) -> None:
     coloredlogs.install()
     
     # Check if the config is valid
-    if cfg.trial_idx != 0 and cfg.n_trials == 1:
-        raise ValueError("Trial Index must be 0 if n_trials is 1.")
+    if cfg.trial_idx >= cfg.n_trials == 1:
+        raise ValueError("Trial index smaller than number of trials")
     
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
     # Check if Random Seeds Initialization is enabled
-    if cfg.n_trials > 1:
+    if cfg.trial_idx == 0 and cfg.n_trials > 1:
         run_trials(cfg, output_dir)
     else:
         run_train(cfg, output_dir)
@@ -108,7 +108,7 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
     # Average the results and log to sweep run
     for ds in accuracies.keys():
         accuracies[ds] = average_dict(accuracies[ds])
-        log_dict(accuracies[ds], -1, ds.name.capitalize())
+        log_dict(accuracies[ds], ds.name.capitalize(), commit=True)
 
     sweep_run.finish()
 

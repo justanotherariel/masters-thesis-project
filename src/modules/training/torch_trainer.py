@@ -274,7 +274,7 @@ class TorchTrainer(TransformationBlock):
         data: PipelineData,
     ):
         # Log the model being trained
-        logger.info(f"Training model: {self.model.__class__.__name__}")
+        logger.info(f"Training model: {self.model.name}")
 
         # Create dataloaders
         train_loader = self.create_dataloader(data, DatasetGroup.TRAIN)
@@ -568,5 +568,7 @@ def log_dict(
     commit: bool = False,
 ) -> None:
     """Log the values of target."""
+    message = {}
     for key, value in target.items():
-        logger.log_to_external({ f"{prefix}/{key}": value }, commit=commit)
+        message[f"{prefix}/{key}"] = value
+    logger.log_to_external(message, commit=commit)
