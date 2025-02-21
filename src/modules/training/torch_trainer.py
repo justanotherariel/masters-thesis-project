@@ -181,8 +181,9 @@ class TorchTrainer(TransformationBlock):
         else:
             current_time = time.time()
             self._model_train(data)
-            mins = (time.time() - current_time) // 60
-            secs = (time.time() - current_time) % 60
+            data.model_training_time_s = time.time() - current_time
+            mins = data.model_training_time_s // 60
+            secs = data.model_training_time_s % 60
             min_str = "minutes" if mins != 1 else "minute"
             sec_str = "seconds" if secs != 1.0 else "second"
             logger.info(f"Training took {f'{mins} {min_str} and ' if mins > 0 else ''}{secs:.2f} {sec_str}")

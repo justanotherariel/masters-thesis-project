@@ -37,6 +37,7 @@ class PipelineData:
     # Predictions
     predictions: dict[DatasetGroup, list[Any]] = field(default_factory=lambda: {})
     model_last_epoch_recorded: int = 0
+    model_training_time_s: float = 0.0
     accuracies: dict[DatasetGroup, dict[str, float]] = field(default_factory=lambda: {})
 
     def check_data(self) -> None:
