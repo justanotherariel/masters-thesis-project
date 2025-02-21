@@ -66,18 +66,25 @@ class TorchTrainer(TransformationBlock):
     optimizer: functools.partial[Optimizer]
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     model_storage_conf: ModelStorageConf = field(default_factory=ModelStorageConf, init=True, repr=False, compare=False)
-    dataloader_conf: dict[str, Any] = field(default_factory=dict, repr=False)
+    dataloader_conf: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     # Training parameters
     epochs: Annotated[int, Gt(0)] = 10
-    patience: Annotated[int, Gt(0)] = -1  # Early stopping
     batch_size: Annotated[int, Gt(0)] = 32
     use_mixed_precision: bool = field(default=False)
     validate_every_x_epochs: Annotated[int, Gt(0)] = 1
-    load_all_batches_to_gpu: bool = field(default=False)
-
+    load_all_batches_to_gpu: bool = field(default=False)    # Load and keep all batches in GPU memory
+    discrete: bool = field(default=True)    # Discretize the data before training
+    
+    # Early Stopping
+    early_stopping_patience: Annotated[int, Gt(0)] = field(default=5, repr=False, compare=False)
+    early_stopping_counter: int = field(default=0, repr=False, compare=False)
+    early_stopping_metric: tuple[DatasetGroup, str] = field(default=(DatasetGroup.VALIDATION, "Loss"), repr=False, compare=False)
+    early_stopping_metric_mode: str = field(default="min", repr=False, compare=False) # min or max
+    early_stopping_metric_min_change: float = field(default=0.001, repr=False, compare=False)
+    revert_to_best_model: bool = field(default=False, repr=False, compare=False)
+    
     # Predction parameters
-    discrete: bool = field(default=True)
     to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
 
     # Parameters relevant for Hashing
@@ -96,7 +103,9 @@ class TorchTrainer(TransformationBlock):
         self.to_predict = DatasetGroup[self.to_predict]
 
         # Initialize variables
-        self.best_model_state_dict: dict[Any, Any] = {}
+        self.early_stopping_metric = (DatasetGroup[self.early_stopping_metric[0]], self.early_stopping_metric[1])
+        self.early_stopping_best_metric: float = float("inf") if self.early_stopping_metric_mode == "min" else -float("inf")
+        self.early_stopping_best_model: dict[Any, Any] = {}
 
         super().__post_init__()
 
@@ -306,11 +315,11 @@ class TorchTrainer(TransformationBlock):
         )
 
         # Revert to the best model
-        if self.best_model_state_dict:
+        if self.early_stopping_best_model:
             logger.info(
                 f"Reverting to model with best validation loss {self.lowest_val_loss}",
             )
-            self.model.module.load_state_dict(self.best_model_state_dict)
+            self.model.module.load_state_dict(self.early_stopping_best_model)
 
         # Save the model
         if self.model_storage_conf.save_model_to_disk:
@@ -331,22 +340,16 @@ class TorchTrainer(TransformationBlock):
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
-
-        # Track validation loss for early stopping
-        self.lowest_val_loss = np.inf
-        self.last_val_loss = np.inf
         
         # Track the number of epochs trained
         self.last_epoch = 0
 
-        for epoch in range(start_epoch, self.epochs):            
-            # Train using train_loader
-            loss, accuracy = self.train_one_epoch(train_loader, epoch)
-            logger.debug(f"Epoch {epoch} Train Loss: {loss['Loss']}")
-
-            # Log train loss
-            log_dict(loss, "Train")
-            log_dict(accuracy, "Train")
+        for epoch in range(start_epoch, self.epochs):
+                        
+            # Train the model for one epoch
+            train_metrics = self.train_one_epoch(train_loader, epoch)
+            logger.debug(f"Epoch {epoch} Train Loss: {train_metrics['Loss']}")
+            log_dict(train_metrics, "Train")
 
             # Step the scheduler
             if self.initialized_scheduler is not None:
@@ -367,31 +370,19 @@ class TorchTrainer(TransformationBlock):
                 ) and self.model_storage.get_model_checkpoint_path(epoch - 1).exists():
                     self.model_storage.get_model_checkpoint_path(epoch - 1).unlink()
 
-            # Compute validation loss
+            # Validate the model
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
-                loss, accuracy = self.val_one_epoch(
-                    validation_loader,
-                    epoch=epoch,
-                )
-                self.last_val_loss = loss["Loss"]
+                validation_metrics = self.val_one_epoch(validation_loader, epoch)
+                logger.debug(f"Epoch {epoch} Valid Loss: {validation_metrics['Loss']}")
+                log_dict(validation_metrics, "Validation")
 
-                logger.debug(f"Epoch {epoch} Valid Loss: {self.last_val_loss}")
-                log_dict(loss, "Validation")
-                log_dict(accuracy, "Validation")
-
-                # Early stopping
-                if self.patience_exceeded():
-                    logger.info(f"Early stopping after {self.early_stopping_counter} epochs")
-                    logger.log_to_external(
-                        message={"Epochs": (epoch + 1) - (self.patience * self.validate_every_x_epochs)},
-                        commit=False
-                    )
-                    logger.log_to_external({"Epoch": epoch})
-                    break
-                        
             # Log Epoch and commit Wandb Logs
             logger.log_to_external({"Epoch": epoch})
             self.last_epoch = epoch
+
+            # Early stopping
+            if self.early_stop({DatasetGroup.TRAIN: train_metrics, DatasetGroup.VALIDATION: validation_metrics}):
+                break
 
         # Log the trained epochs to wandb after finishing training
         # Marks the true Epochs trained when early stopping is used
@@ -459,7 +450,9 @@ class TorchTrainer(TransformationBlock):
             append_to_dict(epoch_accuracy, acc_dict)
             pbar.set_postfix(loss=torch.cat(epoch_loss["Loss"]).mean().item())
 
-        return average_dict(epoch_loss), average_dict(epoch_accuracy)
+        epoch_metrics = average_dict(epoch_loss)
+        epoch_metrics.update(average_dict(epoch_accuracy))
+        return epoch_metrics
 
     def val_one_epoch(
         self,
@@ -510,24 +503,48 @@ class TorchTrainer(TransformationBlock):
                 append_to_dict(epoch_loss, loss_dict)
                 append_to_dict(epoch_accuracy, acc_dict)
                 pbar.set_postfix(loss=torch.cat(epoch_loss["Loss"]).mean().item())
-        return average_dict(epoch_loss), average_dict(epoch_accuracy)
+                
+        epoch_metrics = average_dict(epoch_loss)
+        epoch_metrics.update(average_dict(epoch_accuracy))
+        return epoch_metrics
 
-    def patience_exceeded(self) -> bool:
+    def early_stop(self, metrics: dict[DatasetGroup, dict[str, float]]) -> bool:
         """Check if early stopping should be performed.
 
         :return: Whether to perform early stopping.
         """
-        # Store the best model so far based on validation loss
-        if self.patience != -1:
-            if self.last_val_loss < self.lowest_val_loss:
-                self.lowest_val_loss = self.last_val_loss
-                self.best_model_state_dict = copy.deepcopy(self.model.module.state_dict())
+        # Check if early stopping is enabled
+        if self.early_stopping_patience == -1:
+            return False
+        
+        metric = metrics[self.early_stopping_metric[0]][self.early_stopping_metric[1]]
+        
+        min_metric = metric + self.early_stopping_metric_min_change < self.early_stopping_best_metric
+        max_metric = metric - self.early_stopping_metric_min_change > self.early_stopping_best_metric
+        
+        # Check if metric is better
+        if (
+            (self.early_stopping_metric_mode == "min" and min_metric)
+            or (self.early_stopping_metric_mode == "max" and max_metric)
+        ):
+            self.early_stopping_best_metric = metric
+            
+            # Store the best model
+            if self.revert_to_best_model:
+                self.early_stopping_best_model = copy.deepcopy(self.model.module.state_dict())
+            
+            # Don't reset the counter if it's the first epoch
+            # This is to allow setting the early_stopping_counter to negative values
+            # to prevent early stopping for the first few epochs
+            if self.last_epoch != 0:
                 self.early_stopping_counter = 0
-            else:
-                self.early_stopping_counter += 1
-                if self.early_stopping_counter >= self.patience:
-                    return True
-        return False
+            return False
+        else:
+            self.early_stopping_counter += 1
+            
+            if self.early_stopping_counter >= self.early_stopping_patience:
+                logger.info(f"Early Stopping! Last best metric: {self.early_stopping_best_metric}, Current metric: {metric}")
+                return True
 
 
 def moveTo(
