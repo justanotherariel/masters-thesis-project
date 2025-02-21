@@ -65,12 +65,11 @@ class MinigridAccuracy(BaseAccuracy):
         target_reward: torch.Tensor,
     ):
         observation_correct = (pred_obs_argmax == target_obs_argmax).all(dim=[1, 2, 3])
-        reward_correct = torch.isclose(pred_reward, target_reward, atol=0.1).squeeze()
-        total_correct = (observation_correct & reward_correct).sum().item()
-        n_samples = target_obs_argmax.shape[0]
+        reward_correct = torch.isclose(pred_reward, target_reward, atol=0.2).squeeze()
+        total_correct = (observation_correct & reward_correct)
 
         return {
-            "Transition Accuracy": total_correct / n_samples,
+            "Transition Accuracy": total_correct,
         }
 
     def _calc_object_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
@@ -78,20 +77,10 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the object component of the observation tensor. Each object class is weighted
         equally.
         """
-
-        target_class_counts = torch.bincount(
-            target_obs_argmax[..., 0].view(-1), minlength=self._ti.info["observation"][0][1]
-        )
-        zero_class_counts = target_class_counts == 0
-        target_class_counts = target_class_counts[~zero_class_counts]
-
-        truth_mask = target_obs_argmax[..., 0] == pred_obs_argmax[..., 0]
-        pred_class_counts = torch.bincount(
-            target_obs_argmax[..., 0][truth_mask], minlength=self._ti.info["observation"][0][1]
-        )
-        pred_class_counts = pred_class_counts[~zero_class_counts]
+        correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).sum(dim=[1, 2])
         
-        acc = (pred_class_counts / target_class_counts).mean().item()
+        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
+        acc = correct / total
         return { "Object Accuracy": acc }
 
     def _calc_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
@@ -99,29 +88,12 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the color component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        org_target_class_counts = torch.bincount(
-            target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1]
-        )
-        zero_class_counts = org_target_class_counts == 0
-        org_target_class_counts = org_target_class_counts[~zero_class_counts]
-
-        object_truth_mask = target_obs_argmax[..., 0] == pred_obs_argmax[..., 0]
-        pred_obs_argmax = pred_obs_argmax[object_truth_mask]
-        target_obs_argmax = target_obs_argmax[object_truth_mask]
-
-        target_class_counts = torch.bincount(
-            target_obs_argmax[..., 1].view(-1), minlength=self._ti.info["observation"][1][1]
-        )
-        zero_class_counts = target_class_counts == 0
-        target_class_counts = target_class_counts[~zero_class_counts]
-
-        truth_mask = target_obs_argmax[..., 1] == pred_obs_argmax[..., 1]
-        pred_class_counts = torch.bincount(
-            target_obs_argmax[..., 1][truth_mask], minlength=self._ti.info["observation"][1][1]
-        )
-        pred_class_counts = pred_class_counts[~zero_class_counts]
-
-        acc = (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
+        correct_color = pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]
+        correct = (correct_obj & correct_color).sum(dim=[1, 2])
+        
+        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
+        acc = correct / total
         return { "Color Accuracy": acc }
 
     def _calc_state_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
@@ -129,103 +101,61 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the state component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        org_target_class_counts = torch.bincount(
-            target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1]
-        )
-        zero_class_counts = org_target_class_counts == 0
-        org_target_class_counts = org_target_class_counts[~zero_class_counts]
-
-        object_truth_mask = target_obs_argmax[..., 0] == pred_obs_argmax[..., 0]
-        pred_obs_argmax = pred_obs_argmax[object_truth_mask]
-        target_obs_argmax = target_obs_argmax[object_truth_mask]
-
-        target_class_counts = torch.bincount(
-            target_obs_argmax[..., 2].view(-1), minlength=self._ti.info["observation"][2][1]
-        )
-        zero_class_counts = target_class_counts == 0
-        target_class_counts = target_class_counts[~zero_class_counts]
-
-        truth_mask = target_obs_argmax[..., 2] == pred_obs_argmax[..., 2]
-        pred_class_counts = torch.bincount(
-            target_obs_argmax[..., 2][truth_mask], minlength=self._ti.info["observation"][2][1]
-        )
-        pred_class_counts = pred_class_counts[~zero_class_counts]
-
-        acc = (pred_class_counts.sum() / org_target_class_counts.sum()).item()
+        correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
+        correct_state = pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]
+        correct = (correct_obj & correct_state).sum(dim=[1, 2])
+        
+        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
+        acc = correct / total
         return { "State Accuracy": acc }
 
     def _calc_agent_acc(
         self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
     ):
         # How often was only one agent in the observation tensor?
-        samples_one_agent_pred = (
+        samples_one_agent = (
             pred_obs_argmax[..., 3].view(-1, pred_obs_argmax.shape[1] * pred_obs_argmax.shape[2]) != 0
         ).sum(dim=1) == 1
-        perc_samples_one_agent = samples_one_agent_pred.sum().item() / target_obs_argmax.shape[0]
-
-        def agent_correct_perc(pred, targ, mask, max_correct_samples):
-            predictions_tmp = pred[mask, :, :, 3]
-            targets_tmp = targ[mask, :, :, 3]
-            agent_location = targets_tmp != 0
-            correct = predictions_tmp[agent_location] == targets_tmp[agent_location]
-            return correct.sum().item() / max_correct_samples
 
         # For the samples with only one agent, how often was the agent correctly predicted?
-        perc_samples_agent_correct = agent_correct_perc(
-            pred_obs_argmax, target_obs_argmax, samples_one_agent_pred, target_obs_argmax.shape[0]
-        )
+        samples_agent_correct = (pred_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
 
         # Find samples where the agent was supposed to stay
-        samples_stay_mask = (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
-        perc_samples_agent_stay_correct = agent_correct_perc(
-            pred_obs_argmax,
-            target_obs_argmax,
-            samples_stay_mask & samples_one_agent_pred,
-            samples_stay_mask.sum().item(),
-        )
+        mask_agent_stay = (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
+        samples_agent_stay = (pred_obs_argmax[mask_agent_stay, :, :, 3] == target_obs_argmax[mask_agent_stay, :, :, 3]).all(dim=[1, 2])
 
         # Find samples where the agent was supposed to rotate
-        samples_same_field_mask = ((feature_obs_argmax[..., 3] != 0) == (target_obs_argmax[..., 3] != 0)).all(
+        mask_agent_rotate = ((feature_obs_argmax[..., 3] != 0) == (target_obs_argmax[..., 3] != 0)).all(
             dim=[1, 2]
-        ) & ~samples_stay_mask
-        perc_samples_agent_rotated_correct = agent_correct_perc(
-            pred_obs_argmax,
-            target_obs_argmax,
-            samples_same_field_mask & samples_one_agent_pred,
-            samples_same_field_mask.sum().item(),
-        )
+        ) & ~mask_agent_stay
+        samples_agent_rotated = (pred_obs_argmax[mask_agent_rotate, :, :, 3] == target_obs_argmax[mask_agent_rotate, :, :, 3]).all(dim=[1, 2])
 
         # Find samples where the agent was supposed to move
-        samples_moved_mask = (
+        mask_agent_move = (
             (((feature_obs_argmax[..., 3] != 0) != (target_obs_argmax[..., 3] != 0)).sum(dim=[1, 2]) == 2)
-            & ~samples_stay_mask
-            & ~samples_same_field_mask
+            & ~mask_agent_stay
+            & ~mask_agent_rotate
         )
-        perc_samples_agent_moved_correct = agent_correct_perc(
-            pred_obs_argmax,
-            target_obs_argmax,
-            samples_moved_mask & samples_one_agent_pred,
-            samples_moved_mask.sum().item(),
-        )
+        samples_agent_moved = (pred_obs_argmax[mask_agent_move, :, :, 3] == target_obs_argmax[mask_agent_move, :, :, 3]).all(dim=[1, 2])
 
         return {
-            "One Agent Samples Accuracy": perc_samples_one_agent,
-            "Agent Accuracy": perc_samples_agent_correct,
-            "Agent Stay Accuracy": perc_samples_agent_stay_correct,
-            "Agent Rotate Accuracy": perc_samples_agent_rotated_correct,
-            "Agent Move Accuracy": perc_samples_agent_moved_correct,
+            "One Agent Samples Accuracy": samples_one_agent,
+            "Agent Accuracy": samples_agent_correct,
+            "Agent Stay Accuracy": samples_agent_stay,
+            "Agent Rotate Accuracy": samples_agent_rotated,
+            "Agent Move Accuracy": samples_agent_moved,
         }
 
     def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
         reward_mask = target_reward != 0
 
-        reward_predicted_correct = torch.isclose(pred_reward[reward_mask], target_reward[reward_mask], atol=0.1).sum().item()
+        reward_predicted_correct = torch.isclose(pred_reward[reward_mask], target_reward[reward_mask], atol=0.2)
 
-        no_reward_predicted_correct = torch.isclose(pred_reward[~reward_mask], target_reward[~reward_mask], atol=0.1).sum().item()
+        no_reward_predicted_correct = torch.isclose(pred_reward[~reward_mask], target_reward[~reward_mask], atol=0.2)
 
         return {
-            "Reward Accuracy": reward_predicted_correct / reward_mask.sum().item(),
-            "No Reward Accuracy": no_reward_predicted_correct / (~reward_mask).sum().item(),
+            "Reward Accuracy": reward_predicted_correct,
+            "No Reward Accuracy": no_reward_predicted_correct,
         }
 
 

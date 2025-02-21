@@ -439,6 +439,8 @@ class TorchTrainer(TransformationBlock):
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
                 loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
+            
+            with torch.no_grad():
                 acc_dict = self.accuracy(y_pred, y_batch, x_batch)
 
             # Backward pass
@@ -454,7 +456,7 @@ class TorchTrainer(TransformationBlock):
             # Save metrics
             append_to_dict(epoch_loss, loss_dict)
             append_to_dict(epoch_accuracy, acc_dict)
-            pbar.set_postfix(loss=sum(epoch_loss["Loss"]) / len(epoch_loss["Loss"]))
+            pbar.set_postfix(loss=torch.cat(epoch_loss["Loss"]).mean().item())
 
         return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
@@ -506,7 +508,7 @@ class TorchTrainer(TransformationBlock):
                 # Save metrics
                 append_to_dict(epoch_loss, loss_dict)
                 append_to_dict(epoch_accuracy, acc_dict)
-                pbar.set_postfix(loss=sum(epoch_loss["Loss"]) / len(epoch_loss["Loss"]))
+                pbar.set_postfix(loss=torch.cat(epoch_loss["Loss"]).mean().item())
         return average_dict(epoch_loss), average_dict(epoch_accuracy)
 
     def patience_exceeded(self) -> bool:
@@ -559,7 +561,7 @@ def average_dict(
     target: dict[str, list[float]],
 ) -> dict[str, float]:
     """Average the values of target."""
-    return {key: sum(value) / len(value) for key, value in target.items()}
+    return {key: torch.cat(value).float().mean() for key, value in target.items()}
 
 
 def log_dict(

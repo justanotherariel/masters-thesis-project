@@ -2,7 +2,7 @@ from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.scoring.data_transform import dataset_to_list
 from src.modules.training.accuracy import BaseAccuracy
-from src.modules.training.torch_trainer import log_dict
+from src.modules.training.torch_trainer import log_dict, average_dict, append_to_dict
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 logger = Logger()
@@ -29,7 +29,9 @@ class MinigridAccuracy(TransformationBlock):
             dg_name = dg.name.capitalize()
 
             raw_data = dataset_to_list(data, dg, discretize=True, info=self._info)
-            data.accuracies[dg] = self.accuracy_calc(data.predictions[dg], raw_data[1], raw_data[0])
+            accuracies = append_to_dict({}, self.accuracy_calc(data.predictions[dg], raw_data[1], raw_data[0]))
+            
+            data.accuracies[dg] = average_dict(accuracies)
 
             logger.info(f"Accuracies for {dg_name}")
             longest_key = max([len(key) for key in data.accuracies[dg]])
