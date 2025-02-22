@@ -3,7 +3,7 @@ import math
 import torch
 
 from src.framework.transforming import TransformationBlock
-from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom, MinigridSamplerExtensive
+from src.modules.environment.gymnasium import GymnasiumBuilder, MinigridSamplerRandom, MinigridSamplerExtensive
 from src.modules.training.datasets.token_dataset import TokenDataset
 from src.modules.training.datasets.utils import TokenType
 from src.typing.pipeline_objects import PipelineData
@@ -82,7 +82,7 @@ def test_with_gym_sampler_random():
 
     dataset, info = create_dataset(
         builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
-        sampler=GymnasiumSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
+        sampler=MinigridSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
         indices="train_indices",
     )
 
@@ -168,7 +168,7 @@ def test_with_gym_sampler_random_discretized():
 
     dataset, info = create_dataset(
         builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
-        sampler=GymnasiumSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
+        sampler=MinigridSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
         indices="train_indices",
         discretize=True,
     )

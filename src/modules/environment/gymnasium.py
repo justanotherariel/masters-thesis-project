@@ -95,7 +95,7 @@ class GymnasiumBuilder(TransformationBlock):
 
 
 @dataclass
-class GymnasiumSamplerRandom(TransformationBlock):
+class MinigridSamplerRandom(TransformationBlock):
     """Block to sample a Gymnasium Environment.
 
     :param environment: The environment to instantiate. E.g. MiniGrid-Empty-5x5-v0
@@ -104,6 +104,10 @@ class GymnasiumSamplerRandom(TransformationBlock):
     num_samples: int
     num_samples_per_env: int
     perc_train: float
+    
+    def setup(self, info: PipelineInfo) -> PipelineInfo:
+        self._info = info
+        return info
 
     def custom_transform(self, data: PipelineData) -> npt.NDArray[np.float32]:
         """Sample the environment.
@@ -144,7 +148,7 @@ class GymnasiumSamplerRandom(TransformationBlock):
                 observations.append(observation)
 
                 # Take a step
-                action = env.action_space.sample()
+                action = np.random.randint(0, self._info.data_info["action_space"].n.item())
                 observation, reward, terminated, truncated, _info = env.step(action)
 
                 # Save Action and Reward

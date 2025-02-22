@@ -2,7 +2,7 @@ import numpy as np
 
 from src.modules.environment.gymnasium import (
     GymnasiumBuilder,
-    GymnasiumSamplerRandom,
+    MinigridSamplerRandom,
     MinigridSamplerExtensive,
     flatten_indices,
 )
@@ -25,7 +25,7 @@ def test_gymnsasium_sampler_random():
     num_samples_per_env = 5
     perc_train = 0.8
 
-    sampler = GymnasiumSamplerRandom(
+    sampler = MinigridSamplerRandom(
         num_samples=num_samples, num_samples_per_env=num_samples_per_env, perc_train=perc_train
     )
     data = sampler.transform(data)

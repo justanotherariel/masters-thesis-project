@@ -1,7 +1,7 @@
 import torch
 from minigrid.core.constants import COLOR_TO_IDX, OBJECT_TO_IDX, STATE_TO_IDX
 
-from src.modules.environment.gymnasium import GymnasiumBuilder, GymnasiumSamplerRandom
+from src.modules.environment.gymnasium import GymnasiumBuilder, MinigridSamplerRandom
 from src.modules.training.datasets.two_d_dataset import TwoDDataset
 from src.typing.pipeline_objects import PipelineData
 
@@ -16,7 +16,7 @@ def create_dataset(
 ) -> TwoDDataset:
     """Create a minigrid dataset preserving 2D structure."""
     builder = GymnasiumBuilder(environment)
-    sampler = GymnasiumSamplerRandom(num_samples, num_samples_per_env, perc_train)
+    sampler = MinigridSamplerRandom(num_samples, num_samples_per_env, perc_train)
 
     info = builder.setup({})
     info = sampler.setup(info)
