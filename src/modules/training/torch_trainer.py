@@ -564,8 +564,8 @@ def moveTo(
 
 
 def append_to_dict(
-    target: dict[str, Any],
-    source: dict[str, Any],
+    target: dict[str, list[Any]],
+    source: dict[str, list[Any]],
 ) -> dict[str, Any]:
     """Append the values of source to target."""
     for key, value in source.items():
@@ -576,11 +576,17 @@ def append_to_dict(
 
 
 def average_dict(
-    target: dict[str, list[float]],
+    target: dict[str, list[torch.Tensor]],
 ) -> dict[str, float]:
     """Average the values of target."""
-    return {key: torch.cat(value).float().mean() for key, value in target.items()}
-
+    result = {}
+    for key, value in target.items():
+        if (type(value[0]) == torch.Tensor):
+            result[key] = torch.cat(value).float().mean().item()
+        else:
+            result[key] = np.mean(value)
+    return result
+    
 
 def log_dict(
     target: dict[str, float],

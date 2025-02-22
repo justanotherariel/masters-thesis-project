@@ -20,7 +20,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 500
+      epochs: 1000
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -29,7 +29,7 @@ train_sys:
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
       discrete: true
 
-      early_stopping_patience: 50
+      early_stopping_patience: 100
       early_stopping_counter: -200  # Start after 200 epochs
       early_stopping_metric: [TRAIN, Transition Accuracy]
       early_stopping_metric_mode: max

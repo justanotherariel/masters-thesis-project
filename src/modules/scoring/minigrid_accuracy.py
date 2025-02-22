@@ -36,7 +36,7 @@ class MinigridAccuracy(TransformationBlock):
             logger.info(f"Accuracies for {dg_name} (%)")
             longest_key = max([len(key) for key in data.accuracies[dg]]) + 1
             for key, value in data.accuracies[dg].items():
-                value_percent = str(value.item() * 100)[:5]
+                value_percent = str(value * 100)[:5]
                 logger.info(f"{key:<{longest_key}}: {value_percent}")
             logger.info("")
 

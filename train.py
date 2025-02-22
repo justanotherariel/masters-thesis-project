@@ -103,7 +103,7 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
         for ds, acc in result.accuracies.items():
             if ds not in accuracies:
                 accuracies[ds] = {}
-            append_to_dict(accuracies[ds], acc)        
+            append_to_dict(accuracies[ds], acc)
     
     # Average the results and log to sweep run
     for ds in accuracies.keys():
