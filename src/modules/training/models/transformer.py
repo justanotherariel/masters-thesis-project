@@ -13,99 +13,145 @@ from torch import nn
 
 class ScaledDotProductAttention(nn.Module):
     """
-    compute scale dot product attention
-
-    Query : given sentence that we focused on (decoder)
-    Key : every sentence to check relationship with Qeury(encoder)
-    Value : every sentence same with Key (encoder)
+    Computes scaled dot-product attention as described in 'Attention Is All You Need' paper.
+    
+    The attention mechanism computes the relevance between queries and keys, then uses
+    these attention weights to create a weighted sum of the values.
+    
+    Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
-    def __init__(self):
+    def __init__(self, attention_dropout=0.1):
         super().__init__()
+        self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, q, k, v, mask=None, e=1e-12):
-        # input is 4 dimension tensor
-        # [batch_size, head, length, d_tensor]
-        batch_size, head, length, d_tensor = k.size()
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None =None):
+        """
+        Computes attention scores and applies them to values.
+        
+        Args:
+            query: Tensor of shape [batch_size, n_heads, seq_length, d_k]
+            key: Tensor of shape [batch_size, n_heads, seq_length, d_k]
+            value: Tensor of shape [batch_size, n_heads, seq_length, d_v]
+            attention_mask: Optional boolean mask of shape [batch_size, n_heads, seq_length, seq_length]
+            
+        Returns:
+            tuple: (weighted_values, attention_scores)
+        
+        Raises:
+            RuntimeError: If input tensor dimensions don't match expected shapes
+        """
 
-        # 1. dot product Query with Key^T to compute similarity
-        k_t = k.transpose(2, 3)  # transpose
-        score = (q @ k_t) / math.sqrt(d_tensor)  # scaled dot product
+        if not (query.dim() == key.dim() == value.dim() == 4):
+            raise RuntimeError("Query, Key, and Value must be 4-dimensional tensors")
+            
+        batch_size, n_heads, seq_length, dim_per_head = key.size()
+        
+        if query.size(3) != dim_per_head:
+            raise RuntimeError(f"Query dimension {query.size(3)} doesn't match Key dimension {dim_per_head}")
 
-        # 2. apply masking (opt)
-        if mask is not None:
-            score = score.masked_fill(mask == 0, -10000)
+        # 1. Compute attention scores
+        key_transpose = key.transpose(2, 3)  # transpose
+        attention_scores = (query @ key_transpose) / math.sqrt(dim_per_head)
 
-        # 3. pass them softmax to make [0, 1] range
-        score = self.softmax(score)
+        # 2. Apply attention mask if provided
+        if attention_mask is not None:
+            attention_scores = attention_scores.masked_fill(attention_mask, float('-inf'))
 
-        # 4. multiply with Value
-        v = score @ v
+        # 3. Convert scores to probabilities
+        attention_probs = self.softmax(attention_scores)
+        
+        # 4. Apply attention dropout
+        attention_probs = self.dropout(attention_probs)
+        
+        # 5. Compute weighted values
+        weighted_values = attention_probs @ value
 
-        return v, score
+        return weighted_values, attention_probs
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(self, d_model, n_heads):
+    def __init__(self, d_model: int, n_heads: int, attention_dropout: float = 0.1, use_bias: bool = True):
         super().__init__()
+        
+        assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
+        
         self.n_heads = n_heads
-        self.attention = ScaledDotProductAttention()
-        self.w_q = nn.Linear(d_model, d_model)
-        self.w_k = nn.Linear(d_model, d_model)
-        self.w_v = nn.Linear(d_model, d_model)
-        self.w_concat = nn.Linear(d_model, d_model)
+        self.d_model = d_model
+        self.d_k = d_model // n_heads
 
-    def forward(self, x, mask=None):
-        # 1. dot product with weight matrices
-        q, k, v = self.w_q(x), self.w_k(x), self.w_v(x)
+        self.attention = ScaledDotProductAttention(attention_dropout=attention_dropout)
+        
+        # Linear projections
+        self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
+        self.key_projection = nn.Linear(d_model, d_model, bias=use_bias)
+        self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
+        self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
+        # self._reset_parameters()
 
-        # 2. split tensor by number of heads
-        q, k, v = self.split(q), self.split(k), self.split(v)
+    def _reset_parameters(self):
+        """Initialize parameters using Xavier uniform initialization."""
+        nn.init.xavier_uniform_(self.query_projection.weight)
+        nn.init.xavier_uniform_(self.key_projection.weight)
+        nn.init.xavier_uniform_(self.value_projection.weight)
+        nn.init.xavier_uniform_(self.output_projection.weight)
+        
+        if self.query_projection.bias is not None:
+            nn.init.zeros_(self.query_projection.bias)
+            nn.init.zeros_(self.key_projection.bias)
+            nn.init.zeros_(self.value_projection.bias)
+            nn.init.zeros_(self.output_projection.bias)
 
-        # 3. do scale dot product to compute similarity
-        out, attention = self.attention(q, k, v, mask=mask)
-
-        # 4. concat and pass to linear layer
-        out = self.concat(out)
-        out = self.w_concat(out)
-
-        # 5. visualize attention map
-        # TODO : we should implement visualization
-
-        return out
-
-    def split(self, tensor):
+    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor | None =None):
         """
-        split tensor by number of head
-
-        :param tensor: [batch_size, length, d_model]
-        :return: [batch_size, head, length, d_tensor]
+        Applies multi-headed attention to the input tensor.
+        
+        Args:
+            input_tensor: Tensor of shape [batch_size, seq_length, d_model]
+            attention_mask: Optional attention mask
+            is_training: Whether the model is in training mode
         """
-        batch_size, length, d_model = tensor.size()
+        batch_size, seq_length, _ = x.size()
 
-        d_tensor = d_model // self.n_heads
-        tensor = tensor.view(batch_size, length, self.n_heads, d_tensor).transpose(1, 2)
-        # it is similar with group convolution (split by number of heads)
+        # 1. Project input into query, key, and value
+        query = self.query_projection(x)
+        key = self.key_projection(x)
+        value = self.value_projection(x)
 
-        return tensor
+        # 2. Split projections into multiple heads
+        query_heads = self.split_heads(query)
+        key_heads = self.split_heads(key)
+        value_heads = self.split_heads(value)
 
-    def concat(self, tensor):
-        """
-        inverse function of self.split(tensor : torch.Tensor)
+        # 3. Apply scaled dot-product attention
+        attention_output, attention_weights = self.attention(
+            query_heads, key_heads, value_heads, 
+            attention_mask=attention_mask
+        )
 
-        :param tensor: [batch_size, head, length, d_tensor]
-        :return: [batch_size, length, d_model]
-        """
-        batch_size, head, length, d_tensor = tensor.size()
-        d_model = head * d_tensor
+        # 4. Merge attention heads and project to output dimension
+        merged_attention = self.merge_heads(attention_output)
+        output = self.output_projection(merged_attention)
 
-        tensor = tensor.transpose(1, 2).contiguous().view(batch_size, length, d_model)
-        return tensor
+        return output
 
+    def split_heads(self, x: torch.Tensor):
+        """Splits the last dimension of the input tensor into n_heads."""
+        batch_size, seq_length, d_model = x.size()
+        
+        x = x.view(batch_size, seq_length, self.n_heads, self.d_k)
+        return x.transpose(1, 2)
+
+    def merge_heads(self, x: torch.Tensor):
+        """Merges the attention heads back into a single tensor."""
+        batch_size, n_heads, seq_length, d_k = x.size()
+        
+        x = x.transpose(1, 2).contiguous()
+        return x.view(batch_size, seq_length, self.d_model)
 
 class PositionwiseFeedForward(nn.Module):
-    def __init__(self, d_model, hidden, drop_prob=0.1):
+    def __init__(self, d_model: int, hidden: int, drop_prob: float = 0.1):
         super().__init__()
         self.linear1 = nn.Linear(d_model, hidden)
         self.linear2 = nn.Linear(hidden, d_model)
@@ -123,7 +169,7 @@ class PositionwiseFeedForward(nn.Module):
 class TransformerLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_heads, drop_prob):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads)
+        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, attention_dropout=0.0)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
