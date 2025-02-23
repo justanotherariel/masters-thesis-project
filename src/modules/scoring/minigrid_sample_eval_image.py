@@ -31,7 +31,7 @@ ACTION_STR = [actions.Actions(i).name for i in range(7)]
 @dataclass
 class MinigridSampleEvalImage(TransformationBlock):
     """Score the predictions of the model."""
-
+    eval_n_grids: int | None = None
     constrain_to_one_agent: bool = False
     only_errors: bool = False
 
@@ -87,14 +87,15 @@ class MinigridSampleEvalImage(TransformationBlock):
         y_obs, y_reward = target_data[1]
         pred_obs, pred_reward = data.predictions[dataset_group]
         pred_ti = self.info.model_ti
+        
+        eval_n_grids = min(self.eval_n_grids, len(indices)) if self.eval_n_grids is not None else len(indices)
 
         # Argmax the predictions
         pred_obs = obs_argmax(pred_obs, pred_ti, constrain_to_one_agent=constrain_to_one_agent)
 
         # Go through each grid
         grid_idx_start = 0
-        # for grid_idx in tqdm(range(len(indices)), desc=f"Dataset {dataset_group.name.lower()}"):
-        for grid_idx in tqdm(range(1), desc=f"Dataset {dataset_group.name.lower()}"):
+        for grid_idx in tqdm(range(eval_n_grids), desc=f"Dataset {dataset_group.name.lower()}"):
             with PDFFileWriter(self.info.output_dir, f"sample_eval_{prefix}{dataset_group.name.lower()}_{grid_idx}.pdf") as writer:
                 grid_index_len = len(indices[grid_idx])
                 create_sample_eval_pdf(
