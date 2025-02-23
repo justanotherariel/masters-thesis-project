@@ -57,6 +57,7 @@ train_sys:
         n_layers: 3
         d_ff: 256
         drop_prob: 0.15
+        # calculate_eta: true
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss

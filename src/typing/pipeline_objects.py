@@ -34,7 +34,7 @@ class PipelineData:
     indices: dict[DatasetGroup, NDArray[np.int32]] = field(default_factory=lambda: {})
     grids: dict[DatasetGroup, list[Grid]] = field(default_factory=lambda: {})
 
-    # Predictions
+    # Predictions: list[observation, reward, other (optional - e.g. eta)]
     predictions: dict[DatasetGroup, list[Any]] = field(default_factory=lambda: {})
     model_last_epoch_recorded: int = 0
     model_training_time_s: float = 0.0

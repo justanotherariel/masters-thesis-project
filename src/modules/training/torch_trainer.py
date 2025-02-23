@@ -228,13 +228,15 @@ class TorchTrainer(TransformationBlock):
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model.forward(X_batch)
-                y_pred = tuple(y.to("cpu") for y in y_pred) if isinstance(y_pred, tuple) else y_pred.to("cpu")
-                if isinstance(y_pred, tuple):
+                
+                if isinstance(y_pred, tuple):                    
+                    y_pred = tuple(y.to("cpu") for y in y_pred)
                     if predictions == []:
                         predictions = [[] for _ in range(len(y_pred))]
                     for idx, pred in enumerate(y_pred):
                         predictions[idx].extend(pred)
                 else:
+                    y_pred.to("cpu")
                     predictions.extend(y_pred)
         return [torch.stack(pred) for pred in predictions]
 
@@ -430,10 +432,10 @@ class TorchTrainer(TransformationBlock):
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
-                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
+                loss, loss_dict = self.loss(y_pred[:2], y_batch, x_batch)
             
             with torch.no_grad():
-                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -496,8 +498,8 @@ class TorchTrainer(TransformationBlock):
 
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
-                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
-                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
+                loss, loss_dict = self.loss(y_pred[:2], y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
 
                 # Save metrics
                 append_to_dict(epoch_loss, loss_dict)

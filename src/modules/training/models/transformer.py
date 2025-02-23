@@ -103,7 +103,7 @@ class MultiHeadedAttention(nn.Module):
             nn.init.zeros_(self.value_projection.bias)
             nn.init.zeros_(self.output_projection.bias)
 
-    def forward(self, x: torch.Tensor, attention_mask: torch.Tensor | None =None):
+    def forward(self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Applies multi-headed attention to the input tensor.
         
@@ -111,6 +111,9 @@ class MultiHeadedAttention(nn.Module):
             input_tensor: Tensor of shape [batch_size, seq_length, d_model]
             attention_mask: Optional attention mask
             is_training: Whether the model is in training mode
+            
+        Returns:
+            tuple: (output_tensor, new_eta)
         """
         batch_size, seq_length, _ = x.size()
 
@@ -133,8 +136,17 @@ class MultiHeadedAttention(nn.Module):
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
         output = self.output_projection(merged_attention)
+        
+        # 5. Calculate new η values if requested
+        new_eta = None
+        if prev_eta is not None:
+            # Average attention weights across heads
+            eta_layer = attention_weights.mean(dim=1)
+                        
+            # Update η using matrix multiplication
+            new_eta = torch.bmm(eta_layer, prev_eta)
 
-        return output
+        return output, new_eta
 
     def split_heads(self, x: torch.Tensor):
         """Splits the last dimension of the input tensor into n_heads."""
@@ -177,10 +189,21 @@ class TransformerLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout2 = nn.Dropout(p=drop_prob)
 
-    def forward(self, x):
+    def forward(self, x, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Performs a single transformer layer operation.
+
+        Args:
+            x (torch.Tensor): Input Tensor
+            prev_eta (torch.Tensor | None, optional): Previous Eta. Defaults to None.
+            attention_mask (torch.Tensor | None, optional): Attention Mask. Defaults to None.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor | None]: output tensor and new eta
+        """
+        
         # Self attention
         _x = x
-        x = self.attention(x)
+        x, eta = self.attention(x, prev_eta=prev_eta, attention_mask=attention_mask)
         x = self.dropout1(x)
         x = self.norm1(x + _x)
 
@@ -189,7 +212,7 @@ class TransformerLayer(nn.Module):
         x = self.ffn(x)
         x = self.dropout2(x)
         x = self.norm2(x + _x)
-        return x
+        return x, eta
 
 
 class TransformerSepAction(nn.Module):
@@ -203,6 +226,7 @@ class TransformerSepAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
+        calculate_eta: bool = False,    # Whether to calculate η values
     ):
         super().__init__()
 
@@ -212,11 +236,14 @@ class TransformerSepAction(nn.Module):
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
         self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
+        self.input_token_len = self.obs_token_len + 1
+        
+        self.calculate_eta = calculate_eta
 
         # Input Projection and Positional Encoding
         self.obs_in_up = nn.Linear(in_obs_shape[-1], d_model)
         self.action_in_up = nn.Linear(action_dim, d_model)
-        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.obs_token_len + 1, d_model))
+        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
         # Transformer layers
         self.layers = nn.ModuleList(
@@ -234,9 +261,12 @@ class TransformerSepAction(nn.Module):
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
+        
+        # Vars
+        n_samples = x_obs.shape[0]
 
         # Embed input sequence
-        x_obs = x_obs.view(x_obs.shape[0], self.obs_token_len, self.in_obs_shape[-1])
+        x_obs = x_obs.view(n_samples, self.obs_token_len, self.in_obs_shape[-1])
         x_obs = self.obs_in_up(x_obs)
         x_action = self.action_in_up(x_action).unsqueeze(dim=1)
 
@@ -245,14 +275,15 @@ class TransformerSepAction(nn.Module):
         x = x + self.input_pos_embedding
 
         # Apply transformer layers
+        eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len) if self.calculate_eta else None
         for layer in self.layers:
-            x = layer(x)
+            x, eta = layer(x, prev_eta=eta)
 
         # Project to output size
         pred_obs = self.obs_out_down(x[:, :-1]).view(-1, *self.out_obs_shape)
         pred_reward = self.reward_out_down(x[:, -1])
 
-        return pred_obs, pred_reward
+        return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
 
 
 class TransformerCombAction(nn.Module):
@@ -266,6 +297,7 @@ class TransformerCombAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
+        calculate_eta: bool = False,    # Whether to calculate η values
     ):
         super().__init__()
 
@@ -275,12 +307,14 @@ class TransformerCombAction(nn.Module):
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
         self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
-
+        self.input_token_len = self.obs_token_len
         self.input_token_dim = in_obs_shape[-1] + action_dim
+
+        self.calculate_eta = calculate_eta
 
         # Input Projection and Positional Encoding
         self.in_up = nn.Linear(self.input_token_dim, d_model)
-        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.obs_token_len, d_model))
+        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
         # Transformer layers
         self.layers = nn.ModuleList(
@@ -312,11 +346,12 @@ class TransformerCombAction(nn.Module):
         x = x + self.input_pos_embedding
 
         # Apply transformer layers
+        eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len) if self.calculate_eta else None
         for layer in self.layers:
-            x = layer(x)
+            x, eta = layer(x, prev_eta=eta)
 
         # Extract obs and reward
         pred_obs = x[..., : x_obs.shape[-1]].reshape(n_samples, *self.out_obs_shape)
         pred_reward = x[..., -1].mean(dim=-1, keepdim=True)
 
-        return pred_obs, pred_reward
+        return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)

@@ -1,7 +1,7 @@
 from torch import nn
 
 from src.typing.pipeline_objects import PipelineInfo
-
+import torch
 
 class BaseModel:
     module: nn.Module
@@ -67,5 +67,14 @@ class MinigridModel:
 
         return SimpleDatasetDefault
 
-    def forward(self, x):
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, ...]:
+        """Forward pass through the model.
+
+        Args:
+            x (tuple[torch.Tensor, torch.Tensor]): Expects a tuple of (observation, action).
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, ...]: Returns a tuple of (observation, action) or (observation, action, other), where other is any additional output from the model such as eta.
+        """
+        
         return self.module.forward(x)
