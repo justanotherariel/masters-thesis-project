@@ -69,10 +69,10 @@ train_sys:
           _args_:
             - _target_: hydra.utils.get_method
               # path: torch.nn.functional.cross_entropy
-              # path: src.modules.training.loss.ce_focal_loss
+              path: src.modules.training.loss.ce_focal_loss
               # path: src.modules.training.loss.ce_adaptive_loss
               # path: src.modules.training.loss.ce_rebalance_loss
-              path: src.modules.training.loss.ce_rebalanced_focal_loss
+              # path: src.modules.training.loss.ce_rebalanced_focal_loss
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
@@ -96,16 +96,16 @@ train_sys:
         _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
-            path: torch.optim.AdamW
-        lr: 0.002
+            path: torch.optim.Adafactor
+        lr: 0.02
 
       scheduler:
         _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 100
-        decay_rate: 0.7
+        decay_t: 150
+        decay_rate: 0.9
 
 pred_sys:
   steps:
