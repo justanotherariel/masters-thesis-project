@@ -77,9 +77,9 @@ class TorchTrainer(TransformationBlock):
     discrete: bool = field(default=True)    # Discretize the data before training
     
     # Early Stopping
-    early_stopping_patience: Annotated[int, Gt(0)] = field(default=5, repr=False, compare=False)
+    early_stopping_patience: Annotated[int, Gt(0)] = field(default=-1, repr=False, compare=False)
     early_stopping_counter: int = field(default=0, repr=False, compare=False)
-    early_stopping_metric: tuple[DatasetGroup, str] = field(default=(DatasetGroup.VALIDATION, "Loss"), repr=False, compare=False)
+    early_stopping_metric: tuple[DatasetGroup, str] = field(default=("VALIDATION", "Loss"), repr=False, compare=False)
     early_stopping_metric_mode: str = field(default="min", repr=False, compare=False) # min or max
     early_stopping_metric_min_change: float = field(default=0.001, repr=False, compare=False)
     revert_to_best_model: bool = field(default=False, repr=False, compare=False)
