@@ -26,7 +26,7 @@ class ScaledDotProductAttention(nn.Module):
         self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None =None):
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Computes attention scores and applies them to values.
         
@@ -148,14 +148,14 @@ class MultiHeadedAttention(nn.Module):
 
         return output, new_eta
 
-    def split_heads(self, x: torch.Tensor):
+    def split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """Splits the last dimension of the input tensor into n_heads."""
         batch_size, seq_length, d_model = x.size()
         
         x = x.view(batch_size, seq_length, self.n_heads, self.d_k)
         return x.transpose(1, 2)
 
-    def merge_heads(self, x: torch.Tensor):
+    def merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """Merges the attention heads back into a single tensor."""
         batch_size, n_heads, seq_length, d_k = x.size()
         
