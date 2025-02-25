@@ -277,8 +277,9 @@ class MinigridHeatmap(TransformationBlock):
                 grid_img = self.renderer.render_grid(grid)
                 grid_img.save(output_dir / f"grid_{grid_name}.png")
 
-                grid_metrics = self._calc_grid_metrics(grid, raw_data, preds)
-                self._log_grid_metrics(grid, grid_img, grid_name, grid_metrics)
+                if len(self._metric_calculators) > 0:
+                    grid_metrics = self._calc_grid_metrics(grid, raw_data, preds)
+                    self._log_grid_metrics(grid, grid_img, grid_name, grid_metrics)
 
         logger.info("Heatmaps generated.")
         return data
