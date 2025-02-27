@@ -122,3 +122,7 @@ pred_sys:
     # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
     #   eval_n_grids: 1
     #   only_errors: true
+
+    - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
+      eval_n_correct: 50
+      eval_n_incorrect: 50
