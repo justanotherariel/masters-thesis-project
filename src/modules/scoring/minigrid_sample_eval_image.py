@@ -85,7 +85,7 @@ class MinigridSampleEvalImage(TransformationBlock):
         target_data = dataset_to_list(data, dataset_group)
         x_obs, x_action = target_data[0]
         y_obs, y_reward = target_data[1]
-        pred_obs, pred_reward = data.predictions[dataset_group]
+        pred_obs, pred_reward = data.predictions[dataset_group][:2]
         pred_ti = self.info.model_ti
         
         eval_n_grids = min(self.eval_n_grids, len(indices)) if self.eval_n_grids is not None else len(indices)

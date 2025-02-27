@@ -140,9 +140,9 @@ class MultiHeadedAttention(nn.Module):
         # 5. Calculate new η values if requested
         new_eta = None
         if prev_eta is not None:
-            # Average attention weights across heads
-            eta_layer = attention_weights.mean(dim=1)
-                        
+            # Sum attention weights across heads
+            eta_layer = attention_weights.sum(dim=1)
+            
             # Update η using matrix multiplication
             new_eta = torch.bmm(eta_layer, prev_eta)
 
@@ -202,16 +202,14 @@ class TransformerLayer(nn.Module):
         """
         
         # Self attention
-        _x = x
-        x, eta = self.attention(x, prev_eta=prev_eta, attention_mask=attention_mask)
-        x = self.dropout1(x)
-        x = self.norm1(x + _x)
+        delta_x, eta = self.attention(x, prev_eta=prev_eta, attention_mask=attention_mask)
+        delta_x = self.dropout1(delta_x)
+        x = self.norm1(x + delta_x)
 
         # Feed forward
-        _x = x
-        x = self.ffn(x)
-        x = self.dropout2(x)
-        x = self.norm2(x + _x)
+        delta_x = self.ffn(x)
+        delta_x = self.dropout2(x)
+        x = self.norm2(x + delta_x)
         return x, eta
 
 
