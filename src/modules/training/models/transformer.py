@@ -238,11 +238,13 @@ class TransformerSepAction(nn.Module):
         self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
         self.input_token_len = self.obs_token_len + 1 + 1  # obs + action + reward
 
-        # Input Projection and Positional Encoding
-        self.obs_in_up = nn.Linear(in_obs_shape[-1], d_model)
-        self.action_in_up = nn.Linear(action_dim, d_model)        
+        # Input Projection
+        self.obs_in_proj = nn.Linear(in_obs_shape[-1], d_model)
+        self.action_in_proj = nn.Linear(action_dim, d_model)        
         self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
-        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
+        
+        # Positional Encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
         # Transformer layers
         self.layers = nn.ModuleList(
@@ -253,8 +255,8 @@ class TransformerSepAction(nn.Module):
         )
 
         # Output projection
-        self.obs_out_down = nn.Linear(d_model, out_obs_shape[-1])
-        self.reward_out_down = nn.Linear(d_model, 1)
+        self.obs_out_proj = nn.Linear(d_model, out_obs_shape[-1])
+        self.reward_out_proj = nn.Linear(d_model, 1)
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         # Unpack input
@@ -266,12 +268,12 @@ class TransformerSepAction(nn.Module):
 
         # Embed input sequence
         x_obs = x_obs.view(n_samples, self.obs_token_len, self.in_obs_shape[-1])
-        x_obs = self.obs_in_up(x_obs)
-        x_action = self.action_in_up(x_action).unsqueeze(dim=1)
+        x_obs = self.obs_in_proj(x_obs)
+        x_action = self.action_in_proj(x_action).unsqueeze(dim=1)
 
         # Concatenate obs and action and add positional encoding
         x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, 1, -1)], dim=1)
-        x = x + self.input_pos_embedding
+        x = x + self.pos_embedding
         
         # Calculate η values if requested
         eta = None
@@ -283,8 +285,8 @@ class TransformerSepAction(nn.Module):
             x, eta = layer(x, prev_eta=eta)
 
         # Project obs and reward to output size (discard action token)
-        pred_obs = self.obs_out_down(x[:, :-2]).view(-1, *self.out_obs_shape)
-        pred_reward = self.reward_out_down(x[:, -1])
+        pred_obs = self.obs_out_proj(x[:, :-2]).view(-1, *self.out_obs_shape)
+        pred_reward = self.reward_out_proj(x[:, -1])
 
         return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
 
@@ -307,17 +309,20 @@ class TransformerCombAction(nn.Module):
         if in_obs_shape[:2] != out_obs_shape[:2]:
             raise ValueError("Input and output observation shapes must have the same height and width.")
 
+        self.calculate_eta = calculate_eta
+
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
         self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
-        self.input_token_len = self.obs_token_len
+        self.input_token_len = self.obs_token_len + 1  # obs + reward
         self.input_token_dim = in_obs_shape[-1] + action_dim
 
-        self.calculate_eta = calculate_eta
-
-        # Input Projection and Positional Encoding
-        self.in_up = nn.Linear(self.input_token_dim, d_model)
-        self.input_pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
+        # Input Projection
+        self.in_proj = nn.Linear(self.input_token_dim, d_model)
+        self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
+        
+        # Positional Encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
         # Transformer layers
         self.layers = nn.ModuleList(
@@ -328,7 +333,8 @@ class TransformerCombAction(nn.Module):
         )
 
         # Output projection
-        self.out_down = nn.Linear(d_model, out_obs_shape[-1])
+        self.obs_out_proj = nn.Linear(d_model, out_obs_shape[-1])
+        self.reward_out_proj = nn.Linear(d_model, 1)
 
     def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         # Unpack input
@@ -338,23 +344,29 @@ class TransformerCombAction(nn.Module):
         # Vars
         n_samples = x_obs.shape[0]
 
-        # Reshape the input to a token sequence
-        # Expand action and add to each obs token
+        # Create input sequence
         x = torch.zeros(n_samples, self.obs_token_len, self.input_token_dim, device=x_obs.device)
-        x[..., : x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
-        x[..., x_obs.shape[-1] :] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
+        x[..., :x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
+        x[..., x_obs.shape[-1]:] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
 
-        # Embed token sequence and add positional encoding
-        x = self.in_up(x)
-        x = x + self.input_pos_embedding
+        # Embed input sequence
+        x = self.in_proj(x)
+        
+        # Append reward token and add positional encoding
+        x = torch.cat([x, self.reward_token.expand(n_samples, 1, -1)], dim=1)
+        x = x + self.pos_embedding
 
+        # Calculate η values if requested
+        eta = None
+        if self.calculate_eta:
+            eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len)
+        
         # Apply transformer layers
-        eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len) if self.calculate_eta else None
         for layer in self.layers:
             x, eta = layer(x, prev_eta=eta)
 
-        # Extract obs and reward
-        pred_obs = x[..., : x_obs.shape[-1]].reshape(n_samples, *self.out_obs_shape)
-        pred_reward = x[..., -1].mean(dim=-1, keepdim=True)
+        # Project obs and reward to output size
+        pred_obs = self.obs_out_proj(x[:, :-1]).view(-1, *self.out_obs_shape)
+        pred_reward = self.reward_out_proj(x[:, -1])
 
         return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
