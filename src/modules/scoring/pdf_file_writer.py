@@ -221,7 +221,7 @@ class PDFFileWriter:
                 center_y = grid_y - (i + 0.5) * cell_size
                 
                 # Draw the circle if the value is not too small
-                if radius > 0.2:  # Minimum size threshold for visibility
+                if radius > 0.1:  # Minimum size threshold for visibility
                     self.c.circle(center_x, center_y, radius, fill=1)
                 
         # Reset current y position

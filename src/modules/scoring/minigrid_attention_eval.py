@@ -105,6 +105,8 @@ class MinigridAttentionEval(TransformationBlock):
             n_correct=self.eval_n_correct,
             n_incorrect=self.eval_n_incorrect,
         )
+        writer.close()
+        progress_bar.close()
         
         
 
@@ -187,7 +189,12 @@ def create_sample_eval_pdf(
         # Add the row to the PDF
         writer.add_row(x_obs_img, ACTION_STR[action], y_obs_img, y_reward_val, pred_obs_img, pred_reward_val, obs_correct, reward_correct)
         
-        eta = torch.nn.functional.softmax(pred_eta[sample_idx], dim=1)
+        # Softmax the attention map
+        # eta = torch.nn.functional.softmax(pred_eta[sample_idx], dim=1)
+        
+        # Scale eta to 0-1
+        eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
+        
         writer.add_tensor(eta.transpose(dim0=0, dim1=1))
         writer.add_page_break()
         
