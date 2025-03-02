@@ -58,7 +58,6 @@ train_sys:
         _target_: src.modules.training.loss.MinigridLoss
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
-        two_agent_penalty_loss_weight: 0
         discrete_loss_fn:
           _target_: src.utils.functools.partial
           _args_:
