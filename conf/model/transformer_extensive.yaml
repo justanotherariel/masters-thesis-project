@@ -50,13 +50,13 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          _target_: src.modules.training.models.transformer.TransformerCombAction
-          # _target_: src.modules.training.models.transformer.TransformerSepAction
+          _target_: src.modules.training.models.transformer.TransformerSepAction
+          # _target_: src.modules.training.models.transformer.TransformerCombAction
 
-        d_model: 256
-        n_heads: 16
+        d_model: 128
+        n_heads: 4
         n_layers: 3
-        d_ff: 256
+        d_ff: 128
         drop_prob: 0.15
         # calculate_eta: true
 
@@ -111,16 +111,19 @@ pred_sys:
   steps:
     - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
       accuarcy_calc: ${model.train_sys.steps[0].accuracy}
+    
     - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
       # metric_calculators: 
       #     - AgentPovCertaintyCalc
       #     - AgentPovAccuracyCalc
       #     - FieldPovAccuracyCalc
       #     - RewardAccuracyCalc
+    
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
-    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-    #   eval_n_grids: 1
-    #   only_errors: true
+    
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+      eval_n_grids: 1
+      only_errors: true
 
     - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
       eval_n_correct: 50
