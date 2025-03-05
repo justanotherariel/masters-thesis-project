@@ -1,27 +1,12 @@
 import io
-from dataclasses import dataclass
+import math
 from pathlib import Path
 
-import numpy as np
 import torch
-from minigrid.core import actions
-from minigrid.core.grid import Grid
-from minigrid.core.world_object import WorldObj
 from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-from tqdm import tqdm
-import math
-
-from src.framework.logging import Logger
-from src.framework.transforming import TransformationBlock
-from src.modules.training.accuracy import obs_argmax
-from src.modules.training.datasets.simple import SimpleDatasetDefault
-from src.modules.training.datasets.tensor_index import TensorIndex
-from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
-
-from .data_transform import dataset_to_list
 
 
 class PDFFileWriter:
@@ -64,7 +49,17 @@ class PDFFileWriter:
         sign = "+" if reward >= 0 else "-"
         return f"{sign} {abs(reward):.2f}"
 
-    def add_row(self, x_obs: Image.Image, x_action: str, y_obs: Image.Image, y_reward: float, pred_obs: Image.Image, pred_reward: float, correct_obs: bool, correct_reward: bool):
+    def add_row(
+        self,
+        x_obs: Image.Image,
+        x_action: str,
+        y_obs: Image.Image,
+        y_reward: float,
+        pred_obs: Image.Image,
+        pred_reward: float,
+        correct_obs: bool,
+        correct_reward: bool,
+    ):
         """
         Add a row with observation images, action text, and rewards.
 
@@ -127,7 +122,7 @@ class PDFFileWriter:
         self.c.drawString(reward_x, self.current_y - self.image_height / 3, target_text)
         # Predicted reward (bottom)
         pred_text = f"Pred  : {self._format_reward(pred_reward)}"
-        self.c.drawString(reward_x, self.current_y - self.image_height * 2/3, pred_text)
+        self.c.drawString(reward_x, self.current_y - self.image_height * 2 / 3, pred_text)
         self.c.setFillColor("black")
 
         # Add vertical separator
@@ -140,46 +135,46 @@ class PDFFileWriter:
         """
         Add a tensor to the PDF as a grid of circles where the size of each circle
         represents the value (between 0 and 1).
-        
+
         Args:
             tensor: A 2D tensor with values between 0 and 1
         """
         # # Add a page break to ensure we have a full page for the tensor
         # self.add_page_break()
-        
+
         # Ensure tensor is 2D
         if tensor.dim() != 2:
             raise ValueError(f"Expected 2D tensor, got {tensor.dim()}D")
-            
+
         # Get tensor dimensions
         rows, cols = tensor.shape
-        
+
         # Calculate subdivision size (square root of dimensions)
         subdivision_size_rows = int(math.sqrt(rows))
         subdivision_size_cols = int(math.sqrt(cols))
-        
+
         # Calculate maximum circle size and grid cell size based on page dimensions
         usable_width = self.page_width - (2 * self.margin)
         usable_height = self.page_height - (2 * self.margin)
-        
+
         # Determine grid cell size (smaller of width or height constraint)
         cell_size_width = usable_width / cols
         cell_size_height = usable_height / rows
         cell_size = min(cell_size_width, cell_size_height)
-        
+
         # Maximum circle radius is half the cell size with some padding
         max_radius = cell_size * 0.4
-        
+
         # Calculate grid origin (top-left corner)
         grid_width = cols * cell_size
         grid_height = rows * cell_size
         grid_x = self.margin + (usable_width - grid_width) / 2
         grid_y = self.page_height - self.margin - (usable_height - grid_height) / 2
-        
+
         # Draw the grid
         self.c.setLineWidth(0.5)
         self.c.setStrokeColor("lightgrey")
-                
+
         # Draw horizontal grid lines
         for i in range(rows + 1):
             # Use thicker line for subdivisions
@@ -189,10 +184,10 @@ class PDFFileWriter:
             else:
                 self.c.setLineWidth(0.5)
                 self.c.setStrokeColor("lightgrey")
-                
+
             y = grid_y - i * cell_size
             self.c.line(grid_x, y, grid_x + grid_width, y)
-        
+
         # Draw vertical grid lines
         for j in range(cols + 1):
             # Use thicker line for subdivisions
@@ -202,30 +197,81 @@ class PDFFileWriter:
             else:
                 self.c.setLineWidth(0.5)
                 self.c.setStrokeColor("lightgrey")
-                
+
             x = grid_x + j * cell_size
             self.c.line(x, grid_y, x, grid_y - grid_height)
-        
+
         # Draw circles for each cell
         self.c.setStrokeColor("black")
         self.c.setFillColor("black")
-        
+
         for i in range(rows):
             for j in range(cols):
                 # Get value and calculate circle radius
                 value = tensor[i, j].item()
                 radius = value * max_radius
-                
+
                 # Calculate center of the cell
                 center_x = grid_x + (j + 0.5) * cell_size
                 center_y = grid_y - (i + 0.5) * cell_size
-                
+
                 # Draw the circle if the value is not too small
                 if radius > 0.1:  # Minimum size threshold for visibility
                     self.c.circle(center_x, center_y, radius, fill=1)
-                
+
         # Reset current y position
         self.current_y = self.margin
+
+    def add_grid_environments(self, environments: list[Image.Image], title: str, envs_per_row: int = 5):
+        """
+        Add a section of grid environment images to the PDF with a title.
+
+        Args:
+            environments: List of environment images to display
+            title: Title for this group of environments
+            envs_per_row: Number of environments to display per row
+        """
+        # Calculate image dimensions
+        env_width = (self.usable_width - ((envs_per_row - 1) * 10)) / envs_per_row  # 10px spacing between images
+        env_height = env_width  # Keep square aspect ratio for grid environments
+
+        # Check if we need a new page for title
+        if self.current_y - 40 - env_height < self.margin:
+            self.c.showPage()
+            self.current_y = self.page_height - self.margin
+
+        # Add title with some padding
+        self.c.setFont("Helvetica-Bold", 16)
+        self.c.drawString(self.margin, self.current_y, title)
+        self.current_y -= 20  # Space after title
+
+        # Process environments in chunks of envs_per_row
+        for i in range(0, len(environments), envs_per_row):
+            # Get the chunk of environments for this row
+            row_envs = environments[i : i + envs_per_row]
+
+            # Draw each environment in the row
+            for j, env in enumerate(row_envs):
+                img_buffer = io.BytesIO()
+                env.save(img_buffer, format="PNG")
+                img_buffer.seek(0)
+
+                x_pos = self.margin + j * (env_width + 10)  # 10px spacing
+                self.c.drawImage(
+                    ImageReader(img_buffer),
+                    x_pos,
+                    self.current_y - env_height,
+                    width=env_width,
+                    height=env_height,
+                    preserveAspectRatio=True,
+                )
+
+                # Optional: Add index number below each environment
+                self.c.setFont("Helvetica", 8)
+                self.c.drawString(x_pos + env_width / 2 - 10, self.current_y - env_height - 10, f"#{i+j+1}")
+
+            # Update y position for next row
+            self.current_y -= env_height + 50  # Add some space between rows
 
     def add_page_break(self):
         """Add a page break and reset the y-position to the top of the new page."""
