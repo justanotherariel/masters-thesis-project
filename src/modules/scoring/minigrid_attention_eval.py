@@ -1,24 +1,16 @@
-import io
+import math
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import torch
 from minigrid.core import actions
 from minigrid.core.grid import Grid
-from minigrid.core.world_object import WorldObj
 from PIL import Image
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
 from tqdm import tqdm
-import math
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.accuracy import obs_argmax
-from src.modules.training.datasets.simple import SimpleDatasetDefault
-from src.modules.training.datasets.tensor_index import TensorIndex
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .data_transform import dataset_to_list
@@ -32,9 +24,10 @@ ACTION_STR = [actions.Actions(i).name for i in range(7)]
 @dataclass
 class MinigridAttentionEval(TransformationBlock):
     """Score the predictions of the model."""
+
     eval_n_correct: int = 5
     eval_n_incorrect: int = 5
-    
+
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         """Setup the transformation block.
 
@@ -50,25 +43,24 @@ class MinigridAttentionEval(TransformationBlock):
         :param data: The data to transform
         :param kwargs: Any additional arguments
         :return: The transformed data
-        """        
+        """
         logger.info("Evaluating samples (attention map)...")
 
         for dataset_group in data.grids:
             if dataset_group == DatasetGroup.ALL:
                 continue
-            
+
             if len(data.predictions[dataset_group]) < 3:
-                logger.info(f"Skipping sample evaluation (attention) because predictions attention maps are not available. ({dataset_group.name})")
+                logger.info(
+                    f"Skipping sample evaluation (attention) because predictions "
+                    f"attention maps are not available. ({dataset_group.name})"
+                )
                 continue
 
-            self.create_sample_eval_pdf(
-                data,
-                dataset_group
-            )
+            self.create_sample_eval_pdf(data, dataset_group)
 
         logger.info("Sample evaluation (image) complete.")
         return data
-
 
     def create_sample_eval_pdf(
         self,
@@ -84,12 +76,14 @@ class MinigridAttentionEval(TransformationBlock):
         y_obs, y_reward = target_data[1]
         pred_obs, pred_reward, pred_eta = data.predictions[dataset_group]
         pred_ti = self.info.model_ti
-        
+
         # Argmax the predictions
         pred_obs = obs_argmax(pred_obs, pred_ti)
 
         # Go through each grid
-        progress_bar = tqdm(total=self.eval_n_correct + self.eval_n_incorrect, desc=f"Creating PDF ({dataset_group.name})")
+        progress_bar = tqdm(
+            total=self.eval_n_correct + self.eval_n_incorrect, desc=f"Creating PDF ({dataset_group.name})"
+        )
         writer = PDFFileWriter(self.info.output_dir, f"attention_eval_{dataset_group.name.lower()}.pdf")
 
         create_sample_eval_pdf(
@@ -107,8 +101,7 @@ class MinigridAttentionEval(TransformationBlock):
         )
         writer.close()
         progress_bar.close()
-        
-        
+
 
 def create_sample_eval_pdf(
     x_obs: torch.Tensor,
@@ -129,21 +122,35 @@ def create_sample_eval_pdf(
     """
     found_correct = 0
     found_incorrect = 0
-        
+
+    # Randomize the samples
+    indices = torch.randperm(len(x_obs))
+    x_obs = x_obs[indices]
+    x_action = x_action[indices]
+    y_obs = y_obs[indices]
+    y_reward = y_reward[indices]
+    pred_obs = pred_obs[indices]
+    pred_reward = pred_reward[indices]
+    pred_eta = pred_eta[indices]
+
     # Go through each sample
     for sample_idx in range(len(x_obs)):
         if found_correct >= n_correct and found_incorrect >= n_incorrect:
             break
-        
+
+        # Only show samples with action 2 (forward)
+        if x_action[sample_idx] != 2:
+            continue
+
         # Get the reward
         y_reward_val = y_reward[sample_idx].item()
         pred_reward_val = pred_reward[sample_idx].item()
-        
+
         # Check if the prediction was correct
         obs_correct = (y_obs[sample_idx] == pred_obs[sample_idx]).all().item()
         reward_correct = math.isclose(y_reward_val, pred_reward_val, abs_tol=0.2)
         prediction_correct = obs_correct and reward_correct
-        
+
         if found_correct >= n_correct and prediction_correct:
             continue
         elif prediction_correct:
@@ -153,23 +160,17 @@ def create_sample_eval_pdf(
             continue
         elif not prediction_correct:
             found_incorrect += 1
-        
+
         # Get the agent positions for x, y, and pred observations
         agent_x_obs_pos = (x_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()[0]
-        agent_x_obs_dir = (
-            x_obs[sample_idx, agent_x_obs_pos[0], agent_x_obs_pos[1], 3].item() - 1
-        )
+        agent_x_obs_dir = x_obs[sample_idx, agent_x_obs_pos[0], agent_x_obs_pos[1], 3].item() - 1
         agent_x_obs_pos = [((agent_x_obs_pos[0].item(), agent_x_obs_pos[1].item()), agent_x_obs_dir)]
 
         agent_y_obs_pos = (y_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()[0]
-        agent_y_obs_dir = (
-            y_obs[sample_idx, agent_y_obs_pos[0], agent_y_obs_pos[1], 3].item() - 1
-        )
+        agent_y_obs_dir = y_obs[sample_idx, agent_y_obs_pos[0], agent_y_obs_pos[1], 3].item() - 1
         agent_y_obs_pos = [((agent_y_obs_pos[0].item(), agent_y_obs_pos[1].item()), agent_y_obs_dir)]
 
-        agent_pred_obs_pos_tmp = (
-            pred_obs[sample_idx, :, :, 3].squeeze() != 0
-        ).nonzero()
+        agent_pred_obs_pos_tmp = (pred_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()
         agent_pred_obs_pos = []
         for i in range(agent_pred_obs_pos_tmp.shape[0]):
             x = agent_pred_obs_pos_tmp[i, 0].item()
@@ -182,24 +183,33 @@ def create_sample_eval_pdf(
         x_obs_img = render_grid(x_obs[sample_idx], None, agent_x_obs_pos)
         y_obs_img = render_grid(y_obs[sample_idx], None, agent_y_obs_pos)
         pred_obs_img = render_grid(pred_obs[sample_idx], y_obs[sample_idx], agent_pred_obs_pos)
-        
+
         # Get the action
         action = x_action[sample_idx].item()
-        
+
         # Add the row to the PDF
-        writer.add_row(x_obs_img, ACTION_STR[action], y_obs_img, y_reward_val, pred_obs_img, pred_reward_val, obs_correct, reward_correct)
-        
+        writer.add_row(
+            x_obs_img,
+            ACTION_STR[action],
+            y_obs_img,
+            y_reward_val,
+            pred_obs_img,
+            pred_reward_val,
+            obs_correct,
+            reward_correct,
+        )
+
         # Softmax the attention map
         # eta = torch.nn.functional.softmax(pred_eta[sample_idx], dim=1)
-        
+
         # Scale eta to 0-1
         eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
-        
+
         writer.add_tensor(eta.transpose(dim0=0, dim1=1))
         writer.add_page_break()
-        
+
         progress_bar.update(1)
-        
+
 
 def render_grid(obs: torch.Tensor, target: torch.Tensor | None, agents: list[tuple[tuple[int, int], int]]):
     tile_size = 32

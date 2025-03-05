@@ -55,26 +55,27 @@ class RewardAccuracyCalc(MetricCalculator):
         model_ti: TensorIndex,
     ) -> dict[MetricType, np.ndarray]:
         grid_size = GridSize(width=grid.width, height=grid.height)
-        
+
         y_obs = raw_data[1][0]
         y_reward = raw_data[1][1]
         pred_reward = preds[1]
-        
+
         metric_data_raw: dict[tuple[int, int], list[bool]] = {}
         for sample_idx in range(y_obs.shape[0]):
             agent_pos = self.get_agent_pos(y_obs[sample_idx], raw_ti)
             if agent_pos not in metric_data_raw:
                 metric_data_raw[agent_pos] = []
-            
+
             reward_correct = torch.isclose(pred_reward[sample_idx], y_reward[sample_idx], atol=0.1).item()
             metric_data_raw[agent_pos].append(reward_correct)
 
         metric_data = np.zeros((grid_size.width, grid_size.height, 2))
         for pos, values in metric_data_raw.items():
             metric_data[pos.x, pos.y, 0] = np.mean(values)
-            metric_data[pos.x, pos.y, 1] = min((len(values) - sum(values))*0.2, 1)
-        
+            metric_data[pos.x, pos.y, 1] = min((len(values) - sum(values)) * 0.2, 1)
+
         return {MetricType.REWARD_ACCURACY: metric_data}
+
 
 class AgentPovCertaintyCalc(MetricCalculator):
     def calculate(

@@ -73,17 +73,17 @@ class TorchTrainer(TransformationBlock):
     batch_size: Annotated[int, Gt(0)] = 32
     use_mixed_precision: bool = field(default=False)
     validate_every_x_epochs: Annotated[int, Gt(0)] = 1
-    load_all_batches_to_gpu: bool = field(default=False)    # Load and keep all batches in GPU memory
-    discrete: bool = field(default=True)    # Discretize the data before training
-    
+    load_all_batches_to_gpu: bool = field(default=False)  # Load and keep all batches in GPU memory
+    discrete: bool = field(default=True)  # Discretize the data before training
+
     # Early Stopping
     early_stopping_patience: Annotated[int, Gt(0)] = field(default=-1, repr=False, compare=False)
     early_stopping_counter: int = field(default=0, repr=False, compare=False)
     early_stopping_metric: tuple[DatasetGroup, str] = field(default=("VALIDATION", "Loss"), repr=False, compare=False)
-    early_stopping_metric_mode: str = field(default="min", repr=False, compare=False) # min or max
+    early_stopping_metric_mode: str = field(default="min", repr=False, compare=False)  # min or max
     early_stopping_metric_min_change: float = field(default=0.001, repr=False, compare=False)
     revert_to_best_model: bool = field(default=False, repr=False, compare=False)
-    
+
     # Predction parameters
     to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
 
@@ -104,7 +104,9 @@ class TorchTrainer(TransformationBlock):
 
         # Initialize variables
         self.early_stopping_metric = (DatasetGroup[self.early_stopping_metric[0]], self.early_stopping_metric[1])
-        self.early_stopping_best_metric: float = float("inf") if self.early_stopping_metric_mode == "min" else -float("inf")
+        self.early_stopping_best_metric: float = (
+            float("inf") if self.early_stopping_metric_mode == "min" else -float("inf")
+        )
         self.early_stopping_best_model: dict[Any, Any] = {}
 
         super().__post_init__()
@@ -228,8 +230,8 @@ class TorchTrainer(TransformationBlock):
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
                 y_pred = self.model.forward(X_batch)
-                
-                if isinstance(y_pred, tuple):                    
+
+                if isinstance(y_pred, tuple):
                     y_pred = tuple(y.to("cpu") for y in y_pred)
                     if predictions == []:
                         predictions = [[] for _ in range(len(y_pred))]
@@ -342,12 +344,11 @@ class TorchTrainer(TransformationBlock):
         # Set the scheduler to the correct epoch
         if self.initialized_scheduler is not None:
             self.initialized_scheduler.step(epoch=start_epoch)
-        
+
         # Track the number of epochs trained
         self.last_epoch = 0
 
         for epoch in range(start_epoch, self.epochs):
-                        
             # Train the model for one epoch
             train_metrics = self.train_one_epoch(train_loader, epoch)
             logger.debug(f"Epoch {epoch} Train Loss: {train_metrics['Loss']}")
@@ -432,8 +433,8 @@ class TorchTrainer(TransformationBlock):
             # Forward pass
             with torch.autocast(self.device.type) if self.use_mixed_precision else contextlib.nullcontext():  # type: ignore[attr-defined]
                 y_pred = self.model.forward(x_batch)
-                loss, loss_dict = self.loss(y_pred[:2], y_batch, x_batch)
-            
+                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
+
             with torch.no_grad():
                 acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
 
@@ -498,14 +499,14 @@ class TorchTrainer(TransformationBlock):
 
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
-                loss, loss_dict = self.loss(y_pred[:2], y_batch, x_batch)
+                loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
                 acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
 
                 # Save metrics
                 append_to_dict(epoch_loss, loss_dict)
                 append_to_dict(epoch_accuracy, acc_dict)
                 pbar.set_postfix(loss=torch.cat(epoch_loss["Loss"]).mean().item())
-                
+
         epoch_metrics = average_dict(epoch_loss)
         epoch_metrics.update(average_dict(epoch_accuracy))
         return epoch_metrics
@@ -518,23 +519,22 @@ class TorchTrainer(TransformationBlock):
         # Check if early stopping is enabled
         if self.early_stopping_patience == -1:
             return False
-        
+
         metric = metrics[self.early_stopping_metric[0]][self.early_stopping_metric[1]]
-        
+
         min_metric = metric + self.early_stopping_metric_min_change < self.early_stopping_best_metric
         max_metric = metric - self.early_stopping_metric_min_change > self.early_stopping_best_metric
-        
+
         # Check if metric is better
-        if (
-            (self.early_stopping_metric_mode == "min" and min_metric)
-            or (self.early_stopping_metric_mode == "max" and max_metric)
+        if (self.early_stopping_metric_mode == "min" and min_metric) or (
+            self.early_stopping_metric_mode == "max" and max_metric
         ):
             self.early_stopping_best_metric = metric
-            
+
             # Store the best model
             if self.revert_to_best_model:
                 self.early_stopping_best_model = copy.deepcopy(self.model.module.state_dict())
-            
+
             # Don't reset the counter if it's the first epoch
             # This is to allow setting the early_stopping_counter to negative values
             # to prevent early stopping for the first few epochs
@@ -543,9 +543,11 @@ class TorchTrainer(TransformationBlock):
             return False
         else:
             self.early_stopping_counter += 1
-            
+
             if self.early_stopping_counter >= self.early_stopping_patience:
-                logger.info(f"Early Stopping! Last best metric: {self.early_stopping_best_metric}, Current metric: {metric}")
+                logger.info(
+                    f"Early Stopping! Last best metric: {self.early_stopping_best_metric}, Current metric: {metric}"
+                )
                 return True
 
 
@@ -583,12 +585,12 @@ def average_dict(
     """Average the values of target."""
     result = {}
     for key, value in target.items():
-        if (type(value[0]) == torch.Tensor):
+        if isinstance(value[0], torch.Tensor):
             result[key] = torch.cat(value).float().mean().item()
         else:
             result[key] = np.mean(value)
     return result
-    
+
 
 def log_dict(
     target: dict[str, float],

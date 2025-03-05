@@ -115,11 +115,18 @@ class MinigridLoss(BaseLoss):
         losses = {
             "Loss": total_loss.expand(n_samples),
             "Observation Loss": (obs_loss.mean() * self.obs_loss_weight).expand(n_samples),
-            "Observation Loss - Object": (obs_loss[0] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(
-                n_samples),
-            "Observation Loss - Color": (obs_loss[1] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(n_samples),
-            "Observation Loss - State": (obs_loss[2] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(n_samples),
-            "Observation Loss - Agent": (obs_loss[3] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(n_samples),
+            "Observation Loss - Object": (
+                obs_loss[0] * self.obs_loss_weight * (1 / len(self._tensor_values))
+            ).expand(n_samples),
+            "Observation Loss - Color": (
+                obs_loss[1] * self.obs_loss_weight * (1 / len(self._tensor_values))
+            ).expand(n_samples),
+            "Observation Loss - State": (
+                obs_loss[2] * self.obs_loss_weight * (1 / len(self._tensor_values))
+            ).expand(n_samples),
+            "Observation Loss - Agent": (
+                obs_loss[3] * self.obs_loss_weight * (1 / len(self._tensor_values))
+            ).expand(n_samples),
             "Reward Loss": (reward_loss * self.reward_loss_weight).expand(n_samples),
         }
         return total_loss, losses

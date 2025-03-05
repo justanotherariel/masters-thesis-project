@@ -1,9 +1,9 @@
 import numpy as np
 
-from src.modules.environment.gymnasium import (
-    GymnasiumBuilder,
-    MinigridSamplerRandom,
+from src.modules.environment.minigrid_builder import (
+    MinigridBuilder,
     MinigridSamplerExtensive,
+    MinigridSamplerRandom,
     flatten_indices,
 )
 from src.typing.pipeline_objects import PipelineData
@@ -11,14 +11,14 @@ from src.typing.pipeline_objects import PipelineData
 
 def test_gymnasium_builder():
     """Test the GymnasiumBuilder class."""
-    builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
+    builder = MinigridBuilder(environment="MiniGrid-Empty-5x5-v0")
     data = builder.transform(PipelineData())
     assert data.env is not None
 
 
 def test_gymnsasium_sampler_random():
     """Test the GymnasiumSampler class."""
-    builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
+    builder = MinigridBuilder(environment="MiniGrid-Empty-5x5-v0")
     data: PipelineData = builder.transform(PipelineData())
 
     num_samples = 10
@@ -72,7 +72,7 @@ def test_gymnsasium_sampler_random():
 def test_minigrid_sampler_extensive():
     """Test the MinigridSamplerExtensive class."""
     # Initialize environment
-    builder = GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0")
+    builder = MinigridBuilder(environment="MiniGrid-Empty-5x5-v0")
     data: PipelineData = builder.transform(PipelineData())
 
     # Initialize sampler with 2 train and 1 validation environment

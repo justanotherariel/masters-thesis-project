@@ -48,7 +48,7 @@ class MinigridAccuracy(BaseAccuracy):
 
         accuracies = {}
         accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward))
-        
+
         accuracies.update(self._calc_object_acc(pred_obs_argmax, target_obs_argmax))
         accuracies.update(self._calc_color_acc(pred_obs_argmax, target_obs_argmax))
         accuracies.update(self._calc_state_acc(pred_obs_argmax, target_obs_argmax))
@@ -66,7 +66,7 @@ class MinigridAccuracy(BaseAccuracy):
     ):
         observation_correct = (pred_obs_argmax == target_obs_argmax).all(dim=[1, 2, 3])
         reward_correct = torch.isclose(pred_reward, target_reward, atol=0.2).squeeze()
-        total_correct = (observation_correct & reward_correct)
+        total_correct = observation_correct & reward_correct
 
         return {
             "Transition Accuracy": total_correct,
@@ -78,10 +78,10 @@ class MinigridAccuracy(BaseAccuracy):
         equally.
         """
         correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).sum(dim=[1, 2])
-        
+
         total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
         acc = correct / total
-        return { "Object Accuracy": acc }
+        return {"Object Accuracy": acc}
 
     def _calc_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -91,10 +91,10 @@ class MinigridAccuracy(BaseAccuracy):
         correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
         correct_color = pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]
         correct = (correct_obj & correct_color).sum(dim=[1, 2])
-        
+
         total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
         acc = correct / total
-        return { "Color Accuracy": acc }
+        return {"Color Accuracy": acc}
 
     def _calc_state_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -104,10 +104,10 @@ class MinigridAccuracy(BaseAccuracy):
         correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
         correct_state = pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]
         correct = (correct_obj & correct_state).sum(dim=[1, 2])
-        
+
         total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
         acc = correct / total
-        return { "State Accuracy": acc }
+        return {"State Accuracy": acc}
 
     def _calc_agent_acc(
         self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
@@ -122,13 +122,17 @@ class MinigridAccuracy(BaseAccuracy):
 
         # Find samples where the agent was supposed to stay
         mask_agent_stay = (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
-        samples_agent_stay = (pred_obs_argmax[mask_agent_stay, :, :, 3] == target_obs_argmax[mask_agent_stay, :, :, 3]).all(dim=[1, 2])
+        samples_agent_stay = (
+            pred_obs_argmax[mask_agent_stay, :, :, 3] == target_obs_argmax[mask_agent_stay, :, :, 3]
+        ).all(dim=[1, 2])
 
         # Find samples where the agent was supposed to rotate
         mask_agent_rotate = ((feature_obs_argmax[..., 3] != 0) == (target_obs_argmax[..., 3] != 0)).all(
             dim=[1, 2]
         ) & ~mask_agent_stay
-        samples_agent_rotated = (pred_obs_argmax[mask_agent_rotate, :, :, 3] == target_obs_argmax[mask_agent_rotate, :, :, 3]).all(dim=[1, 2])
+        samples_agent_rotated = (
+            pred_obs_argmax[mask_agent_rotate, :, :, 3] == target_obs_argmax[mask_agent_rotate, :, :, 3]
+        ).all(dim=[1, 2])
 
         # Find samples where the agent was supposed to move
         mask_agent_move = (
@@ -136,7 +140,9 @@ class MinigridAccuracy(BaseAccuracy):
             & ~mask_agent_stay
             & ~mask_agent_rotate
         )
-        samples_agent_moved = (pred_obs_argmax[mask_agent_move, :, :, 3] == target_obs_argmax[mask_agent_move, :, :, 3]).all(dim=[1, 2])
+        samples_agent_moved = (
+            pred_obs_argmax[mask_agent_move, :, :, 3] == target_obs_argmax[mask_agent_move, :, :, 3]
+        ).all(dim=[1, 2])
 
         return {
             "One Agent Samples Accuracy": samples_one_agent,
@@ -148,7 +154,7 @@ class MinigridAccuracy(BaseAccuracy):
 
     def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
         reward_correct = torch.isclose(pred_reward, target_reward, atol=0.2)
-        
+
         reward_mask = target_reward != 0
         reward_pos_correct = torch.isclose(pred_reward[reward_mask], target_reward[reward_mask], atol=0.2)
         reward_neg_correct = torch.isclose(pred_reward[~reward_mask], target_reward[~reward_mask], atol=0.2)

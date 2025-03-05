@@ -3,7 +3,7 @@ import math
 import torch
 
 from src.framework.transforming import TransformationBlock
-from src.modules.environment.gymnasium import GymnasiumBuilder, MinigridSamplerRandom, MinigridSamplerExtensive
+from src.modules.environment.minigrid_builder import MinigridBuilder, MinigridSamplerExtensive, MinigridSamplerRandom
 from src.modules.training.datasets.token_dataset import TokenDataset
 from src.modules.training.datasets.utils import TokenType
 from src.typing.pipeline_objects import PipelineData
@@ -81,7 +81,7 @@ def test_with_gym_sampler_random():
     environment_shape = (5, 5)
 
     dataset, info = create_dataset(
-        builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
+        builder=MinigridBuilder(environment="MiniGrid-Empty-5x5-v0"),
         sampler=MinigridSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
         indices="train_indices",
     )
@@ -103,7 +103,7 @@ def test_with_minigrid_sampler_extensive():
     num_samples_train = samples_per_env * tain_envs
 
     dataset, info = create_dataset(
-        builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
+        builder=MinigridBuilder(environment="MiniGrid-Empty-5x5-v0"),
         sampler=MinigridSamplerExtensive(train_envs=tain_envs, validation_envs=1),
         indices="train_indices",
     )
@@ -167,7 +167,7 @@ def test_with_gym_sampler_random_discretized():
     environment_shape = (5, 5)
 
     dataset, info = create_dataset(
-        builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
+        builder=MinigridBuilder(environment="MiniGrid-Empty-5x5-v0"),
         sampler=MinigridSamplerRandom(num_samples=num_samples_total, num_samples_per_env=5, perc_train=per_train),
         indices="train_indices",
         discretize=True,
@@ -190,7 +190,7 @@ def test_with_minigrid_sampler_extensive_discretized():
     num_samples_train = samples_per_env * tain_envs
 
     dataset, info = create_dataset(
-        builder=GymnasiumBuilder(environment="MiniGrid-Empty-5x5-v0"),
+        builder=MinigridBuilder(environment="MiniGrid-Empty-5x5-v0"),
         sampler=MinigridSamplerExtensive(train_envs=tain_envs, validation_envs=1),
         indices="train_indices",
         discretize=True,

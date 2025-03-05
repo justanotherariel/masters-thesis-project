@@ -1,28 +1,20 @@
-import io
+import math
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import torch
 from minigrid.core import actions
 from minigrid.core.grid import Grid
-from minigrid.core.world_object import WorldObj
 from PIL import Image
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
 from tqdm import tqdm
-import math
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
 from src.modules.training.accuracy import obs_argmax
-from src.modules.training.datasets.simple import SimpleDatasetDefault
-from src.modules.training.datasets.tensor_index import TensorIndex
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
-from .pdf_file_writer import PDFFileWriter
 from .data_transform import dataset_to_list
+from .pdf_file_writer import PDFFileWriter
 
 logger = Logger()
 
@@ -32,6 +24,7 @@ ACTION_STR = [actions.Actions(i).name for i in range(7)]
 @dataclass
 class MinigridSampleEvalImage(TransformationBlock):
     """Score the predictions of the model."""
+
     eval_n_grids: int | None = None
     constrain_to_one_agent: bool = False
     only_errors: bool = False
@@ -67,7 +60,6 @@ class MinigridSampleEvalImage(TransformationBlock):
         logger.info("Sample evaluation (image) complete.")
         return data
 
-
     def create_sample_eval_pdf(
         self,
         data: PipelineData,
@@ -88,7 +80,7 @@ class MinigridSampleEvalImage(TransformationBlock):
         y_obs, y_reward = target_data[1]
         pred_obs, pred_reward = data.predictions[dataset_group][:2]
         pred_ti = self.info.model_ti
-        
+
         eval_n_grids = min(self.eval_n_grids, len(indices)) if self.eval_n_grids is not None else len(indices)
 
         # Argmax the predictions
@@ -97,7 +89,9 @@ class MinigridSampleEvalImage(TransformationBlock):
         # Go through each grid
         grid_idx_start = 0
         for grid_idx in tqdm(range(eval_n_grids), desc=f"Dataset {dataset_group.name.lower()}"):
-            with PDFFileWriter(self.info.output_dir, f"sample_eval_{prefix}{dataset_group.name.lower()}_{grid_idx}.pdf") as writer:
+            with PDFFileWriter(
+                self.info.output_dir, f"sample_eval_{prefix}{dataset_group.name.lower()}_{grid_idx}.pdf"
+            ) as writer:
                 grid_index_len = len(indices[grid_idx])
                 create_sample_eval_pdf(
                     x_obs[grid_idx_start : grid_idx_start + grid_index_len],
@@ -124,8 +118,9 @@ class MinigridSampleEvalImage(TransformationBlock):
                         writer=writer,
                         errors_only=False,
                     )
-                
+
             grid_idx_start += grid_index_len
+
 
 def create_sample_eval_pdf(
     x_obs: torch.Tensor,
@@ -144,34 +139,27 @@ def create_sample_eval_pdf(
     """
     # Go through each sample
     for sample_idx in range(len(x_obs)):
-        
         # Get the reward
         y_reward_val = y_reward[sample_idx].item()
         pred_reward_val = pred_reward[sample_idx].item()
-        
+
         # Check if the prediction was correct
         obs_correct = (y_obs[sample_idx] == pred_obs[sample_idx]).all().item()
         reward_correct = math.isclose(y_reward_val, pred_reward_val, abs_tol=0.2)
         prediction_correct = obs_correct and reward_correct
         if errors_only and prediction_correct:
-            continue    # Skip correct predictions
-        
+            continue  # Skip correct predictions
+
         # Get the agent positions for x, y, and pred observations
         agent_x_obs_pos = (x_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()[0]
-        agent_x_obs_dir = (
-            x_obs[sample_idx, agent_x_obs_pos[0], agent_x_obs_pos[1], 3].item() - 1
-        )
+        agent_x_obs_dir = x_obs[sample_idx, agent_x_obs_pos[0], agent_x_obs_pos[1], 3].item() - 1
         agent_x_obs_pos = [((agent_x_obs_pos[0].item(), agent_x_obs_pos[1].item()), agent_x_obs_dir)]
 
         agent_y_obs_pos = (y_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()[0]
-        agent_y_obs_dir = (
-            y_obs[sample_idx, agent_y_obs_pos[0], agent_y_obs_pos[1], 3].item() - 1
-        )
+        agent_y_obs_dir = y_obs[sample_idx, agent_y_obs_pos[0], agent_y_obs_pos[1], 3].item() - 1
         agent_y_obs_pos = [((agent_y_obs_pos[0].item(), agent_y_obs_pos[1].item()), agent_y_obs_dir)]
 
-        agent_pred_obs_pos_tmp = (
-            pred_obs[sample_idx, :, :, 3].squeeze() != 0
-        ).nonzero()
+        agent_pred_obs_pos_tmp = (pred_obs[sample_idx, :, :, 3].squeeze() != 0).nonzero()
         agent_pred_obs_pos = []
         for i in range(agent_pred_obs_pos_tmp.shape[0]):
             x = agent_pred_obs_pos_tmp[i, 0].item()
@@ -184,12 +172,21 @@ def create_sample_eval_pdf(
         x_obs_img = render_grid(x_obs[sample_idx], None, agent_x_obs_pos)
         y_obs_img = render_grid(y_obs[sample_idx], None, agent_y_obs_pos)
         pred_obs_img = render_grid(pred_obs[sample_idx], y_obs[sample_idx], agent_pred_obs_pos)
-        
+
         # Get the action
         action = x_action[sample_idx].item()
-        
+
         # Add the row to the PDF
-        writer.add_row(x_obs_img, ACTION_STR[action], y_obs_img, y_reward_val, pred_obs_img, pred_reward_val, obs_correct, reward_correct)
+        writer.add_row(
+            x_obs_img,
+            ACTION_STR[action],
+            y_obs_img,
+            y_reward_val,
+            pred_obs_img,
+            pred_reward_val,
+            obs_correct,
+            reward_correct,
+        )
 
 
 def render_grid(obs: torch.Tensor, target: torch.Tensor | None, agents: list[tuple[tuple[int, int], int]]):
