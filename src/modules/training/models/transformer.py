@@ -14,10 +14,10 @@ from torch import nn
 class ScaledDotProductAttention(nn.Module):
     """
     Computes scaled dot-product attention as described in 'Attention Is All You Need' paper.
-    
+
     The attention mechanism computes the relevance between queries and keys, then uses
     these attention weights to create a weighted sum of the values.
-    
+
     Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
@@ -26,28 +26,30 @@ class ScaledDotProductAttention(nn.Module):
         self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Computes attention scores and applies them to values.
-        
+
         Args:
             query: Tensor of shape [batch_size, n_heads, seq_length, d_k]
             key: Tensor of shape [batch_size, n_heads, seq_length, d_k]
             value: Tensor of shape [batch_size, n_heads, seq_length, d_v]
             attention_mask: Optional boolean mask of shape [batch_size, n_heads, seq_length, seq_length]
-            
+
         Returns:
             tuple: (weighted_values, attention_scores)
-        
+
         Raises:
             RuntimeError: If input tensor dimensions don't match expected shapes
         """
 
         if not (query.dim() == key.dim() == value.dim() == 4):
             raise RuntimeError("Query, Key, and Value must be 4-dimensional tensors")
-            
+
         batch_size, n_heads, seq_length, dim_per_head = key.size()
-        
+
         if query.size(3) != dim_per_head:
             raise RuntimeError(f"Query dimension {query.size(3)} doesn't match Key dimension {dim_per_head}")
 
@@ -57,41 +59,48 @@ class ScaledDotProductAttention(nn.Module):
 
         # 2. Apply attention mask if provided
         if attention_mask is not None:
-            attention_scores = attention_scores.masked_fill(attention_mask, float('-inf'))
+            attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
 
         # 3. Convert scores to probabilities
         attention_probs = self.softmax(attention_scores)
-        
+
         # 4. Apply attention dropout
-        attention_probs = self.dropout(attention_probs)
-        
+        attention_probs_drop = self.dropout(attention_probs)
+
         # 5. Compute weighted values
-        weighted_values = attention_probs @ value
+        weighted_values = attention_probs_drop @ value
 
         return weighted_values, attention_probs
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, attention_dropout: float = 0.1, use_bias: bool = True, 
-                 eigenvalue_update_freq: int = 100, weight_change_threshold: float = 0.05):
+    def __init__(
+        self,
+        d_model: int,
+        n_heads: int,
+        drop_p: float = 0.1,
+        use_bias: bool = True,
+        eigenvalue_update_freq: int = 100,
+        weight_change_threshold: float = 0.05,
+    ):
         super().__init__()
-        
+
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
-        
+
         self.n_heads = n_heads
         self.d_model = d_model
         self.d_k = d_model // n_heads
         self.eigenvalue_update_freq = eigenvalue_update_freq
         self.weight_change_threshold = weight_change_threshold
 
-        self.attention = ScaledDotProductAttention(attention_dropout=attention_dropout)
-        
+        self.attention = ScaledDotProductAttention(attention_dropout=drop_p)
+
         # Linear projections
         self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.key_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
-        
+
         # Cache for eigenvalues and tracking variables
         self.register_buffer('max_eigenvalues', torch.ones(n_heads), persistent=False)
         self.register_buffer('last_value_weights', None, persistent=False)
@@ -138,16 +147,18 @@ class MultiHeadedAttention(nn.Module):
         
         return relative_change.item()
 
-    def forward(self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(
+        self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Applies multi-headed attention to the input tensor.
-        
+
         Args:
             x: Tensor of shape [batch_size, seq_length, d_model]
             prev_eta: Optional previous eta values
             attention_mask: Optional attention mask
             force_eigenvalue_update: Force recomputation of eigenvalues
-            
+
         Returns:
             tuple: (output_tensor, new_eta)
         """
@@ -163,14 +174,13 @@ class MultiHeadedAttention(nn.Module):
 
         # 3. Apply scaled dot-product attention
         attention_output, attention_weights = self.attention(
-            query_heads, key_heads, value_heads, 
-            attention_mask=attention_mask
+            query_heads, key_heads, value_heads, attention_mask=attention_mask
         )
 
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
         output = self.output_projection(merged_attention)
-        
+
         # 5. Calculate new η values if requested
         new_eta = None
         if prev_eta is not None:
@@ -213,16 +223,17 @@ class MultiHeadedAttention(nn.Module):
     def split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """Splits the last dimension of the input tensor into n_heads."""
         batch_size, seq_length, d_model = x.size()
-        
+
         x = x.view(batch_size, seq_length, self.n_heads, self.d_k)
         return x.transpose(1, 2)
 
     def merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """Merges the attention heads back into a single tensor."""
         batch_size, n_heads, seq_length, d_k = x.size()
-        
+
         x = x.transpose(1, 2).contiguous()
         return x.view(batch_size, seq_length, self.d_model)
+
 
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model: int, hidden: int, drop_prob: float = 0.1):
@@ -243,7 +254,7 @@ class PositionwiseFeedForward(nn.Module):
 class TransformerLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_heads, drop_prob):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, attention_dropout=0.0)
+        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -251,7 +262,9 @@ class TransformerLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout2 = nn.Dropout(p=drop_prob)
 
-    def forward(self, x, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(
+        self, x, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Performs a single transformer layer operation.
 
         Args:
@@ -262,7 +275,7 @@ class TransformerLayer(nn.Module):
         Returns:
             tuple[torch.Tensor, torch.Tensor | None]: output tensor and new eta
         """
-        
+
         # Self attention
         delta_x, eta = self.attention(x, prev_eta=prev_eta, attention_mask=attention_mask)
         delta_x = self.dropout1(delta_x)
@@ -272,6 +285,7 @@ class TransformerLayer(nn.Module):
         delta_x = self.ffn(x)
         delta_x = self.dropout2(delta_x)
         x = self.norm2(x + delta_x)
+
         return x, eta
 
 
@@ -286,7 +300,7 @@ class TransformerSepAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
-        calculate_eta: bool = False,    # Whether to calculate η values
+        calculate_eta: bool = False,  # Whether to calculate η values
     ):
         super().__init__()
 
@@ -302,9 +316,9 @@ class TransformerSepAction(nn.Module):
 
         # Input Projection
         self.obs_in_proj = nn.Linear(in_obs_shape[-1], d_model)
-        self.action_in_proj = nn.Linear(action_dim, d_model)        
+        self.action_in_proj = nn.Linear(action_dim, d_model)
         self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
-        
+
         # Positional Encoding
         self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
@@ -324,7 +338,7 @@ class TransformerSepAction(nn.Module):
         # Unpack input
         x_obs = x[0].float()
         x_action = x[1].float()
-        
+
         # Vars
         n_samples = x_obs.shape[0]
 
@@ -336,12 +350,14 @@ class TransformerSepAction(nn.Module):
         # Concatenate obs and action and add positional encoding
         x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, 1, -1)], dim=1)
         x = x + self.pos_embedding
-        
+
         # Calculate η values if requested
         eta = None
         if self.calculate_eta:
-            eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len)
-        
+            eta = torch.eye(self.input_token_len, device=x.device).expand(
+                n_samples, self.input_token_len, self.input_token_len
+            )
+
         # Apply transformer layers
         for layer in self.layers:
             x, eta = layer(x, prev_eta=eta)
@@ -364,7 +380,7 @@ class TransformerCombAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
-        calculate_eta: bool = False,    # Whether to calculate η values
+        calculate_eta: bool = False,  # Whether to calculate η values
     ):
         super().__init__()
 
@@ -382,7 +398,7 @@ class TransformerCombAction(nn.Module):
         # Input Projection
         self.in_proj = nn.Linear(self.input_token_dim, d_model)
         self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
-        
+
         # Positional Encoding
         self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
 
@@ -408,12 +424,12 @@ class TransformerCombAction(nn.Module):
 
         # Create input sequence
         x = torch.zeros(n_samples, self.obs_token_len, self.input_token_dim, device=x_obs.device)
-        x[..., :x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
-        x[..., x_obs.shape[-1]:] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
+        x[..., : x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
+        x[..., x_obs.shape[-1] :] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
 
         # Embed input sequence
         x = self.in_proj(x)
-        
+
         # Append reward token and add positional encoding
         x = torch.cat([x, self.reward_token.expand(n_samples, 1, -1)], dim=1)
         x = x + self.pos_embedding
@@ -421,8 +437,10 @@ class TransformerCombAction(nn.Module):
         # Calculate η values if requested
         eta = None
         if self.calculate_eta:
-            eta = torch.eye(self.input_token_len, device=x.device).expand(n_samples, self.input_token_len, self.input_token_len)
-        
+            eta = torch.eye(self.input_token_len, device=x.device).expand(
+                n_samples, self.input_token_len, self.input_token_len
+            )
+
         # Apply transformer layers
         for layer in self.layers:
             x, eta = layer(x, prev_eta=eta)
