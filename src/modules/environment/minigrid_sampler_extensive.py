@@ -24,14 +24,19 @@ class MinigridSamplerExtensive(TransformationBlock):
     """
 
     train_envs: int
+    train_keep_perc: float
     validation_envs: int
 
-    def __init__(self, train_envs: int, validation_envs: int):
+    def __init__(self, train_envs: int, validation_envs: int, train_keep_perc: float = 1.0):
+        if train_keep_perc < 0.0 or train_keep_perc > 1.0:
+            raise ValueError("train_keep_perc must be between 0.0 and 1.0")
+        
         self.train_envs = train_envs
+        self.train_keep_perc = train_keep_perc
         self.validation_envs = validation_envs
 
     def __repr__(self):
-        args_to_show = [self.train_envs, self.validation_envs]
+        args_to_show = [self.train_envs, self.train_keep_perc, self.validation_envs]
         args = ", ".join([f"{arg}" for arg in args_to_show])
         return f"{self.__class__.__name__}({args})"
 
@@ -170,6 +175,12 @@ class MinigridSamplerExtensive(TransformationBlock):
                     # Create samples for this position
                     self._sample_pos(env, pos, env_indices, observations_list, actions_list, rewards_list)
                     pbar.update(1)
+                    
+            if current_env < self.train_envs and self.train_keep_perc < 1.0:
+                env_indices_discard_idx = np.random.choice(
+                    len(env_indices), int(len(env_indices) * (1 - self.train_keep_perc)), replace=False
+                )
+                env_indices = [env_indices[i] for i in range(len(env_indices)) if i not in env_indices_discard_idx]
 
             # Store indices in appropriate set
             if current_env < self.train_envs:
