@@ -102,50 +102,50 @@ class MultiHeadedAttention(nn.Module):
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
 
         # Cache for eigenvalues and tracking variables
-        self.register_buffer('max_eigenvalues', torch.ones(n_heads), persistent=False)
-        self.register_buffer('last_value_weights', None, persistent=False)
-        self.eigenvalues_computed = False
-        self.forward_count = 0
-        
-    def compute_max_eigenvalues(self):
-        """Compute the maximum eigenvalue for each head's value projection."""
-        with torch.no_grad():
-            weight = self.value_projection.weight  # shape: [d_model, d_model]
-            d_k = self.d_model // self.n_heads
-            
-            # Save current weights for future comparison
-            if self.last_value_weights is None or self.last_value_weights.shape != weight.shape:
-                self.last_value_weights = weight.clone()
-            else:
-                self.last_value_weights.copy_(weight)
-            
-            # Initialize eigenvalues tensor
-            max_eigenvalues = torch.zeros(self.n_heads, device=weight.device)
-            
-            for h in range(self.n_heads):
-                # Extract the weight matrix for this head
-                head_weight = weight[h*d_k:(h+1)*d_k, :]  # shape: [d_k, d_model]
-                
-                # Compute singular values (square roots of eigenvalues of W*W^T)
-                _, s, _ = torch.linalg.svd(head_weight, full_matrices=False)
-                max_eigenvalues[h] = torch.max(s)
-            
-            self.max_eigenvalues.copy_(max_eigenvalues)
-            self.eigenvalues_computed = True
-            print(f"Updated eigenvalues: {self.max_eigenvalues}")
+        # self.register_buffer('max_eigenvalues', torch.ones(n_heads), persistent=False)
+        # self.register_buffer('last_value_weights', None, persistent=False)
+        # self.eigenvalues_computed = False
+        # self.forward_count = 0
 
-    def check_weight_change(self) -> float:
-        """Measure how much value weights have changed since last eigenvalue computation."""
-        if self.last_value_weights is None:
-            return float('inf')  # Force update if no previous weights stored
-        
-        current_weights = self.value_projection.weight
-        # Relative Frobenius norm of the difference
-        diff_norm = torch.norm(current_weights - self.last_value_weights)
-        weights_norm = torch.norm(self.last_value_weights)
-        relative_change = diff_norm / (weights_norm + 1e-8)
-        
-        return relative_change.item()
+    # def compute_max_eigenvalues(self):
+    #     """Compute the maximum eigenvalue for each head's value projection."""
+    #     with torch.no_grad():
+    #         weight = self.value_projection.weight  # shape: [d_model, d_model]
+    #         d_k = self.d_model // self.n_heads
+
+    #         # Save current weights for future comparison
+    #         if self.last_value_weights is None or self.last_value_weights.shape != weight.shape:
+    #             self.last_value_weights = weight.clone()
+    #         else:
+    #             self.last_value_weights.copy_(weight)
+
+    #         # Initialize eigenvalues tensor
+    #         max_eigenvalues = torch.zeros(self.n_heads, device=weight.device)
+
+    #         for h in range(self.n_heads):
+    #             # Extract the weight matrix for this head
+    #             head_weight = weight[h*d_k:(h+1)*d_k, :]  # shape: [d_k, d_model]
+
+    #             # Compute singular values (square roots of eigenvalues of W*W^T)
+    #             _, s, _ = torch.linalg.svd(head_weight, full_matrices=False)
+    #             max_eigenvalues[h] = torch.max(s)
+
+    #         self.max_eigenvalues.copy_(max_eigenvalues)
+    #         self.eigenvalues_computed = True
+    #         print(f"Updated eigenvalues: {self.max_eigenvalues}")
+
+    # def check_weight_change(self) -> float:
+    #     """Measure how much value weights have changed since last eigenvalue computation."""
+    #     if self.last_value_weights is None:
+    #         return float('inf')  # Force update if no previous weights stored
+
+    #     current_weights = self.value_projection.weight
+    #     # Relative Frobenius norm of the difference
+    #     diff_norm = torch.linalg.matrix_norm(current_weights - self.last_value_weights)
+    #     weights_norm = torch.linalg.matrix_norm(self.last_value_weights)
+    #     relative_change = diff_norm / (weights_norm + 1e-8)
+
+    #     return relative_change.item()
 
     def forward(
         self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
@@ -184,37 +184,40 @@ class MultiHeadedAttention(nn.Module):
         # 5. Calculate new η values if requested
         new_eta = None
         if prev_eta is not None:
-            # Check if we should update eigenvalues based on various criteria
-            should_update = False
-                    
-            # Criterion 1: First computation
-            if not self.eigenvalues_computed:
-                should_update = True
-                
-            # Only check the following criteria during training
-            elif self.training:
-                # Criterion 2: Update every N forward passes
-                self.forward_count += 1
-                if self.forward_count >= self.eigenvalue_update_freq:
-                    should_update = True
-                    self.forward_count = 0
-                
-                # Criterion 3: Significant weight change detected
-                elif self.forward_count % 10 == 0:  # Check less frequently for efficiency
-                    weight_change = self.check_weight_change()
-                    if weight_change > self.weight_change_threshold:
-                        should_update = True
-                        self.forward_count = 0
-            
-            if should_update:
-                self.compute_max_eigenvalues()
+            # # Check if we should update eigenvalues based on various criteria
+            # should_update = False
 
-            # Scale attention weights by the maximum eigenvalue for each head
-            scaled_weights = attention_weights * self.max_eigenvalues.view(1, self.n_heads, 1, 1)
-            
+            # # Criterion 1: First computation
+            # if not self.eigenvalues_computed:
+            #     should_update = True
+
+            # # Only check the following criteria during training
+            # elif self.training:
+            #     # Criterion 2: Update every N forward passes
+            #     self.forward_count += 1
+            #     if self.forward_count >= self.eigenvalue_update_freq:
+            #         should_update = True
+            #         self.forward_count = 0
+
+            #     # Criterion 3: Significant weight change detected
+            #     elif self.forward_count % 10 == 0:  # Check less frequently for efficiency
+            #         weight_change = self.check_weight_change()
+            #         if weight_change > self.weight_change_threshold:
+            #             should_update = True
+            #             self.forward_count = 0
+
+            # if should_update:
+            #     self.compute_max_eigenvalues()
+
+            # # Scale attention weights by the maximum eigenvalue for each head
+            # scaled_weights = attention_weights * self.max_eigenvalues.view(1, self.n_heads, 1, 1)
+
+            # # Sum across heads to get the total influence
+            # eta_layer = scaled_weights.sum(dim=1)
+
             # Sum across heads to get the total influence
-            eta_layer = scaled_weights.sum(dim=1)
-            
+            eta_layer = attention_weights.sum(dim=1)
+
             # Update η using matrix multiplication
             new_eta = torch.bmm(eta_layer, prev_eta)
 
