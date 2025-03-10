@@ -42,6 +42,18 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
     return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
 
 
+def attention_focus_loss(eta, factor: float = 0.01):
+    # Normalize each column (per output token) to create a probability distribution
+    eta_norm = eta / (eta.sum(dim=1, keepdim=True) + 1e-10)
+
+    # Calculate entropy for each output token's influence distribution
+    # Lower entropy = more focused attention
+    entropies = -torch.sum(eta_norm * torch.log(eta_norm + 1e-10), dim=1)
+
+    # Return mean entropy as the loss
+    return entropies.mean() * factor
+
+
 class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         raise NotImplementedError("BaseLoss is an abstract class and should not be called.")
@@ -58,6 +70,8 @@ class BaseLoss:
 @dataclass
 class MinigridLoss(BaseLoss):
     discrete_loss_fn: callable = None
+    eta_loss_fn: callable = None
+
     obs_loss_weight: float = 0.8
     reward_loss_weight: float = 0.2
 
@@ -79,7 +93,6 @@ class MinigridLoss(BaseLoss):
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute the combined loss for observation and reward predictions."""
         predicted_next_obs, predicted_reward = predictions[:2]
-        predicted_aux = predictions[2:]
         target_next_obs, target_reward = targets
 
         # Compute observation loss using cross entropy for value ranges (logits)
@@ -103,11 +116,13 @@ class MinigridLoss(BaseLoss):
         # Compute reward loss
         reward_loss = F.mse_loss(predicted_reward, target_reward)
 
+        # Compute auxiliary losses
+        eta_loss = torch.tensor(0.0, device=predicted_next_obs.device)
+        if len(predictions) > 2 and self.eta_loss_fn is not None:
+            eta_loss = self.eta_loss_fn(predictions[2])
+
         # Final loss combining original and consistency terms
-        total_loss = (
-            self.obs_loss_weight * obs_loss.mean()
-            + self.reward_loss_weight * reward_loss
-        )
+        total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss + eta_loss
 
         n_samples = predicted_next_obs.shape[0]
 
@@ -128,5 +143,6 @@ class MinigridLoss(BaseLoss):
                 obs_loss[3] * self.obs_loss_weight * (1 / len(self._tensor_values))
             ).expand(n_samples),
             "Reward Loss": (reward_loss * self.reward_loss_weight).expand(n_samples),
+            "Eta Loss": eta_loss.expand(n_samples),
         }
         return total_loss, losses
