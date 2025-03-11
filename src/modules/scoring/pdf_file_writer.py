@@ -25,8 +25,9 @@ class PDFFileWriter:
         self.c = canvas.Canvas(str(self.file_path), pagesize=A4)
         self.current_y = self.page_height - self.margin
 
-        # Add arrow symbol
+        # Spacing
         self.arrow_width = 30
+        self.idx_width = 20  # Width for sample index display
 
     def _add_arrow(self, x, y, color: str):
         """Draw an arrow symbol"""
@@ -51,6 +52,7 @@ class PDFFileWriter:
 
     def add_row(
         self,
+        idx: int,
         x_obs: Image.Image,
         x_action: str,
         y_obs: Image.Image,
@@ -64,13 +66,15 @@ class PDFFileWriter:
         Add a row with observation images, action text, and rewards.
 
         Args:
+            idx: Sample index within the dataset
             x_obs: Input observation (PIL Image)
             x_action: Action index
             y_obs: Target observation (PIL Image)
             y_reward: Target reward value
             pred_obs: Predicted observation (PIL Image)
             pred_reward: Predicted reward value
-            correct: Whether the prediction was correct
+            correct_obs: Whether observation prediction was correct
+            correct_reward: Whether reward prediction was correct
         """
         # Check if we need a new page
         if self.current_y - self.row_height < self.margin:
@@ -79,7 +83,8 @@ class PDFFileWriter:
 
         # Calculate positions
         x_positions = []
-        x_positions.append(self.margin)  # x_obs
+        x_positions.append(self.margin - 20)  # idx display
+        x_positions.append(x_positions[-1] + self.idx_width)  # x_obs
         x_positions.append(x_positions[-1] + self.image_width)  # action text
         x_positions.append(x_positions[-1] + self.image_width)  # arrow
         x_positions.append(x_positions[-1] + 50)  # rewards
@@ -87,8 +92,17 @@ class PDFFileWriter:
         x_positions.append(x_positions[-1] + self.image_width + 20)  # separator
         x_positions.append(x_positions[-1] + 20)  # pred_obs
 
+        # Draw the sample index vertically
+        self.c.saveState()
+        self.c.setFont("Helvetica-Bold", 10)
+        self.c.translate(x_positions[0] + 10, self.current_y - self.image_height/2)  # Position in the middle of the row
+        self.c.rotate(90)  # Rotate 90 degrees to write vertically
+        idx_text = f"#{idx}"
+        self.c.drawString(0, 0, idx_text)  # The 0,0 position is now rotated
+        self.c.restoreState()
+
         # Draw images and elements
-        for img, pos in [(x_obs, 0), (y_obs, 4), (pred_obs, 6)]:
+        for img, pos in [(x_obs, 1), (y_obs, 5), (pred_obs, 7)]:
             img_buffer = io.BytesIO()
             img.save(img_buffer, format="PNG")
             img_buffer.seek(0)
@@ -105,18 +119,18 @@ class PDFFileWriter:
         # Add action text
         self.c.setFont("Helvetica", 12)
         text_width = self.c.stringWidth(x_action, "Helvetica", 12)
-        text_x = x_positions[1] + (self.image_width - text_width) / 2
+        text_x = x_positions[2] + (self.image_width - text_width) / 2
         text_y = self.current_y - self.image_height / 2
         self.c.drawString(text_x, text_y, x_action)
 
         # Add arrow
         arrow_color = "green" if (correct_obs and correct_reward) else "red"
-        self._add_arrow(x_positions[2], self.current_y - self.image_height / 2, arrow_color)
+        self._add_arrow(x_positions[3], self.current_y - self.image_height / 2, arrow_color)
 
         # Add reward values
         self.c.setFont("Courier", 9)  # Use monospace font for aligned numbers
         self.c.setFillColor("black" if correct_reward else "red")
-        reward_x = x_positions[3]
+        reward_x = x_positions[4]
         # Target reward (top)
         target_text = f"Target: {self._format_reward(y_reward)}"
         self.c.drawString(reward_x, self.current_y - self.image_height / 3, target_text)
@@ -126,7 +140,7 @@ class PDFFileWriter:
         self.c.setFillColor("black")
 
         # Add vertical separator
-        self._add_vertical_separator(x_positions[5], self.current_y - self.image_height, self.image_height)
+        self._add_vertical_separator(x_positions[6], self.current_y - self.image_height, self.image_height)
 
         # Update current_y position
         self.current_y -= self.row_height

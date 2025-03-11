@@ -125,16 +125,9 @@ def create_sample_eval_pdf(
 
     # Randomize the samples
     indices = torch.randperm(len(x_obs))
-    x_obs = x_obs[indices]
-    x_action = x_action[indices]
-    y_obs = y_obs[indices]
-    y_reward = y_reward[indices]
-    pred_obs = pred_obs[indices]
-    pred_reward = pred_reward[indices]
-    pred_eta = pred_eta[indices]
 
     # Go through each sample
-    for sample_idx in range(len(x_obs)):
+    for sample_idx in indices:
         if found_correct >= n_correct and found_incorrect >= n_incorrect:
             break
 
@@ -189,6 +182,7 @@ def create_sample_eval_pdf(
 
         # Add the row to the PDF
         writer.add_row(
+            sample_idx,
             x_obs_img,
             ACTION_STR[action],
             y_obs_img,

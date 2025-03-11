@@ -50,7 +50,7 @@ class MinigridSampleEvalImage(TransformationBlock):
         for dataset_group in data.grids:
             if dataset_group == DatasetGroup.ALL:
                 continue
-            self.create_sample_eval_pdf(
+            self._create_sample_eval_pdf(
                 data,
                 dataset_group,
                 constrain_to_one_agent=self.constrain_to_one_agent,
@@ -60,7 +60,7 @@ class MinigridSampleEvalImage(TransformationBlock):
         logger.info("Sample evaluation (image) complete.")
         return data
 
-    def create_sample_eval_pdf(
+    def _create_sample_eval_pdf(
         self,
         data: PipelineData,
         dataset_group: DatasetGroup,
@@ -100,6 +100,7 @@ class MinigridSampleEvalImage(TransformationBlock):
                     y_reward[grid_idx_start : grid_idx_start + grid_index_len],
                     pred_obs[grid_idx_start : grid_idx_start + grid_index_len],
                     pred_reward[grid_idx_start : grid_idx_start + grid_index_len],
+                    start_idx=grid_idx_start,
                     writer=writer,
                     errors_only=True,
                 )
@@ -115,6 +116,7 @@ class MinigridSampleEvalImage(TransformationBlock):
                         y_reward[grid_idx_start : grid_idx_start + grid_index_len],
                         pred_obs[grid_idx_start : grid_idx_start + grid_index_len],
                         pred_reward[grid_idx_start : grid_idx_start + grid_index_len],
+                        start_idx=grid_idx_start,
                         writer=writer,
                         errors_only=False,
                     )
@@ -129,6 +131,7 @@ def create_sample_eval_pdf(
     y_reward: torch.Tensor,
     pred_obs: torch.Tensor,
     pred_reward: torch.Tensor,
+    start_idx: int,
     writer: "PDFFileWriter",
     *,
     errors_only: bool = False,
@@ -178,6 +181,7 @@ def create_sample_eval_pdf(
 
         # Add the row to the PDF
         writer.add_row(
+            start_idx + sample_idx,
             x_obs_img,
             ACTION_STR[action],
             y_obs_img,
