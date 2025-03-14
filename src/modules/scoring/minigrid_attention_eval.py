@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from minigrid.core import actions
 from minigrid.core.grid import Grid
+from minigrid.core.constants import DIR_TO_VEC
 from PIL import Image
 from tqdm import tqdm
 
@@ -198,8 +199,17 @@ def create_sample_eval_pdf(
 
         # Scale eta to 0-1
         eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
-
-        writer.add_tensor(eta.transpose(dim0=0, dim1=1))
+        eta = eta.transpose(dim0=0, dim1=1)
+        
+        # Highlight feature and target agent positions
+        current_pos_idx = agent_x_obs_pos[0][0][1]*x_obs.shape[1] + agent_x_obs_pos[0][0][0]
+        x_hightlight = (current_pos_idx, "green", "green")
+        
+        direction = DIR_TO_VEC[agent_x_obs_dir]
+        forward_pos_idx = (agent_x_obs_pos[0][0][1] + direction[1]) *y_obs.shape[1] + agent_x_obs_pos[0][0][0] + direction[0]
+        forward_hightlight = (forward_pos_idx, "red", "red")
+        
+        writer.add_tensor(eta, [x_hightlight, forward_hightlight])
         writer.add_page_break()
 
         progress_bar.update(1)

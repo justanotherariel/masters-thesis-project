@@ -145,20 +145,28 @@ class PDFFileWriter:
         # Update current_y position
         self.current_y -= self.row_height
 
-    def add_tensor(self, tensor: torch.Tensor):
+    def add_tensor(
+        self,
+        tensor: torch.Tensor,
+        highlight: list[tuple[int, str | None, str | None]] = None,
+    ):
         """
         Add a tensor to the PDF as a grid of circles where the size of each circle
         represents the value (between 0 and 1).
 
         Args:
             tensor: A 2D tensor with values between 0 and 1
+            highlight: List of tuples (idx, row_color, col_color) specifying which 
+                      rows/columns to highlight and with what colors. If row_color or 
+                      col_color is None, that dimension won't be highlighted.
         """
-        # # Add a page break to ensure we have a full page for the tensor
-        # self.add_page_break()
-
         # Ensure tensor is 2D
         if tensor.dim() != 2:
             raise ValueError(f"Expected 2D tensor, got {tensor.dim()}D")
+
+        # Initialize highlight list if None
+        if highlight is None:
+            highlight = []
 
         # Get tensor dimensions
         rows, cols = tensor.shape
@@ -184,6 +192,41 @@ class PDFFileWriter:
         grid_height = rows * cell_size
         grid_x = self.margin + (usable_width - grid_width) / 2
         grid_y = self.page_height - self.margin - (usable_height - grid_height) / 2
+
+        # First, draw highlights if any
+        for idx, row_color, col_color in highlight:
+            # Validate index is within bounds
+            if idx < 0 or idx >= max(rows, cols):
+                continue
+                
+            # Draw row highlight if row_color is provided and index is valid
+            if row_color is not None and idx < rows:
+                self.c.setFillColor(row_color)
+                self.c.setFillAlpha(0.3)  # Semi-transparent
+                self.c.rect(
+                    grid_x,
+                    grid_y - (idx + 1) * cell_size,
+                    grid_width,
+                    cell_size,
+                    fill=1,
+                    stroke=0
+                )
+                
+            # Draw column highlight if col_color is provided and index is valid
+            if col_color is not None and idx < cols:
+                self.c.setFillColor(col_color)
+                self.c.setFillAlpha(0.3)  # Semi-transparent
+                self.c.rect(
+                    grid_x + idx * cell_size,
+                    grid_y - grid_height,
+                    cell_size,
+                    grid_height,
+                    fill=1,
+                    stroke=0
+                )
+                
+        # Reset fill opacity
+        self.c.setFillAlpha(1.0)
 
         # Draw the grid
         self.c.setLineWidth(0.5)
