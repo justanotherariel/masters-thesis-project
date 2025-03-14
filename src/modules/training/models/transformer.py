@@ -21,10 +21,13 @@ class ScaledDotProductAttention(nn.Module):
     Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
-    def __init__(self, attention_dropout=0.1):
+    def __init__(self, dim_per_head: int, attention_dropout=0.1, normalize_values=True):
         super().__init__()
         self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
+        self.normalize_values = normalize_values
+        
+        self.value_norm = nn.LayerNorm(dim_per_head)
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
@@ -68,7 +71,15 @@ class ScaledDotProductAttention(nn.Module):
         attention_probs_drop = self.dropout(attention_probs)
 
         # 5. Compute weighted values
-        weighted_values = attention_probs_drop @ value
+        if self.normalize_values:
+            # Reshape for LayerNorm which expects (batch_size, seq_len, hidden_size)
+            original_shape = value.shape
+            value_reshaped = value.reshape(-1, value.size(-1))
+            # Apply LayerNorm
+            normalized_values = self.value_norm(value_reshaped).view(original_shape)
+            weighted_values = attention_probs_drop @ normalized_values
+        else:
+            weighted_values = attention_probs_drop @ value
 
         return weighted_values, attention_probs
 
@@ -80,8 +91,7 @@ class MultiHeadedAttention(nn.Module):
         n_heads: int,
         drop_p: float = 0.1,
         use_bias: bool = True,
-        eigenvalue_update_freq: int = 100,
-        weight_change_threshold: float = 0.05,
+        idx: int = 0
     ):
         super().__init__()
 
@@ -90,62 +100,15 @@ class MultiHeadedAttention(nn.Module):
         self.n_heads = n_heads
         self.d_model = d_model
         self.d_k = d_model // n_heads
-        self.eigenvalue_update_freq = eigenvalue_update_freq
-        self.weight_change_threshold = weight_change_threshold
+        self.idx = idx
 
-        self.attention = ScaledDotProductAttention(attention_dropout=drop_p)
+        self.attention = ScaledDotProductAttention(dim_per_head=self.d_k, attention_dropout=drop_p)
 
         # Linear projections
         self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.key_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
-
-        # Cache for eigenvalues and tracking variables
-        # self.register_buffer('max_eigenvalues', torch.ones(n_heads), persistent=False)
-        # self.register_buffer('last_value_weights', None, persistent=False)
-        # self.eigenvalues_computed = False
-        # self.forward_count = 0
-
-    # def compute_max_eigenvalues(self):
-    #     """Compute the maximum eigenvalue for each head's value projection."""
-    #     with torch.no_grad():
-    #         weight = self.value_projection.weight  # shape: [d_model, d_model]
-    #         d_k = self.d_model // self.n_heads
-
-    #         # Save current weights for future comparison
-    #         if self.last_value_weights is None or self.last_value_weights.shape != weight.shape:
-    #             self.last_value_weights = weight.clone()
-    #         else:
-    #             self.last_value_weights.copy_(weight)
-
-    #         # Initialize eigenvalues tensor
-    #         max_eigenvalues = torch.zeros(self.n_heads, device=weight.device)
-
-    #         for h in range(self.n_heads):
-    #             # Extract the weight matrix for this head
-    #             head_weight = weight[h*d_k:(h+1)*d_k, :]  # shape: [d_k, d_model]
-
-    #             # Compute singular values (square roots of eigenvalues of W*W^T)
-    #             _, s, _ = torch.linalg.svd(head_weight, full_matrices=False)
-    #             max_eigenvalues[h] = torch.max(s)
-
-    #         self.max_eigenvalues.copy_(max_eigenvalues)
-    #         self.eigenvalues_computed = True
-    #         print(f"Updated eigenvalues: {self.max_eigenvalues}")
-
-    # def check_weight_change(self) -> float:
-    #     """Measure how much value weights have changed since last eigenvalue computation."""
-    #     if self.last_value_weights is None:
-    #         return float('inf')  # Force update if no previous weights stored
-
-    #     current_weights = self.value_projection.weight
-    #     # Relative Frobenius norm of the difference
-    #     diff_norm = torch.linalg.matrix_norm(current_weights - self.last_value_weights)
-    #     weights_norm = torch.linalg.matrix_norm(self.last_value_weights)
-    #     relative_change = diff_norm / (weights_norm + 1e-8)
-
-    #     return relative_change.item()
 
     def forward(
         self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
@@ -184,37 +147,6 @@ class MultiHeadedAttention(nn.Module):
         # 5. Calculate new η values if requested
         new_eta = None
         if prev_eta is not None:
-            # # Check if we should update eigenvalues based on various criteria
-            # should_update = False
-
-            # # Criterion 1: First computation
-            # if not self.eigenvalues_computed:
-            #     should_update = True
-
-            # # Only check the following criteria during training
-            # elif self.training:
-            #     # Criterion 2: Update every N forward passes
-            #     self.forward_count += 1
-            #     if self.forward_count >= self.eigenvalue_update_freq:
-            #         should_update = True
-            #         self.forward_count = 0
-
-            #     # Criterion 3: Significant weight change detected
-            #     elif self.forward_count % 10 == 0:  # Check less frequently for efficiency
-            #         weight_change = self.check_weight_change()
-            #         if weight_change > self.weight_change_threshold:
-            #             should_update = True
-            #             self.forward_count = 0
-
-            # if should_update:
-            #     self.compute_max_eigenvalues()
-
-            # # Scale attention weights by the maximum eigenvalue for each head
-            # scaled_weights = attention_weights * self.max_eigenvalues.view(1, self.n_heads, 1, 1)
-
-            # # Sum across heads to get the total influence
-            # eta_layer = scaled_weights.sum(dim=1)
-
             # Sum across heads to get the total influence
             eta_layer = attention_weights.sum(dim=1)
 
@@ -255,9 +187,9 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class TransformerLayer(nn.Module):
-    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob):
+    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0)
+        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -328,8 +260,8 @@ class TransformerSepAction(nn.Module):
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
-                for _ in range(n_layers)
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob, idx=idx)
+                for idx in range(n_layers)
             ]
         )
 
