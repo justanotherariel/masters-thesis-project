@@ -8,7 +8,7 @@ entity: a-ebersberger-tu-delft
 program: train.py
 name: U-Net | fixed loss + arch change
 metric:
-  name: Train/Agent Accuracy
+  name: Train/Transition Accuracy
   goal: maximize
 parameters:
 
