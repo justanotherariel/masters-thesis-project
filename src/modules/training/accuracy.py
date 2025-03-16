@@ -77,11 +77,9 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the object component of the observation tensor. Each object class is weighted
         equally.
         """
-        correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).sum(dim=[1, 2])
+        correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).all(dim=[1, 2])
 
-        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
-        acc = correct / total
-        return {"Object Accuracy": acc}
+        return {"Object Accuracy": correct}
 
     def _calc_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -90,11 +88,9 @@ class MinigridAccuracy(BaseAccuracy):
         """
         correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
         correct_color = pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]
-        correct = (correct_obj & correct_color).sum(dim=[1, 2])
+        correct = (correct_obj & correct_color).all(dim=[1, 2])
 
-        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
-        acc = correct / total
-        return {"Color Accuracy": acc}
+        return {"Color Accuracy": correct}
 
     def _calc_state_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
@@ -103,11 +99,9 @@ class MinigridAccuracy(BaseAccuracy):
         """
         correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
         correct_state = pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]
-        correct = (correct_obj & correct_state).sum(dim=[1, 2])
+        correct = (correct_obj & correct_state).all(dim=[1, 2])
 
-        total = target_obs_argmax.shape[1] * target_obs_argmax.shape[2]
-        acc = correct / total
-        return {"State Accuracy": acc}
+        return {"State Accuracy": correct}
 
     def _calc_agent_acc(
         self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
