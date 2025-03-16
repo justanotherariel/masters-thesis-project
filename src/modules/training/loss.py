@@ -42,7 +42,7 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
     return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
 
 
-def attention_focus_loss(eta, factor: float = 0.01):
+def eta_focus_loss(eta, weight: float = 0.01):
     # Normalize each column (per output token) to create a probability distribution
     eta_norm = eta / (eta.sum(dim=1, keepdim=True) + 1e-10)
 
@@ -51,8 +51,68 @@ def attention_focus_loss(eta, factor: float = 0.01):
     entropies = -torch.sum(eta_norm * torch.log(eta_norm + 1e-10), dim=1)
 
     # Return mean entropy as the loss
-    return entropies.mean() * factor
+    return entropies.mean() * weight
 
+def eta_minimization_loss(eta: torch.Tensor, loss_type: str = 'frobenius', weight: float = 0.01) -> torch.Tensor:
+    """
+    Computes a loss term that encourages minimizing eta values, effectively pushing
+    attention toward the dummy token.
+    
+    Args:
+        eta: Tensor of shape [batch_size, seq_length, seq_length] representing 
+                  the final attention influence matrix (excluding dummy token)
+        loss_type: The type of loss function to use ('l1', 'frobenius', 'nuclear', 'entropy', 'sparse')
+        weight: Scaling factor to control the strength of the regularization
+        
+    Returns:
+        A scalar loss value that can be added to the main loss function
+    """
+    # Ensure we have a proper batch dimension
+    if eta.dim() == 2:
+        eta = eta.unsqueeze(0)
+    
+    if loss_type == 'l1':
+        # L1 loss: encourages sparsity by pushing most values toward zero
+        return weight * torch.abs(eta).mean()
+    
+    elif loss_type == 'frobenius':
+        # Frobenius norm: penalizes the squared magnitude of all attention values
+        # This is like L2 regularization for matrices
+        return weight * torch.sum(eta ** 2, dim=(1, 2)).mean()
+    
+    elif loss_type == 'nuclear':
+        # Nuclear norm: sum of singular values, encourages low-rank attention patterns
+        # This is computationally more expensive but can produce more structured attention
+        loss = 0
+        for i in range(eta.size(0)):  # For each item in batch
+            # SVD to get singular values
+            u, s, v = torch.svd(eta[i])
+            # Sum of singular values = nuclear norm
+            loss += torch.sum(s)
+        return weight * loss / eta.size(0)
+    
+    elif loss_type == 'entropy':
+        # Entropy loss: encourages attention to be concentrated rather than diffuse
+        # First normalize eta to sum to 1
+        eps = 1e-8  # Small epsilon to prevent log(0)
+        eta_abs = torch.abs(eta)
+        eta_sum = eta_abs.sum(dim=(1, 2), keepdim=True) + eps
+        eta_prob = eta_abs / eta_sum
+        
+        # Calculate entropy: -sum(p * log(p))
+        entropy = -torch.sum(eta_prob * torch.log(eta_prob + eps), dim=(1, 2)).mean()
+        return weight * entropy
+    
+    elif loss_type == 'sparse':
+        # Sparsity-promoting loss based on L1/L2 ratio
+        # Higher ratio = more sparsity
+        l1_norm = torch.abs(eta).sum(dim=(1, 2))
+        l2_norm = torch.sqrt((eta ** 2).sum(dim=(1, 2)) + 1e-8)
+        sparsity_term = (l1_norm / l2_norm).mean()
+        return weight * sparsity_term
+    
+    else:
+        raise ValueError(f"Unknown loss type: {loss_type}")
 
 class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
