@@ -21,13 +21,10 @@ class ScaledDotProductAttention(nn.Module):
     Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
-    def __init__(self, dim_per_head: int, attention_dropout=0.1, normalize_values=True):
+    def __init__(self, attention_dropout=0.1):
         super().__init__()
         self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
-        self.normalize_values = normalize_values
-        
-        self.value_norm = nn.LayerNorm(dim_per_head)
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
@@ -71,15 +68,7 @@ class ScaledDotProductAttention(nn.Module):
         attention_probs_drop = self.dropout(attention_probs)
 
         # 5. Compute weighted values
-        if self.normalize_values:
-            # Reshape for LayerNorm which expects (batch_size, seq_len, hidden_size)
-            original_shape = value.shape
-            value_reshaped = value.reshape(-1, value.size(-1))
-            # Apply LayerNorm
-            normalized_values = self.value_norm(value_reshaped).view(original_shape)
-            weighted_values = attention_probs_drop @ normalized_values
-        else:
-            weighted_values = attention_probs_drop @ value
+        weighted_values = attention_probs_drop @ value
 
         return weighted_values, attention_probs
 
@@ -102,7 +91,7 @@ class MultiHeadedAttention(nn.Module):
         self.d_k = d_model // n_heads
         self.idx = idx
 
-        self.attention = ScaledDotProductAttention(dim_per_head=self.d_k, attention_dropout=drop_p)
+        self.attention = ScaledDotProductAttention(attention_dropout=drop_p)
 
         # Linear projections
         self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
@@ -120,7 +109,6 @@ class MultiHeadedAttention(nn.Module):
             x: Tensor of shape [batch_size, seq_length, d_model]
             prev_eta: Optional previous eta values
             attention_mask: Optional attention mask
-            force_eigenvalue_update: Force recomputation of eigenvalues
 
         Returns:
             tuple: (output_tensor, new_eta)
@@ -149,9 +137,12 @@ class MultiHeadedAttention(nn.Module):
         if prev_eta is not None:
             # Sum across heads to get the total influence
             eta_layer = attention_weights.sum(dim=1)
-
-            # Update η using matrix multiplication
-            new_eta = torch.bmm(eta_layer, prev_eta)
+            
+            # Take previous η values into account
+            eta_layer = torch.bmm(eta_layer, prev_eta)
+            
+            # Add the new layer's influence to account for the skip connection
+            new_eta = prev_eta + eta_layer
 
         return output, new_eta
 
