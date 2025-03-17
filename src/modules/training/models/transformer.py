@@ -45,13 +45,7 @@ class ScaledDotProductAttention(nn.Module):
             RuntimeError: If input tensor dimensions don't match expected shapes
         """
 
-        if not (query.dim() == key.dim() == value.dim() == 4):
-            raise RuntimeError("Query, Key, and Value must be 4-dimensional tensors")
-
         batch_size, n_heads, seq_length, dim_per_head = key.size()
-
-        if query.size(3) != dim_per_head:
-            raise RuntimeError(f"Query dimension {query.size(3)} doesn't match Key dimension {dim_per_head}")
 
         # 1. Compute attention scores
         key_transpose = key.transpose(2, 3)  # transpose
@@ -274,7 +268,7 @@ class TransformerSepAction(nn.Module):
         x_action = self.action_in_proj(x_action).unsqueeze(dim=1)
 
         # Concatenate obs and action and add positional encoding
-        x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, 1, -1)], dim=1)
+        x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, -1, -1)], dim=1)
         x = x + self.pos_embedding
 
         # Calculate η values if requested
@@ -357,7 +351,7 @@ class TransformerCombAction(nn.Module):
         x = self.in_proj(x)
 
         # Append reward token and add positional encoding
-        x = torch.cat([x, self.reward_token.expand(n_samples, 1, -1)], dim=1)
+        x = torch.cat([x, self.reward_token.expand(n_samples, -1, -1)], dim=1)
         x = x + self.pos_embedding
 
         # Calculate η values if requested
