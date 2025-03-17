@@ -129,12 +129,17 @@ class MultiHeadedAttention(nn.Module):
         # 5. Calculate new η values if requested
         new_eta = None
         if prev_eta is not None:
+            # Scale the attention weights by the magnitude of the corresponding values
+            value_magnitude = torch.norm(value_heads, dim=-1)
+            value_magnitude = value_magnitude.unsqueeze(2)
+            weighted_attention = attention_weights * value_magnitude
+
             # Sum across heads to get the total influence
-            eta_layer = attention_weights.sum(dim=1)
-            
+            eta_layer = weighted_attention.sum(dim=1)
+
             # Take previous η values into account
             eta_layer = torch.bmm(eta_layer, prev_eta)
-            
+
             # Add the new layer's influence to account for the skip connection
             new_eta = prev_eta + eta_layer
 
@@ -209,7 +214,7 @@ class TransformerLayer(nn.Module):
         return x, eta
 
 
-class TransformerSepAction(nn.Module):
+class Transformer(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
