@@ -15,7 +15,8 @@ env_sys:
 
     - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
       train_envs: 5
-      validation_envs: 5
+      train_keep_perc: 0.25
+      validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
     #   num_samples: 2048
@@ -30,7 +31,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 1000
+      epochs: 1500
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -50,9 +51,13 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          _target_: src.modules.training.models.unet.UNet
-
-        hidden_channels: [48, 96, 192]
+          _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
+        d_model: 128
+        n_heads: 4
+        n_layers: 3
+        d_ff: 128
+        drop_prob: 0.15
+        calculate_eta: true
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss
@@ -63,14 +68,19 @@ train_sys:
           _args_:
             - _target_: hydra.utils.get_method
               # path: torch.nn.functional.cross_entropy
-              # path: src.modules.training.loss.ce_focal_loss
-              # path: src.modules.training.loss.ce_adaptive_loss
-              # path: src.modules.training.loss.ce_rebalance_loss
-              path: src.modules.training.loss.ce_rebalanced_focal_loss
+              path: src.modules.training.loss.ce_focal_loss
+        eta_loss_fn:
+          _target_: src.utils.functools.partial
+          _args_:
+            - _target_: hydra.utils.get_method
+              path: src.modules.training.loss.eta_l1_loss
+              # path: src.modules.training.loss.eta_l2_loss
+              # path: src.modules.training.loss.eta_l_ratio_loss
+              # path: src.modules.training.loss.eta_entropy_loss
+          weight: 0.1e-3
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
-        # constrain_to_one_agent: true
 
       model_storage_conf:
         save_model_to_disk: true
@@ -87,31 +97,42 @@ train_sys:
         persistent_workers: true
 
       optimizer:
-        _target_: src.utils.functools.partial
+        _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
-            path: torch.optim.AdamW
-        lr: 0.005
+            path: torch.optim.Adafactor
+        lr: 0.02
 
       scheduler:
-        _target_: src.utils.functools.partial
+        _target_: functools.partial
         _args_:
           - _target_: hydra.utils.get_class
             path: timm.scheduler.step_lr.StepLRScheduler
         decay_t: 150
-        decay_rate: 0.7
+        decay_rate: 0.9
 
 pred_sys:
   steps:
+    # - _target_: src.modules.scoring.minigrid_save_data.MinigridSaveData
+
     - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
       accuarcy_calc: ${model.train_sys.steps[0].accuracy}
-    - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
-      # metric_calculators: 
-      #   - AgentPovCertaintyCalc
-      #   - AgentPovAccuracyCalc
-      #   - FieldPovAccuracyCalc
-      #   - RewardAccuracyCalc
+    
+    # - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
+
+    # - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
+    #   metric_calculators: 
+    #       - AgentPovCertaintyCalc
+    #       - AgentPovAccuracyCalc
+    #       - FieldPovAccuracyCalc
+    #       - RewardAccuracyCalc
+    
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
-    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-    #   eval_n_grids: 1
-    #   only_errors: true
+    
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+      eval_n_grids: 1
+      only_errors: true
+
+    - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
+      eval_n_correct: 50
+      eval_n_incorrect: 50

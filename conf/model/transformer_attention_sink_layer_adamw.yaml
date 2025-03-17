@@ -1,0 +1,138 @@
+defaults:
+  - pipeline/default@_here_
+  - _self_
+
+env_sys:
+  steps:
+    - _target_: src.modules.environment.minigrid_builder.MinigridBuilder
+      # environment: MiniGrid-Empty-5x5-v0
+      # environment: MiniGrid-Fetch-8x8-N3-v0
+      # environment: MiniGrid-LavaCrossingS9N3-v0
+      environment: MiniGrid-SimpleCrossingS9N3-v0
+      # environment: MiniGrid-LavaCrossingS11N5-v0
+      # environment: MiniGrid-SimpleCrossingS11N5-v0
+      # environment: MiniGrid-MultiRoom-N4-S5-v0
+
+    - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
+      train_envs: 5
+      train_keep_perc: 0.25
+      validation_envs: 10
+
+    # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
+    #   num_samples: 2048
+    #   num_samples_per_env: 20
+    #   perc_train: 0.8
+
+    # - _target_: src.modules.environment.minigrid_sampler_extensive_split.MinigridSamplerExtensiveSplit
+    #   envs: 10
+    #   perc_train: 0.1
+
+train_sys:
+  steps:
+    - _target_: src.modules.training.torch_trainer.TorchTrainer
+
+      epochs: 1500
+      batch_size: 2048
+
+      n_folds: ${n_trials}
+      load_all_batches_to_gpu: true
+      validate_every_x_epochs: 5
+      to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
+      discrete: true
+
+      # early_stopping_patience: 150
+      # early_stopping_counter: -200  # Start after 200 epochs
+      # early_stopping_metric: [TRAIN, Transition Accuracy]
+      # early_stopping_metric_mode: max
+      # early_stopping_metric_min_change: 0.01
+      # revert_to_best_model: false
+
+      model:
+        _target_: src.modules.training.models.base.MinigridModel
+        model_cls:
+          _partial_: true
+          _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
+        d_model: 128
+        n_heads: 4
+        n_layers: 3
+        d_ff: 128
+        drop_prob: 0.15
+        calculate_eta: true
+
+      loss:
+        _target_: src.modules.training.loss.MinigridLoss
+        obs_loss_weight: 0.8
+        reward_loss_weight: 0.2
+        discrete_loss_fn:
+          _target_: src.utils.functools.partial
+          _args_:
+            - _target_: hydra.utils.get_method
+              # path: torch.nn.functional.cross_entropy
+              path: src.modules.training.loss.ce_focal_loss
+        eta_loss_fn:
+          _target_: src.utils.functools.partial
+          _args_:
+            - _target_: hydra.utils.get_method
+              path: src.modules.training.loss.eta_l1_loss
+              # path: src.modules.training.loss.eta_l2_loss
+              # path: src.modules.training.loss.eta_l_ratio_loss
+              # path: src.modules.training.loss.eta_entropy_loss
+          weight: 0.1e-3
+
+      accuracy:
+        _target_: src.modules.training.accuracy.MinigridAccuracy
+
+      model_storage_conf:
+        save_model_to_disk: true
+        save_model_to_wandb: true
+        save_checkpoints_to_disk: false
+        save_checkpoints_keep_every_x_epochs: 50
+        resume_training_from_checkpoint: false
+        save_directory: !!python/object/apply:pathlib.PosixPath
+          - 'tm/'
+
+      dataloader_conf:
+        num_workers: 8
+        prefetch_factor: 4
+        persistent_workers: true
+
+      optimizer:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: torch.optim.AdamW
+        lr: 0.02
+
+      scheduler:
+        _target_: functools.partial
+        _args_:
+          - _target_: hydra.utils.get_class
+            path: timm.scheduler.step_lr.StepLRScheduler
+        decay_t: 150
+        decay_rate: 0.9
+
+pred_sys:
+  steps:
+    # - _target_: src.modules.scoring.minigrid_save_data.MinigridSaveData
+
+    - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
+      accuarcy_calc: ${model.train_sys.steps[0].accuracy}
+    
+    # - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
+
+    # - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
+    #   metric_calculators: 
+    #       - AgentPovCertaintyCalc
+    #       - AgentPovAccuracyCalc
+    #       - FieldPovAccuracyCalc
+    #       - RewardAccuracyCalc
+    
+    # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
+    
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+      eval_n_grids: 1
+      only_errors: true
+
+    - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
+      eval_n_correct: 50
+      eval_n_incorrect: 50
