@@ -5,6 +5,7 @@ from torch.nn import functional as F
 
 from src.typing.pipeline_objects import PipelineInfo
 
+EPS = 1e-8
 
 def ce_focal_loss(predictions, targets, weight=None, gamma=2.0):
     ce_loss = F.cross_entropy(predictions, targets, weight=weight, reduction="none")
@@ -25,7 +26,7 @@ def ce_rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
     class_counts = torch.bincount(targets, minlength=num_classes)
 
     weight = torch.where(
-        class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
+        class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
     )
 
     return F.cross_entropy(predictions, targets, weight=weight)
@@ -36,83 +37,128 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
     class_counts = torch.bincount(targets, minlength=num_classes)
 
     weight = torch.where(
-        class_counts > 0, torch.max(class_counts) / (class_counts + 1e-8), torch.zeros_like(class_counts)
+        class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
     )
 
     return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
-
-
-def eta_focus_loss(eta, weight: float = 0.01):
-    # Normalize each column (per output token) to create a probability distribution
-    eta_norm = eta / (eta.sum(dim=1, keepdim=True) + 1e-10)
-
-    # Calculate entropy for each output token's influence distribution
-    # Lower entropy = more focused attention
-    entropies = -torch.sum(eta_norm * torch.log(eta_norm + 1e-10), dim=1)
-
-    # Return mean entropy as the loss
-    return entropies.mean() * weight
-
-def eta_minimization_loss(eta: torch.Tensor, loss_type: str = 'frobenius', weight: float = 0.01) -> torch.Tensor:
+    
+def eta_l1_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     """
-    Computes a loss term that encourages minimizing eta values, effectively pushing
-    attention toward the dummy token.
+    L1 loss: encourages sparsity by pushing most values toward zero.
+    All attention values are penalized equally.
+    
+    Lower values = more sparsity
+    """    
+    return weight * torch.abs(eta).mean()
+    
+def eta_l2_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
+    """
+    L2 loss / Frobenius norm: penalizes the squared magnitude of all attention values.
+    Higher values are penalized more heavily than lower values.
+    
+    Lower values = more sparsity
+    """
+    return weight * torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2)).mean()
+
+def eta_l_ratio_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
+    """
+    Sparsity-promoting loss based on L1/L2 ratio.
+    
+    Lower ratio = more sparsity
+    """
+    l1_norm = torch.abs(eta).sum(dim=(1, 2))
+    l2_norm = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
+    sparsity_term = (l1_norm / l2_norm).mean()
+    return weight * sparsity_term
+
+def eta_entropy_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
+    """
+    Encourages a uniform distribution of attention weights
+    Lower entropy = more focused attention
+    """
+    eta_prob = F.softmax(eta, dim=2) + EPS
+    entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean()
+    return weight * entropy
+
+def eta_entropy_guided_l1_softplus_loss(eta: torch.Tensor, weight: float = 0.01, smoothness: float = 10.0) -> torch.Tensor:
+    """
+    Computes a combined loss that uses entropy to guide L1 regularization:
+    - When entropy is high (diffuse attention), L1 regularization is relaxed
+    - When entropy is low (concentrated attention), L1 regularization is enforced
     
     Args:
         eta: Tensor of shape [batch_size, seq_length, seq_length] representing 
-                  the final attention influence matrix (excluding dummy token)
-        loss_type: The type of loss function to use ('l1', 'frobenius', 'nuclear', 'entropy', 'sparse')
-        weight: Scaling factor to control the strength of the regularization
-        
+             the final attention influence matrix (excluding dummy token)
+        base_weight: Base scaling factor for the overall loss
+        smoothness: Controls how quickly L1 weight transitions as entropy changes
+                    Higher values = sharper transition
+
     Returns:
         A scalar loss value that can be added to the main loss function
     """
-    # Ensure we have a proper batch dimension
-    if eta.dim() == 2:
-        eta = eta.unsqueeze(0)
+    # L1 component
+    l1_norm = torch.abs(eta).mean()
     
-    if loss_type == 'l1':
-        # L1 loss: encourages sparsity by pushing most values toward zero
-        return weight * torch.abs(eta).mean()
+    # Entropy component
+    eta_prob = F.softmax(eta, dim=2) + EPS
+    entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
     
-    elif loss_type == 'frobenius':
-        # Frobenius norm: penalizes the squared magnitude of all attention values
-        # This is like L2 regularization for matrices
-        return weight * torch.sum(eta ** 2, dim=(1, 2)).mean()
+    # Normalize entropy to [0, 1] range
+    max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
+    normalized_entropy = entropy / max_entropy
     
-    elif loss_type == 'nuclear':
-        # Nuclear norm: sum of singular values, encourages low-rank attention patterns
-        # This is computationally more expensive but can produce more structured attention
-        loss = 0
-        for i in range(eta.size(0)):  # For each item in batch
-            # SVD to get singular values
-            u, s, v = torch.svd(eta[i])
-            # Sum of singular values = nuclear norm
-            loss += torch.sum(s)
-        return weight * loss / eta.size(0)
+    # Softplus smoothing for L1 coefficient
+    # When entropy is high, coefficient is low; when entropy is low, coefficient is high
+    l1_coef = torch.nn.functional.softplus(smoothness * (1.0 - normalized_entropy)) / smoothness
     
-    elif loss_type == 'entropy':
-        # Entropy loss: encourages attention to be concentrated rather than diffuse
-        # First normalize eta to sum to 1
-        eps = 1e-8  # Small epsilon to prevent log(0)
-        eta_abs = torch.abs(eta)
-        eta_sum = eta_abs.sum(dim=(1, 2), keepdim=True) + eps
-        eta_prob = eta_abs / eta_sum
-        
-        # Calculate entropy: -sum(p * log(p))
-        entropy = -torch.sum(eta_prob * torch.log(eta_prob + eps), dim=(1, 2)).mean()
-        return weight * entropy
+    # Final combined loss (mean over batch)
+    return weight * (l1_coef * l1_norm).mean()
+
+def eta_entropy_guided_l1_exp_loss(eta: torch.Tensor, base_weight: float = 0.01, decay_rate: float = 5.0) -> torch.Tensor:
+    # L1 component
+    l1_norm = torch.abs(eta).mean()
     
-    elif loss_type == 'sparse':
-        # Sparsity-promoting loss based on L1/L2 ratio
-        # Higher ratio = more sparsity
-        l1_norm = torch.abs(eta).sum(dim=(1, 2))
-        l2_norm = torch.sqrt((eta ** 2).sum(dim=(1, 2)) + 1e-8)
-        sparsity_term = (l1_norm / l2_norm).mean()
-        return weight * sparsity_term
+    # Entropy component
+    eta_prob = F.softmax(eta, dim=2) + EPS
+    entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
     
-    else:
-        raise ValueError(f"Unknown loss type: {loss_type}")
+    # Normalize entropy to [0, 1] range
+    max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
+    normalized_entropy = entropy / max_entropy
+    
+    # Exponential scaling: when entropy is high, coefficient is close to 0
+    l1_coef = torch.exp(-decay_rate * normalized_entropy)
+    
+    # Final combined loss (mean over batch)
+    return base_weight * (l1_coef * l1_norm).mean()
+
+def eta_entropy_guided_l1_sigmoid_loss(eta: torch.Tensor, weight: float = 0.01, scale: float = 5.0, midpoint: float = 0.5) -> torch.Tensor:
+    """
+    Combines L1 and entropy losses with adaptive sigmoid weighting.
+    When entropy is high (unfocused attention), L1 weight is reduced.
+    When entropy is low (focused attention), L1 weight is increased.
+    
+    Args:
+        eta: Attention influence matrix
+        weight: Overall weight of the combined loss
+        scale: Controls steepness of sigmoid transition (higher = sharper transition)
+        midpoint: Normalized entropy value where L1 weight equals 0.5
+    """    
+    # L1 component
+    l1_norm = torch.abs(eta).mean()
+    
+    # Entropy component
+    eta_prob = F.softmax(eta, dim=2) + EPS
+    entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
+    
+    # Normalize entropy to [0, 1] range
+    max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
+    normalized_entropy = entropy / max_entropy
+    
+    # Sigmoid weighting: smooth transition from low to high L1 weight as entropy decreases
+    adaptive_weight = torch.sigmoid(scale * (midpoint - normalized_entropy))
+    
+    return weight * (adaptive_weight * l1_norm).mean()
 
 class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
