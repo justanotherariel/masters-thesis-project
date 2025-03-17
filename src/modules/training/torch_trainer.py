@@ -436,7 +436,7 @@ class TorchTrainer(TransformationBlock):
                 loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
 
             with torch.no_grad():
-                acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
 
             # Backward pass
             self.initialized_optimizer.zero_grad()
@@ -500,7 +500,7 @@ class TorchTrainer(TransformationBlock):
                 # Forward pass
                 y_pred = self.model.forward(x_batch)
                 loss, loss_dict = self.loss(y_pred, y_batch, x_batch)
-                acc_dict = self.accuracy(y_pred[:2], y_batch, x_batch)
+                acc_dict = self.accuracy(y_pred, y_batch, x_batch)
 
                 # Save metrics
                 append_to_dict(epoch_loss, loss_dict)

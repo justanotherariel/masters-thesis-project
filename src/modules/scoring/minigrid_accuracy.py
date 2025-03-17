@@ -29,7 +29,7 @@ class MinigridAccuracy(TransformationBlock):
             dg_name = dg.name.capitalize()
 
             raw_data = dataset_to_list(data, dg, discretize=True, info=self._info)
-            accuracies = append_to_dict({}, self.accuracy_calc(data.predictions[dg][:2], raw_data[1], raw_data[0]))
+            accuracies = append_to_dict({}, self.accuracy_calc(data.predictions[dg], raw_data[1], raw_data[0]))
 
             data.accuracies[dg] = average_dict(accuracies)
 

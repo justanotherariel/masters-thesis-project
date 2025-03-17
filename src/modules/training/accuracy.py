@@ -5,6 +5,7 @@ from torch.nn import functional as F
 
 from src.typing.pipeline_objects import PipelineInfo
 
+EPS = 1e-8
 
 class BaseAccuracy:
     def __init__(self, **kwargs):
@@ -15,7 +16,7 @@ class BaseAccuracy:
 
     def __call__(
         self,
-        predictions: tuple[torch.Tensor, torch.Tensor],
+        predictions: tuple[torch.Tensor, ...],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: torch.Tensor,
     ) -> dict[str, float]:
@@ -34,11 +35,11 @@ class MinigridAccuracy(BaseAccuracy):
 
     def __call__(
         self,
-        predictions: tuple[torch.Tensor, torch.Tensor],
+        predictions: tuple[torch.Tensor, ...],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: torch.Tensor,
     ) -> dict[str, float]:
-        pred_obs, pred_reward = predictions
+        pred_obs, pred_reward = predictions[:2]
         target_obs, target_reward = targets
         feature_obs, feature_action = features
 
@@ -54,6 +55,10 @@ class MinigridAccuracy(BaseAccuracy):
         accuracies.update(self._calc_state_acc(pred_obs_argmax, target_obs_argmax))
         accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax))
         accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
+        
+        if len(predictions) > 2:
+            eta = predictions[2]
+            accuracies.update(self._calc_eta_metrics(eta))
 
         return accuracies
 
@@ -86,9 +91,7 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the color component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
-        correct_color = pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]
-        correct = (correct_obj & correct_color).all(dim=[1, 2])
+        correct = (pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]).all(dim=[1, 2])
 
         return {"Color Accuracy": correct}
 
@@ -97,9 +100,7 @@ class MinigridAccuracy(BaseAccuracy):
         Calculate the accuracy of the state component of the observation tensor. Each state class is weighted
         equally, but is only counted if the object component on that field was correctly predicted.
         """
-        correct_obj = pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]
-        correct_state = pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]
-        correct = (correct_obj & correct_state).all(dim=[1, 2])
+        correct = (pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]).all(dim=[1, 2])
 
         return {"State Accuracy": correct}
 
@@ -157,6 +158,23 @@ class MinigridAccuracy(BaseAccuracy):
             "Reward Accuracy": reward_correct,
             "Reward-Pos Accuracy": reward_pos_correct,
             "Reward-Neg Accuracy": reward_neg_correct,
+        }
+
+    def _calc_eta_metrics(self, eta: torch.Tensor):
+        # L1 and L2 norm
+        eta_l1 = torch.abs(eta).mean(dim = (1, 2))
+        eta_l2 = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
+        eta_l1l2 = eta_l1 / (eta_l2 + EPS)
+
+        # Entropy
+        eta_prob = F.softmax(eta, dim = 2)
+        eta_entropy = -(eta_prob * eta_prob.log()).sum(dim = (1, 2))
+
+        return {
+            "Eta L1": eta_l1,
+            "Eta L2": eta_l2,
+            "Eta L1/L2": eta_l1l2,
+            "Eta Entropy": eta_entropy,
         }
 
 
