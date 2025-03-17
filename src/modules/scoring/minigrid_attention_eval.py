@@ -133,8 +133,8 @@ def create_sample_eval_pdf(
             break
 
         # Only show samples with action 2 (forward)
-        if x_action[sample_idx] != 2:
-            continue
+        # if x_action[sample_idx] != 2:
+        #     continue
 
         # Get the reward
         y_reward_val = y_reward[sample_idx].item()
@@ -197,16 +197,19 @@ def create_sample_eval_pdf(
         # Softmax the attention map
         # eta = torch.nn.functional.softmax(pred_eta[sample_idx], dim=1)
 
-        # Scale eta to 0-1
-        eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
-        eta = eta.transpose(dim0=0, dim1=1)
+        # Normalize the attention map
+        # eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
+        row_max_values, _ = torch.max(pred_eta[sample_idx], dim=-1, keepdim=True)  
+        safe_max_values = torch.clamp(row_max_values, min=1e-10)
+        eta = pred_eta[sample_idx] / safe_max_values
+
         
         # Highlight feature and target agent positions
-        current_pos_idx = agent_x_obs_pos[0][0][1]*x_obs.shape[1] + agent_x_obs_pos[0][0][0]
+        current_pos_idx = agent_x_obs_pos[0][0][0]*x_obs.shape[1] + agent_x_obs_pos[0][0][1]
         x_hightlight = (current_pos_idx, "green", "green")
         
         direction = DIR_TO_VEC[agent_x_obs_dir]
-        forward_pos_idx = (agent_x_obs_pos[0][0][1] + direction[1]) *y_obs.shape[1] + agent_x_obs_pos[0][0][0] + direction[0]
+        forward_pos_idx = (agent_x_obs_pos[0][0][0] + direction[0]) *y_obs.shape[1] + agent_x_obs_pos[0][0][1] + direction[1]
         forward_hightlight = (forward_pos_idx, "red", "red")
         
         writer.add_tensor(eta, [x_hightlight, forward_hightlight])
