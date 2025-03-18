@@ -10,6 +10,7 @@ defaults:
   # - model: transformer_sigmoid
   # - model: transformer_attention_sink
   # - model: transformer_attention_sink_layer
+  # - model: transformer_attention_sink_layer_adamw
   
   # Downloaded Models
   # - model_download/bumbling-sweep-23@model    # Transformer - best param before bugfixes

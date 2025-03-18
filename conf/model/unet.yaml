@@ -15,7 +15,7 @@ env_sys:
 
     - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
       train_envs: 5
-      # train_keep_perc: 0.25
+      train_keep_perc: 0.25
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -31,7 +31,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 1000
+      epochs: 3000
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -39,13 +39,6 @@ train_sys:
       validate_every_x_epochs: 5
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
       discrete: true
-
-      # early_stopping_patience: 150
-      # early_stopping_counter: -200  # Start after 200 epochs
-      # early_stopping_metric: [TRAIN, Transition Accuracy]
-      # early_stopping_metric_mode: max
-      # early_stopping_metric_min_change: 0.01
-      # revert_to_best_model: false
 
       model:
         _target_: src.modules.training.models.base.MinigridModel
@@ -70,7 +63,15 @@ train_sys:
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
-        # constrain_to_one_agent: true
+
+      early_stopping:
+        enable: true
+        start_epoch: 500
+        patience: 500
+        metric: ["VALIDATION", "Transition Accuracy"]
+        metric_mode: max
+        metric_min_delta: 0.02
+        revert_to_best_model: true
 
       model_storage_conf:
         save_model_to_disk: true
@@ -87,17 +88,13 @@ train_sys:
         persistent_workers: true
 
       optimizer:
-        _target_: src.utils.functools.partial
-        _args_:
-          - _target_: hydra.utils.get_class
-            path: torch.optim.AdamW
+        _partial_: true
+        _target_: torch.optim.AdamW
         lr: 0.005
 
       scheduler:
-        _target_: src.utils.functools.partial
-        _args_:
-          - _target_: hydra.utils.get_class
-            path: timm.scheduler.step_lr.StepLRScheduler
+        _partial_: true
+        _target_: timm.scheduler.step_lr.StepLRScheduler
         decay_t: 150
         decay_rate: 0.7
 
@@ -118,5 +115,5 @@ pred_sys:
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
 
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-      eval_n_grids: 2
+      eval_n_grids: 1
       only_errors: true

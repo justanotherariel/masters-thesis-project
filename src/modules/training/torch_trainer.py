@@ -1,13 +1,12 @@
 """TorchTrainer is a module that allows for the training of Torch models."""
 
 import contextlib
-import copy
 import functools
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any
 
 import numpy as np
 import torch
@@ -15,32 +14,20 @@ from annotated_types import Ge, Gt
 from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
-from src.modules.training.utils.model_storage import ModelStorage
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .accuracy import BaseAccuracy
 from .loss import BaseLoss
 from .models.base import BaseModel
+from .utils.early_stopping import EarlyStopping
+from .utils.model_storage import ModelStorage
 
 logger = Logger()
-
-T = TypeVar("T", bound=Dataset)  # type: ignore[type-arg]
-T_co = TypeVar("T_co", covariant=True)
-
-
-def custom_collate(batch: list[Tensor]) -> tuple[Tensor, Tensor]:
-    """Collate function for the dataloader.
-
-    :param batch: The batch to collate.
-    :return: Collated batch.
-    """
-    X, y = batch[0], batch[1]
-    return X, y
 
 
 @dataclass
@@ -66,6 +53,7 @@ class TorchTrainer(TransformationBlock):
     optimizer: functools.partial[Optimizer]
     scheduler: Callable[[Optimizer], LRScheduler] | None = None
     model_storage_conf: ModelStorageConf = field(default_factory=ModelStorageConf, init=True, repr=False, compare=False)
+    early_stopping: EarlyStopping = field(default_factory=EarlyStopping)
     dataloader_conf: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     # Training parameters
@@ -76,16 +64,8 @@ class TorchTrainer(TransformationBlock):
     load_all_batches_to_gpu: bool = field(default=False)  # Load and keep all batches in GPU memory
     discrete: bool = field(default=True)  # Discretize the data before training
 
-    # Early Stopping
-    early_stopping_patience: Annotated[int, Gt(0)] = field(default=-1, repr=False, compare=False)
-    early_stopping_counter: int = field(default=0, repr=False, compare=False)
-    early_stopping_metric: tuple[DatasetGroup, str] = field(default=("VALIDATION", "Loss"), repr=False, compare=False)
-    early_stopping_metric_mode: str = field(default="min", repr=False, compare=False)  # min or max
-    early_stopping_metric_min_change: float = field(default=0.001, repr=False, compare=False)
-    revert_to_best_model: bool = field(default=False, repr=False, compare=False)
-
     # Predction parameters
-    to_predict: DatasetGroup = field(default=DatasetGroup.VALIDATION, repr=False, compare=False)
+    to_predict: DatasetGroup = field(default="VALIDATION", repr=False, compare=False)
 
     # Parameters relevant for Hashing
     n_folds: Annotated[int, Ge(1)] = field(default=1, init=True, repr=False, compare=False)
@@ -99,15 +79,11 @@ class TorchTrainer(TransformationBlock):
         if ms.save_model_to_wandb and not ms.save_model_to_disk:
             raise ValueError("Cannot save model to wandb without saving to disk.")
 
-        # self.to_predict is a string, but we want to store it as a DataSetTypes
-        self.to_predict = DatasetGroup[self.to_predict]
+        # Setup EarlyStopping
+        self.early_stopping = EarlyStopping(**self.early_stopping)
 
-        # Initialize variables
-        self.early_stopping_metric = (DatasetGroup[self.early_stopping_metric[0]], self.early_stopping_metric[1])
-        self.early_stopping_best_metric: float = (
-            float("inf") if self.early_stopping_metric_mode == "min" else -float("inf")
-        )
-        self.early_stopping_best_model: dict[Any, Any] = {}
+        # Convert to_predict string to DatasetGroup
+        self.to_predict = DatasetGroup[self.to_predict]
 
         super().__post_init__()
 
@@ -319,11 +295,8 @@ class TorchTrainer(TransformationBlock):
         )
 
         # Revert to the best model
-        if self.early_stopping_best_model:
-            logger.info(
-                f"Reverting to model with best validation loss {self.lowest_val_loss}",
-            )
-            self.model.module.load_state_dict(self.early_stopping_best_model)
+        if self.early_stopping.revert_to_best_model:
+            self.early_stopping.load_best_model(self.model)
 
         # Save the model
         if self.model_storage_conf.save_model_to_disk:
@@ -384,7 +357,9 @@ class TorchTrainer(TransformationBlock):
             self.last_epoch = epoch
 
             # Early stopping
-            if self.early_stop({DatasetGroup.TRAIN: train_metrics, DatasetGroup.VALIDATION: validation_metrics}):
+            if self.early_stopping(
+                epoch=epoch, metrics={DatasetGroup.TRAIN: train_metrics, DatasetGroup.VALIDATION: validation_metrics}, model=self.model
+            ):
                 break
 
         # Log the trained epochs to wandb after finishing training
@@ -510,45 +485,6 @@ class TorchTrainer(TransformationBlock):
         epoch_metrics = average_dict(epoch_loss)
         epoch_metrics.update(average_dict(epoch_accuracy))
         return epoch_metrics
-
-    def early_stop(self, metrics: dict[DatasetGroup, dict[str, float]]) -> bool:
-        """Check if early stopping should be performed.
-
-        :return: Whether to perform early stopping.
-        """
-        # Check if early stopping is enabled
-        if self.early_stopping_patience == -1:
-            return False
-
-        metric = metrics[self.early_stopping_metric[0]][self.early_stopping_metric[1]]
-
-        min_metric = metric + self.early_stopping_metric_min_change < self.early_stopping_best_metric
-        max_metric = metric - self.early_stopping_metric_min_change > self.early_stopping_best_metric
-
-        # Check if metric is better
-        if (self.early_stopping_metric_mode == "min" and min_metric) or (
-            self.early_stopping_metric_mode == "max" and max_metric
-        ):
-            self.early_stopping_best_metric = metric
-
-            # Store the best model
-            if self.revert_to_best_model:
-                self.early_stopping_best_model = copy.deepcopy(self.model.module.state_dict())
-
-            # Don't reset the counter if it's the first epoch
-            # This is to allow setting the early_stopping_counter to negative values
-            # to prevent early stopping for the first few epochs
-            if self.last_epoch != 0:
-                self.early_stopping_counter = 0
-            return False
-        else:
-            self.early_stopping_counter += 1
-
-            if self.early_stopping_counter >= self.early_stopping_patience:
-                logger.info(
-                    f"Early Stopping! Last best metric: {self.early_stopping_best_metric}, Current metric: {metric}"
-                )
-                return True
 
 
 def moveTo(

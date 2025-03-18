@@ -1,6 +1,7 @@
 command:
   - python3
   - ${program}
+  - model=transformer_attention_sink_layer_adamw
   - ${args_no_hyphens}
 method: bayes
 project: Thesis
@@ -12,30 +13,25 @@ metric:
   goal: maximize
 parameters:
 
-  model:
-    value: transformer_attention_sink_layer_adamw
-
-  model.train_sys.steps.0.epochs:
-    value: 1000
-
   # n_trials:
   #   value: 5
 
-  Optimizer/Scheduler Parameters
+
+  # Optimizer/Scheduler Parameters
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
-    min: 1e-5
-    max: 5e-3
+    min: 1e-4
+    max: 0.1
 
   model.train_sys.steps.0.scheduler.decay_rate:
     distribution: uniform
-    min: 0.2
-    max: 0.9
+    min: 0.50
+    max: 0.95
 
   model.train_sys.steps.0.scheduler.decay_t:
     distribution: int_uniform
-    min: 50
-    max: 300
+    min: 100
+    max: 350
 
 
   # Loss Parameters
@@ -43,13 +39,11 @@ parameters:
     values:
       - src.modules.training.loss.eta_l1_loss
       - src.modules.training.loss.eta_l2_loss
-      - src.modules.training.loss.eta_l_ratio_loss
-      - src.modules.training.loss.eta_entropy_loss
 
   model.train_sys.steps.0.loss.eta_loss_fn.weight:
-    distribution: uniform
+    distribution: log_uniform_values
     min: 0.1e-5
-    max: 0.1e-1
+    max: 0.5e-2
   
 
   # Model parameters

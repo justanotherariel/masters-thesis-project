@@ -1,6 +1,7 @@
 command:
   - python3
   - ${program}
+  - model=transformer_attention_sink_layer
   - ${args_no_hyphens}
 method: bayes
 project: Thesis
@@ -12,16 +13,11 @@ metric:
   goal: maximize
 parameters:
 
-  model:
-    value: transformer_attention_sink_layer
-
-  model.train_sys.steps.0.epochs:
-    value: 1000
-
   # n_trials:
   #   value: 5
 
-  Optimizer/Scheduler Parameters
+
+  # Optimizer/Scheduler Parameters
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
     min: 1e-5
