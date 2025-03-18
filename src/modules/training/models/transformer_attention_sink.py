@@ -68,14 +68,7 @@ class ScaledDotProductAttention(nn.Module):
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        n_heads: int,
-        drop_p: float = 0.1,
-        use_bias: bool = True,
-        idx: int = 0
-    ):
+    def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
@@ -243,7 +236,7 @@ class TransformerAttentionSink(nn.Module):
         # Input Projection
         self.obs_in_proj = nn.Linear(in_obs_shape[-1], d_model)
         self.action_in_proj = nn.Linear(action_dim, d_model)
-        self.final_tokens = nn.Parameter(torch.randn(1, 2, d_model)) # Reward and attention sink
+        self.final_tokens = nn.Parameter(torch.randn(1, 2, d_model))  # Reward and attention sink
 
         # Positional Encoding
         self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
@@ -287,7 +280,7 @@ class TransformerAttentionSink(nn.Module):
         # Apply transformer layers
         for layer in self.layers:
             x, eta = layer(x, prev_eta=eta)
-        
+
         x = x[:, :-1]
         if eta is not None:
             eta = eta[..., :-1, :-1]
@@ -297,4 +290,3 @@ class TransformerAttentionSink(nn.Module):
         pred_reward = self.reward_out_proj(x[:, -1])
 
         return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
-

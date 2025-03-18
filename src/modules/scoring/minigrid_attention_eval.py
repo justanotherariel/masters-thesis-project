@@ -4,8 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 from minigrid.core import actions
-from minigrid.core.grid import Grid
 from minigrid.core.constants import DIR_TO_VEC
+from minigrid.core.grid import Grid
 from PIL import Image
 from tqdm import tqdm
 
@@ -199,19 +199,20 @@ def create_sample_eval_pdf(
 
         # Normalize the attention map
         # eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
-        row_max_values, _ = torch.max(pred_eta[sample_idx], dim=-1, keepdim=True)  
+        row_max_values, _ = torch.max(pred_eta[sample_idx], dim=-1, keepdim=True)
         safe_max_values = torch.clamp(row_max_values, min=1e-10)
         eta = pred_eta[sample_idx] / safe_max_values
 
-        
         # Highlight feature and target agent positions
-        current_pos_idx = agent_x_obs_pos[0][0][0]*x_obs.shape[1] + agent_x_obs_pos[0][0][1]
+        current_pos_idx = agent_x_obs_pos[0][0][0] * x_obs.shape[1] + agent_x_obs_pos[0][0][1]
         x_hightlight = (current_pos_idx, "green", "green")
-        
+
         direction = DIR_TO_VEC[agent_x_obs_dir]
-        forward_pos_idx = (agent_x_obs_pos[0][0][0] + direction[0]) *y_obs.shape[1] + agent_x_obs_pos[0][0][1] + direction[1]
+        forward_pos_idx = (
+            (agent_x_obs_pos[0][0][0] + direction[0]) * y_obs.shape[1] + agent_x_obs_pos[0][0][1] + direction[1]
+        )
         forward_hightlight = (forward_pos_idx, "red", "red")
-        
+
         writer.add_tensor(eta, [x_hightlight, forward_hightlight])
         writer.add_page_break()
 

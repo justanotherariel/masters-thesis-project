@@ -64,14 +64,7 @@ class ScaledDotProductAttention(nn.Module):
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        n_heads: int,
-        drop_p: float = 0.1,
-        use_bias: bool = True,
-        idx: int = 0
-    ):
+    def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"

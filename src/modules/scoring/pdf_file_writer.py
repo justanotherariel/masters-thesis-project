@@ -95,7 +95,9 @@ class PDFFileWriter:
         # Draw the sample index vertically
         self.c.saveState()
         self.c.setFont("Helvetica-Bold", 10)
-        self.c.translate(x_positions[0] + 10, self.current_y - self.image_height/2)  # Position in the middle of the row
+        self.c.translate(
+            x_positions[0] + 10, self.current_y - self.image_height / 2
+        )  # Position in the middle of the row
         self.c.rotate(90)  # Rotate 90 degrees to write vertically
         idx_text = f"#{idx}"
         self.c.drawString(0, 0, idx_text)  # The 0,0 position is now rotated
@@ -156,8 +158,8 @@ class PDFFileWriter:
 
         Args:
             tensor: A 2D tensor with values between 0 and 1
-            highlight: List of tuples (idx, row_color, col_color) specifying which 
-                      rows/columns to highlight and with what colors. If row_color or 
+            highlight: List of tuples (idx, row_color, col_color) specifying which
+                      rows/columns to highlight and with what colors. If row_color or
                       col_color is None, that dimension won't be highlighted.
         """
         # Ensure tensor is 2D
@@ -198,33 +200,19 @@ class PDFFileWriter:
             # Validate index is within bounds
             if idx < 0 or idx >= max(rows, cols):
                 continue
-                
+
             # Draw row highlight if row_color is provided and index is valid
             if row_color is not None and idx < rows:
                 self.c.setFillColor(row_color)
                 self.c.setFillAlpha(0.3)  # Semi-transparent
-                self.c.rect(
-                    grid_x,
-                    grid_y - (idx + 1) * cell_size,
-                    grid_width,
-                    cell_size,
-                    fill=1,
-                    stroke=0
-                )
-                
+                self.c.rect(grid_x, grid_y - (idx + 1) * cell_size, grid_width, cell_size, fill=1, stroke=0)
+
             # Draw column highlight if col_color is provided and index is valid
             if col_color is not None and idx < cols:
                 self.c.setFillColor(col_color)
                 self.c.setFillAlpha(0.3)  # Semi-transparent
-                self.c.rect(
-                    grid_x + idx * cell_size,
-                    grid_y - grid_height,
-                    cell_size,
-                    grid_height,
-                    fill=1,
-                    stroke=0
-                )
-                
+                self.c.rect(grid_x + idx * cell_size, grid_y - grid_height, cell_size, grid_height, fill=1, stroke=0)
+
         # Reset fill opacity
         self.c.setFillAlpha(1.0)
 

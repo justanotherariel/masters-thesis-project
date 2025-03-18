@@ -1,13 +1,7 @@
-import math
+import pickle
 from dataclasses import dataclass
 
-import numpy as np
-import torch
 from minigrid.core import actions
-from minigrid.core.grid import Grid
-from minigrid.core.constants import DIR_TO_VEC
-from PIL import Image
-from tqdm import tqdm
 
 from src.framework.logging import Logger
 from src.framework.transforming import TransformationBlock
@@ -15,8 +9,6 @@ from src.modules.training.accuracy import obs_argmax
 from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 
 from .data_transform import dataset_to_list
-from .pdf_file_writer import PDFFileWriter
-import pickle
 
 logger = Logger()
 
@@ -48,15 +40,13 @@ class MinigridSaveData(TransformationBlock):
         for dg in data.predictions:
             if dg == DatasetGroup.ALL:
                 continue
-            
+
             features, target = dataset_to_list(data, dg, discretize=False, info=self._info)
             pred_ti = self._info.model_ti
             pred_obs = obs_argmax(data.predictions[dg][0], pred_ti)
             predictions = (pred_obs, data.predictions[dg][1], data.predictions[dg][2])
-            
+
             pickle.dump((features, target, predictions), open(f"data/model-debug/data_{dg.name}.pkl", "wb"))
-            
 
         logger.info("Saving data complete.")
         return data
-

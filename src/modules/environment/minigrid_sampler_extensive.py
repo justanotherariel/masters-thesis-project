@@ -30,7 +30,7 @@ class MinigridSamplerExtensive(TransformationBlock):
     def __init__(self, train_envs: int, validation_envs: int, train_keep_perc: float = 1.0):
         if train_keep_perc < 0.0 or train_keep_perc > 1.0:
             raise ValueError("train_keep_perc must be between 0.0 and 1.0")
-        
+
         self.train_envs = train_envs
         self.train_keep_perc = train_keep_perc
         self.validation_envs = validation_envs
@@ -175,7 +175,7 @@ class MinigridSamplerExtensive(TransformationBlock):
                     # Create samples for this position
                     self._sample_pos(env, pos, env_indices, observations_list, actions_list, rewards_list)
                     pbar.update(1)
-                    
+
             if current_env < self.train_envs and self.train_keep_perc < 1.0:
                 env_indices_discard_idx = np.random.choice(
                     len(env_indices), int(len(env_indices) * (1 - self.train_keep_perc)), replace=False

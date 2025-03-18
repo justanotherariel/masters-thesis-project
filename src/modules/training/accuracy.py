@@ -7,6 +7,7 @@ from src.typing.pipeline_objects import PipelineInfo
 
 EPS = 1e-8
 
+
 class BaseAccuracy:
     def __init__(self, **kwargs):
         raise NotImplementedError("BaseAccuracy is an abstract class and should not be instantiated.")
@@ -55,7 +56,7 @@ class MinigridAccuracy(BaseAccuracy):
         accuracies.update(self._calc_state_acc(pred_obs_argmax, target_obs_argmax))
         accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax))
         accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
-        
+
         if len(predictions) > 2:
             eta = predictions[2]
             accuracies.update(self._calc_eta_metrics(eta))
@@ -162,13 +163,13 @@ class MinigridAccuracy(BaseAccuracy):
 
     def _calc_eta_metrics(self, eta: torch.Tensor):
         # L1 and L2 norm
-        eta_l1 = torch.abs(eta).mean(dim = (1, 2))
+        eta_l1 = torch.abs(eta).mean(dim=(1, 2))
         eta_l2 = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
         eta_l1l2 = eta_l1 / (eta_l2 + EPS)
 
         # Entropy
-        eta_prob = F.softmax(eta, dim = 2)
-        eta_entropy = -(eta_prob * eta_prob.log()).sum(dim = (1, 2))
+        eta_prob = F.softmax(eta, dim=2)
+        eta_entropy = -(eta_prob * eta_prob.log()).sum(dim=(1, 2))
 
         return {
             "Eta L1": eta_l1,

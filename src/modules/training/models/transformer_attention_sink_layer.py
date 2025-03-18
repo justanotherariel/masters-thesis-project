@@ -68,14 +68,7 @@ class ScaledDotProductAttention(nn.Module):
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(
-        self,
-        d_model: int,
-        n_heads: int,
-        drop_p: float = 0.1,
-        use_bias: bool = True,
-        idx: int = 0
-    ):
+    def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
@@ -129,9 +122,7 @@ class MultiHeadedAttention(nn.Module):
         value_heads = self.split_heads(value)
 
         # 3. Apply scaled dot-product attention
-        attention_output, attention_weights = self.attention(
-            query_heads, key_heads, value_heads, attention_mask=None
-        )
+        attention_output, attention_weights = self.attention(query_heads, key_heads, value_heads, attention_mask=None)
 
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
@@ -304,4 +295,3 @@ class TransformerAttentionSinkLayer(nn.Module):
         pred_reward = self.reward_out_proj(x[:, -1])
 
         return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
-

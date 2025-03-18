@@ -7,6 +7,7 @@ from src.typing.pipeline_objects import PipelineInfo
 
 EPS = 1e-8
 
+
 def ce_focal_loss(predictions, targets, weight=None, gamma=2.0):
     ce_loss = F.cross_entropy(predictions, targets, weight=weight, reduction="none")
     pt = torch.exp(-ce_loss)
@@ -41,35 +42,39 @@ def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, g
     )
 
     return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
-    
+
+
 def eta_l1_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     """
     L1 loss: encourages sparsity by pushing most values toward zero.
     All attention values are penalized equally.
-    
+
     Lower values = more sparsity
-    """    
+    """
     return weight * torch.abs(eta).mean()
-    
+
+
 def eta_l2_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     """
     L2 loss / Frobenius norm: penalizes the squared magnitude of all attention values.
     Higher values are penalized more heavily than lower values.
-    
+
     Lower values = more sparsity
     """
     return weight * torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2)).mean()
 
+
 def eta_l_ratio_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     """
     Sparsity-promoting loss based on L1/L2 ratio.
-    
+
     Lower ratio = more sparsity
     """
     l1_norm = torch.abs(eta).sum(dim=(1, 2))
     l2_norm = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
     sparsity_term = (l1_norm / l2_norm).mean()
     return weight * sparsity_term
+
 
 def eta_entropy_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     """
@@ -80,14 +85,17 @@ def eta_entropy_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
     entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean()
     return weight * entropy
 
-def eta_entropy_guided_l1_softplus_loss(eta: torch.Tensor, weight: float = 0.01, smoothness: float = 10.0) -> torch.Tensor:
+
+def eta_entropy_guided_l1_softplus_loss(
+    eta: torch.Tensor, weight: float = 0.01, smoothness: float = 10.0
+) -> torch.Tensor:
     """
     Computes a combined loss that uses entropy to guide L1 regularization:
     - When entropy is high (diffuse attention), L1 regularization is relaxed
     - When entropy is low (concentrated attention), L1 regularization is enforced
-    
+
     Args:
-        eta: Tensor of shape [batch_size, seq_length, seq_length] representing 
+        eta: Tensor of shape [batch_size, seq_length, seq_length] representing
              the final attention influence matrix (excluding dummy token)
         base_weight: Base scaling factor for the overall loss
         smoothness: Controls how quickly L1 weight transitions as entropy changes
@@ -98,67 +106,74 @@ def eta_entropy_guided_l1_softplus_loss(eta: torch.Tensor, weight: float = 0.01,
     """
     # L1 component
     l1_norm = torch.abs(eta).mean()
-    
+
     # Entropy component
     eta_prob = F.softmax(eta, dim=2) + EPS
     entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
-    
+
     # Normalize entropy to [0, 1] range
     max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
     normalized_entropy = entropy / max_entropy
-    
+
     # Softplus smoothing for L1 coefficient
     # When entropy is high, coefficient is low; when entropy is low, coefficient is high
     l1_coef = torch.nn.functional.softplus(smoothness * (1.0 - normalized_entropy)) / smoothness
-    
+
     # Final combined loss (mean over batch)
     return weight * (l1_coef * l1_norm).mean()
 
-def eta_entropy_guided_l1_exp_loss(eta: torch.Tensor, base_weight: float = 0.01, decay_rate: float = 5.0) -> torch.Tensor:
+
+def eta_entropy_guided_l1_exp_loss(
+    eta: torch.Tensor, base_weight: float = 0.01, decay_rate: float = 5.0
+) -> torch.Tensor:
     # L1 component
     l1_norm = torch.abs(eta).mean()
-    
+
     # Entropy component
     eta_prob = F.softmax(eta, dim=2) + EPS
     entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
-    
+
     # Normalize entropy to [0, 1] range
     max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
     normalized_entropy = entropy / max_entropy
-    
+
     # Exponential scaling: when entropy is high, coefficient is close to 0
     l1_coef = torch.exp(-decay_rate * normalized_entropy)
-    
+
     # Final combined loss (mean over batch)
     return base_weight * (l1_coef * l1_norm).mean()
 
-def eta_entropy_guided_l1_sigmoid_loss(eta: torch.Tensor, weight: float = 0.01, scale: float = 5.0, midpoint: float = 0.5) -> torch.Tensor:
+
+def eta_entropy_guided_l1_sigmoid_loss(
+    eta: torch.Tensor, weight: float = 0.01, scale: float = 5.0, midpoint: float = 0.5
+) -> torch.Tensor:
     """
     Combines L1 and entropy losses with adaptive sigmoid weighting.
     When entropy is high (unfocused attention), L1 weight is reduced.
     When entropy is low (focused attention), L1 weight is increased.
-    
+
     Args:
         eta: Attention influence matrix
         weight: Overall weight of the combined loss
         scale: Controls steepness of sigmoid transition (higher = sharper transition)
         midpoint: Normalized entropy value where L1 weight equals 0.5
-    """    
+    """
     # L1 component
     l1_norm = torch.abs(eta).mean()
-    
+
     # Entropy component
     eta_prob = F.softmax(eta, dim=2) + EPS
     entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean(dim=1)
-    
+
     # Normalize entropy to [0, 1] range
     max_entropy = torch.log(torch.tensor(eta.shape[1], dtype=torch.float, device=eta.device))
     normalized_entropy = entropy / max_entropy
-    
+
     # Sigmoid weighting: smooth transition from low to high L1 weight as entropy decreases
     adaptive_weight = torch.sigmoid(scale * (midpoint - normalized_entropy))
-    
+
     return weight * (adaptive_weight * l1_norm).mean()
+
 
 class BaseLoss:
     def setup(self, info: PipelineInfo) -> PipelineInfo:
@@ -236,18 +251,18 @@ class MinigridLoss(BaseLoss):
         losses = {
             "Loss": total_loss.expand(n_samples),
             "Observation Loss": (obs_loss.mean() * self.obs_loss_weight).expand(n_samples),
-            "Observation Loss - Object": (
-                obs_loss[0] * self.obs_loss_weight * (1 / len(self._tensor_values))
-            ).expand(n_samples),
-            "Observation Loss - Color": (
-                obs_loss[1] * self.obs_loss_weight * (1 / len(self._tensor_values))
-            ).expand(n_samples),
-            "Observation Loss - State": (
-                obs_loss[2] * self.obs_loss_weight * (1 / len(self._tensor_values))
-            ).expand(n_samples),
-            "Observation Loss - Agent": (
-                obs_loss[3] * self.obs_loss_weight * (1 / len(self._tensor_values))
-            ).expand(n_samples),
+            "Observation Loss - Object": (obs_loss[0] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(
+                n_samples
+            ),
+            "Observation Loss - Color": (obs_loss[1] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(
+                n_samples
+            ),
+            "Observation Loss - State": (obs_loss[2] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(
+                n_samples
+            ),
+            "Observation Loss - Agent": (obs_loss[3] * self.obs_loss_weight * (1 / len(self._tensor_values))).expand(
+                n_samples
+            ),
             "Reward Loss": (reward_loss * self.reward_loss_weight).expand(n_samples),
             "Eta Loss": eta_loss.expand(n_samples),
         }
