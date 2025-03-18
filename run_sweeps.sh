@@ -32,8 +32,8 @@ run_command() {
 
 # Create
 if [[ $1 == "create" ]]; then
-    wandb sweep conf/sweep/unet.yaml
-    wandb sweep conf/sweep/transformer.yaml
+    wandb sweep conf/sweep/sweep_unet.yaml
+    wandb sweep conf/sweep/sweep_transformer.yaml
     exit
 fi
 
