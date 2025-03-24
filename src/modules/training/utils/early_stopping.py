@@ -19,7 +19,7 @@ class EarlyStopping:
     patience: Annotated[int, Gt(0)] = field(default=5)
     metric: tuple[DatasetGroup, str] = field(default=("VALIDATION", "Loss"))
     metric_mode: str = field(default="min")  # min or max
-    metric_min_delta: float = field(default=0.001)
+    metric_min_delta: float = field(default=0.0)
     revert_to_best_model: bool = field(default=True)
 
     def __post_init__(self):
@@ -49,7 +49,7 @@ class EarlyStopping:
         # Check if the metric is present - Validation might not always be performed
         is_best_score = False
         is_best_score_delta = False
-        if self.metric[0] in metrics:
+        if self.metric[0] in metrics and self.metric[1] in metrics[self.metric[0]]:
             score = metrics[self.metric[0]][self.metric[1]]
             
             if self.metric_mode == "min":
@@ -62,7 +62,7 @@ class EarlyStopping:
             # If the score is better
             if is_best_score:
                 # Update the best score
-                self.best_score = score
+                self.best_model_score = score
 
                 # Store the best model
                 if self.revert_to_best_model:
@@ -70,6 +70,8 @@ class EarlyStopping:
 
         # If the score incl delta is better
         if is_best_score_delta:
+            self.best_score = score
+            
             # Reset the counter
             self.counter = 0
         
@@ -82,7 +84,7 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 logger.info(f"Early Stopping! \n"
                             f"Metric: {self.metric[0]}/{self.metric[1]}\n"
-                            f"Best Score: {self.best_score}\n")
+                            f"Best Score: {self.best_model_score}\n")
                 return True
         return False
 
