@@ -7,83 +7,119 @@ from src.typing.pipeline_objects import PipelineInfo
 
 EPS = 1e-8
 
+@dataclass
+class CELoss:
+    def __call__(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        return F.cross_entropy(predictions, targets)
 
-def ce_focal_loss(predictions, targets, weight=None, gamma=2.0):
-    ce_loss = F.cross_entropy(predictions, targets, weight=weight, reduction="none")
-    pt = torch.exp(-ce_loss)
-    focal_loss = ((1 - pt) ** gamma * ce_loss).mean()
-    return focal_loss
-
-
-def ce_adaptive_loss(predictions, targets, beta=0.3):
-    losses = F.cross_entropy(predictions, targets, reduction="none")
-    k = int(beta * len(losses))
-    _, indices = torch.topk(losses, k)
-    return losses[indices].mean()
-
-
-def ce_rebalance_loss(predictions: torch.Tensor, targets: torch.Tensor):
-    num_classes = predictions.size(1)
-    class_counts = torch.bincount(targets, minlength=num_classes)
-
-    weight = torch.where(
-        class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
-    )
-
-    return F.cross_entropy(predictions, targets, weight=weight)
+@dataclass
+class CEFocalLoss:
+    gamma: float = 2.0
+    
+    def __call__(self, predictions: torch.Tensor, targets: torch.Tensor, weight: torch.Tensor = None) -> torch.Tensor:
+        ce_loss = F.cross_entropy(predictions, targets, weight=weight, reduction="none")
+        pt = torch.exp(-ce_loss)
+        return ((1 - pt) ** self.gamma * ce_loss).mean()
 
 
-def ce_rebalanced_focal_loss(predictions: torch.Tensor, targets: torch.Tensor, gamma=2.0):
-    num_classes = predictions.size(1)
-    class_counts = torch.bincount(targets, minlength=num_classes)
-
-    weight = torch.where(
-        class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
-    )
-
-    return ce_focal_loss(predictions, targets, weight=weight, gamma=gamma)
-
-
-def eta_l1_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
-    """
-    L1 loss: encourages sparsity by pushing most values toward zero.
-    All attention values are penalized equally.
-
-    Lower values = more sparsity
-    """
-    return weight * torch.abs(eta).mean()
+@dataclass
+class CEAdaptiveLoss:
+    beta: float = 0.3
+    
+    def __call__(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        losses = F.cross_entropy(predictions, targets, reduction="none")
+        k = int(self.beta * len(losses))
+        _, indices = torch.topk(losses, k)
+        return losses[indices].mean()
 
 
-def eta_l2_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
-    """
-    L2 loss / Frobenius norm: penalizes the squared magnitude of all attention values.
-    Higher values are penalized more heavily than lower values.
+@dataclass
+class CERebalanceLoss:
+    def __call__(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        num_classes = predictions.size(1)
+        class_counts = torch.bincount(targets, minlength=num_classes)
 
-    Lower values = more sparsity
-    """
-    return weight * torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2)).mean()
+        weight = torch.where(
+            class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
+        )
 
-
-def eta_l_ratio_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
-    """
-    Sparsity-promoting loss based on L1/L2 ratio.
-
-    Lower ratio = more sparsity
-    """
-    l1_norm = torch.abs(eta).sum(dim=(1, 2))
-    l2_norm = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
-    sparsity_term = (l1_norm / l2_norm).mean()
-    return weight * sparsity_term
+        return F.cross_entropy(predictions, targets, weight=weight)
 
 
-def eta_entropy_loss(eta: torch.Tensor, weight: float = 0.01) -> torch.Tensor:
-    """
-    Encourages a uniform distribution of attention weights
-    Lower entropy = more focused attention
-    """
-    eta_prob = F.softmax(eta, dim=2) + EPS
-    entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean()
-    return weight * entropy
+@dataclass
+class CERebalancedFocalLoss:
+    gamma: float = 2.0
+    
+    def __post_init__(self):
+        self.ce_focal_loss = CEFocalLoss(gamma=self.gamma)
+    
+    def __call__(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        num_classes = predictions.size(1)
+        class_counts = torch.bincount(targets, minlength=num_classes)
+
+        weight = torch.where(
+            class_counts > 0, torch.max(class_counts) / (class_counts + EPS), torch.zeros_like(class_counts)
+        )
+
+        return self.ce_focal_loss(predictions, targets, weight=weight)
+
+
+@dataclass
+class EtaL1Loss:
+    weight: float = 0.01
+    
+    def __call__(self, eta: torch.Tensor) -> torch.Tensor:
+        """
+        L1 loss: encourages sparsity by pushing most values toward zero.
+        All attention values are penalized equally.
+
+        Lower values = more sparsity
+        """
+        return self.weight * torch.abs(eta).mean()
+
+
+@dataclass
+class EtaL2Loss:
+    weight: float = 0.01
+    
+    def __call__(self, eta: torch.Tensor) -> torch.Tensor:
+        """
+        L2 loss / Frobenius norm: penalizes the squared magnitude of all attention values.
+        Higher values are penalized more heavily than lower values.
+
+        Lower values = more sparsity
+        """
+        return self.weight * torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2)).mean()
+
+
+@dataclass
+class EtaLRatioLoss:
+    weight: float = 0.01
+    
+    def __call__(self, eta: torch.Tensor) -> torch.Tensor:
+        """
+        Sparsity-promoting loss based on L1/L2 ratio.
+
+        Lower ratio = more sparsity
+        """
+        l1_norm = torch.abs(eta).sum(dim=(1, 2))
+        l2_norm = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
+        sparsity_term = (l1_norm / l2_norm).mean()
+        return self.weight * sparsity_term
+
+
+@dataclass
+class EtaEntropyLoss:
+    weight: float = 0.01
+    
+    def __call__(self, eta: torch.Tensor) -> torch.Tensor:
+        """
+        Encourages a uniform distribution of attention weights
+        Lower entropy = more focused attention
+        """
+        eta_prob = F.softmax(eta, dim=2) + EPS
+        entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean()
+        return self.weight * entropy
 
 
 def eta_entropy_guided_l1_softplus_loss(

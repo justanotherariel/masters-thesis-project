@@ -44,7 +44,11 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          _target_: src.modules.training.models.transformer.Transformer
+          # _target_: src.modules.training.models.transformer.Transformer
+          # _target_: src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax
+          # _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
+          # _target_: src.modules.training.models.transformer_attention_sink.TransformerAttentionSink
+          _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
         d_model: 128
         n_heads: 4
         n_layers: 3
@@ -57,11 +61,14 @@ train_sys:
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
         discrete_loss_fn:
-          _target_: src.utils.functools.partial
-          _args_:
-            - _target_: hydra.utils.get_method
-              # path: torch.nn.functional.cross_entropy
-              path: src.modules.training.loss.ce_focal_loss
+          # _target_: src.modules.training.loss.CELoss
+          _target_: src.modules.training.loss.CEFocalLoss
+        # eta_loss_fn:
+        #   _target_: src.modules.training.loss.EtaL1Loss
+        #   # _target_: src.modules.training.loss.EtaL2Loss
+        #   # _target_: src.modules.training.loss.EtaLRatioLoss
+        #   # _target_: src.modules.training.loss.EtaEntropyLoss
+        #   weight: 0.1e-3
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
@@ -92,6 +99,7 @@ train_sys:
       optimizer:
         _partial_: true
         _target_: torch.optim.Adafactor
+        # _target_: torch.optim.AdamW
         lr: 0.02
 
       scheduler:
@@ -118,10 +126,10 @@ pred_sys:
     
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     
-    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-      eval_n_grids: 1
-      only_errors: true
+    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+    #   eval_n_grids: 1
+    #   only_errors: true
 
-    - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
-      eval_n_correct: 50
-      eval_n_incorrect: 50
+    # - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
+    #   eval_n_correct: 50
+    #   eval_n_incorrect: 50
