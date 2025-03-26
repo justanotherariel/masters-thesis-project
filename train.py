@@ -1,18 +1,21 @@
 """Train.py is the main script for training the model and will take in the raw data and output a trained model."""
+
+# Modify sys argv to include ++ for hydra to append to the config
+import sys
+blacklist = ["model"]
+sys.argv = sys.argv[:1] + [f"++{arg}" if arg.split('=')[0] not in blacklist else arg for arg in sys.argv[1:]]
+
 import collections
 import multiprocessing
 import os
 from typing import List
-import warnings
-import sys
-from contextlib import nullcontext
 from pathlib import Path
+import shutil
 
 import hydra
 import wandb
 import coloredlogs
 from hydra.core.config_store import ConfigStore
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 from src.typing.pipeline_objects import PipelineData
@@ -93,7 +96,15 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
         
         # Run the trial
         worker = workers[trial_idx]
-        worker.queue.put(WorkerInitData(config=cfg, output_dir=output_dir))
+        output_dir_trial = output_dir / f"trial_{trial_idx}"
+        output_dir_trial.mkdir(parents=True, exist_ok=True)
+        
+        # Copy .hydra directory from output_dir to output_dir_trial
+        hydra_dir = output_dir / ".hydra"
+        if hydra_dir.exists():
+            shutil.copytree(hydra_dir, output_dir_trial / ".hydra", dirs_exist_ok=True)
+        
+        worker.queue.put(WorkerInitData(config=cfg, output_dir=output_dir_trial))
         
         # Get the result
         result: WorkerDoneData = sweep_q.get()
