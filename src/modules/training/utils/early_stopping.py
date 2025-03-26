@@ -16,7 +16,7 @@ logger = Logger()
 class EarlyStopping:
     enable: bool = field(default=False)
     start_epoch: Annotated[int, Gt(0)] = field(default=0)
-    patience: Annotated[int, Gt(0)] = field(default=5)
+    patience: Annotated[int, Gt(0)] = field(default=int(1e6))
     metric: tuple[DatasetGroup, str] = field(default=("VALIDATION", "Loss"))
     metric_mode: str = field(default="min")  # min or max
     metric_min_delta: float = field(default=0.0)

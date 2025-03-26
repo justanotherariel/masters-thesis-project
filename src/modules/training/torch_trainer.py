@@ -80,7 +80,7 @@ class TorchTrainer(TransformationBlock):
             raise ValueError("Cannot save model to wandb without saving to disk.")
 
         # Setup EarlyStopping
-        self.early_stopping = EarlyStopping(**self.early_stopping)
+        self.early_stopping = EarlyStopping(**self.early_stopping) if isinstance(self.early_stopping, dict) else self.early_stopping
 
         # Convert to_predict string to DatasetGroup
         self.to_predict = DatasetGroup[self.to_predict]
