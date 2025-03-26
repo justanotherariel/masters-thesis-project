@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+import subprocess
+import itertools
+import os
+import time
+import sys
+import json
+import argparse
+from typing import List, Dict, Any
+import datetime
+
+def generate_permutations(sweep_config: Dict[str, List[str]]) -> List[Dict[str, str]]:
+    """Generate all permutations of parameters from a sweep config."""
+    keys = list(sweep_config.keys())
+    values = [sweep_config[key] for key in keys]
+    
+    permutations = []
+    for combination in itertools.product(*values):
+        permutation = {}
+        for key, value in zip(keys, combination):
+            permutation[key] = value
+        permutations.append(permutation)
+    
+    return permutations
+
+def create_command(params: Dict[str, str]) -> List[str]:
+    """Create the command list with the given parameters."""
+    base_command = ["python", "train.py", "n_trials=5", "trial_idx=0"]
+    
+    # Add each parameter to the command
+    for key, value in params.items():
+        base_command.append(f"{key}={value}")
+    
+    return base_command
+
+def display_progress(completed, total_runs, running_processes):
+    """Display the current progress and running processes."""
+    print(f"\nProgress: {completed}/{total_runs} completed | Running {len(running_processes)} processes:")
+    
+    for process, (idx, _, params) in running_processes.items():
+        param_str = " ".join([f"{k}={v}" for k, v in params.items()])
+        print(f"  Run {idx+1}: {param_str}")
+
+def run_parameter_sweep(sweep_configs: List[Dict[str, List[str]]], concurrent_runs: int = 1) -> None:
+    """Run parameter sweep with specified concurrency."""
+    # Generate all permutations for each sweep config
+    all_permutations = []
+    for config in sweep_configs:
+        all_permutations.extend(generate_permutations(config))
+    
+    total_runs = len(all_permutations)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("logs", exist_ok=True)
+    
+    print(f"Parameter sweep will run {total_runs} configurations:")
+    for idx, params in enumerate(all_permutations):
+        param_str = " ".join([f"{k}={v}" for k, v in params.items()])
+        print(f"  {idx+1}: python train.py n_trials=5 trial_idx=0 {param_str}")
+    
+    print(f"\nStarting parameter sweep with {concurrent_runs} concurrent runs")
+    print(f"Note: Runs will be started at least 5 seconds apart to prevent Hydra output directory collisions")
+    
+    completed = 0
+    running_processes = {}  # Map process to its index, output file, and params
+    next_idx = 0
+    status_changed = True
+    last_process_start_time = 0  # Track when we last started a process
+    
+    try:
+        while completed < total_runs:
+            # Start new processes if we have capacity and enough time has passed since last start
+            process_started = False
+            current_time = time.time()
+            while (len(running_processes) < concurrent_runs and 
+                   next_idx < total_runs and 
+                   (current_time - last_process_start_time >= 5 or completed == 0)):
+                
+                params = all_permutations[next_idx]
+                command = create_command(params)
+                
+                # Create a unique output file name
+                output_file = f"logs/run_{timestamp}_{next_idx+1}_of_{total_runs}.log"
+                
+                print(f"Starting run {next_idx+1}/{total_runs}: {' '.join(command)}")
+                
+                # Run the command and redirect output to file
+                with open(output_file, 'w') as f:
+                    process = subprocess.Popen(
+                        command, 
+                        stdout=f, 
+                        stderr=subprocess.STDOUT,
+                        text=True
+                    )
+                    running_processes[process] = (next_idx, output_file, params)
+                
+                next_idx += 1
+                process_started = True
+                status_changed = True
+                last_process_start_time = time.time()
+                
+                # Wait 5 seconds before starting the next process
+                if next_idx < total_runs and len(running_processes) < concurrent_runs:
+                    print(f"Waiting 5 seconds before starting next run to avoid Hydra directory collision...")
+                    time.sleep(5)
+            
+            # Check for completed processes
+            process_completed = False
+            for process in list(running_processes.keys()):
+                if process.poll() is not None:  # Process has terminated
+                    idx, _, _ = running_processes.pop(process)
+                    completed += 1
+                    return_code = process.returncode
+                    print(f"Completed run {idx+1}/{total_runs} with return code {return_code}")
+                    process_completed = True
+                    status_changed = True
+            
+            # Display progress when status changes
+            if status_changed:
+                display_progress(completed, total_runs, running_processes)
+                status_changed = False
+            
+            # If nothing changed, wait before checking again
+            if not process_started and not process_completed:
+                time.sleep(1)
+        
+        print(f"\nParameter sweep completed. All {total_runs} configurations have been run.")
+    
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user. Terminating running processes...")
+        for process in running_processes:
+            process.terminate()
+        print(f"Completed {completed}/{total_runs} configurations before interruption.")
+        sys.exit(1)
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='Run parameter sweep for training jobs.')
+    parser.add_argument(
+        '--config', 
+        type=str,
+        default=None,
+        help='Path to JSON config file with sweep configurations.'
+    )
+    parser.add_argument(
+        '--concurrent-runs', 
+        type=int, 
+        default=1,
+        help='Number of concurrent runs to execute.'
+    )
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
+    
+    # Default sweep configuration if no config file is provided
+    default_sweep_configs = [
+        # {'model': ['transformer']},
+        {
+            'model': ['transformer_sparse'], 
+            'model.train_sys.steps.0.model.model_cls._target_': [
+                "src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax",
+                "src.modules.training.models.transformer_sigmoid.TransformerSigmoid",
+                "src.modules.training.models.transformer_attention_sink.TransformerAttentionSink",
+                "src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer"
+            ]
+        }
+    ]
+    
+    if args.config:
+        try:
+            with open(args.config, 'r') as f:
+                sweep_configs = json.load(f)
+            print(f"Loaded sweep configuration from {args.config}")
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            print(f"Error loading config file: {e}")
+            print("Using default sweep configuration.")
+            sweep_configs = default_sweep_configs
+    else:
+        sweep_configs = default_sweep_configs
+    
+    run_parameter_sweep(sweep_configs, args.concurrent_runs)
