@@ -154,13 +154,14 @@ class PDFFileWriter:
     ):
         """
         Add a tensor to the PDF as a grid of circles where the size of each circle
-        represents the value (between 0 and 1).
+        represents the value (linearly scaled). Includes a legend showing the maximum, 
+        minimum, and value=1.0 circles, as well as placeholders for metrics.
 
         Args:
-            tensor: A 2D tensor with values between 0 and 1
+            tensor: A 2D tensor
             highlight: List of tuples (idx, row_color, col_color) specifying which
-                      rows/columns to highlight and with what colors. If row_color or
-                      col_color is None, that dimension won't be highlighted.
+                    rows/columns to highlight and with what colors. If row_color or
+                    col_color is None, that dimension won't be highlighted.
         """
         # Ensure tensor is 2D
         if tensor.dim() != 2:
@@ -172,6 +173,12 @@ class PDFFileWriter:
 
         # Get tensor dimensions
         rows, cols = tensor.shape
+        
+        # Normalize tensor values to be between 0 and 1
+        tensor_orginal = tensor
+        tensor_max_value = torch.max(tensor)
+        safe_max_value = torch.clamp(tensor_max_value, min=1e-10).item()
+        tensor = tensor / safe_max_value
 
         # Calculate subdivision size (square root of dimensions)
         subdivision_size_rows = int(math.sqrt(rows))
@@ -179,7 +186,7 @@ class PDFFileWriter:
 
         # Calculate maximum circle size and grid cell size based on page dimensions
         usable_width = self.page_width - (2 * self.margin)
-        usable_height = self.page_height - (2 * self.margin)
+        usable_height = self.current_y - self.margin - 80  # Reserve space for the legend and metrics
 
         # Determine grid cell size (smaller of width or height constraint)
         cell_size_width = usable_width / cols
@@ -188,13 +195,55 @@ class PDFFileWriter:
 
         # Maximum circle radius is half the cell size with some padding
         max_radius = cell_size * 0.4
+        min_radius = 0.05  # Minimum radius for a circle to be visible
 
         # Calculate grid origin (top-left corner)
         grid_width = cols * cell_size
         grid_height = rows * cell_size
         grid_x = self.margin + (usable_width - grid_width) / 2
-        grid_y = self.page_height - self.margin - (usable_height - grid_height) / 2
-
+        
+        legend_height = 60  # Height reserved for legend and metrics
+        grid_y = self.current_y - legend_height
+        
+        # --- Draw legend row ---
+        legend_y = self.current_y - 10
+                
+        # Set font for the legend
+        self.c.setFont("Helvetica", 10)
+        self.c.setFillColor("black")
+        self.c.setStrokeColor("black")
+        
+        # Draw maximum value circle and label
+        # Use the same scaling as in the grid but ensure it's visible
+        self.c.circle(self.margin + max_radius, legend_y, max_radius, fill=1)
+        self.c.drawString(self.margin + 20, legend_y - 3, f"Max value: {safe_max_value:.4f}")
+        
+        # Draw minimum value circle and label
+        # Use the same scaling but ensure it's visible
+        min_visible_value = (min_radius / max_radius) * safe_max_value
+        self.c.circle(self.margin + 180 + max_radius, legend_y, min_radius, fill=1)
+        self.c.drawString(self.margin + 190, legend_y - 3, f"Min value: {min_visible_value:.4f}")
+        
+        # Draw value=1.0 circle and label
+        value_one_display_radius = (1.0 / safe_max_value) * max_radius
+        self.c.circle(self.margin + 350 + max_radius, legend_y, value_one_display_radius, fill=1)
+        self.c.drawString(self.margin + 360, legend_y - 3, "Value = 1.0")
+        
+        # --- Draw metrics row ---
+        metrics_y = legend_y - 30
+        
+        # L1 norm of the tensor
+        l1_norm = tensor_orginal.abs().sum().item()
+        self.c.drawString(self.margin, metrics_y, f"L1: {l1_norm:.4f}")
+        
+        # Avg L1 norm of the tensor
+        l1_avg = tensor_orginal.abs().mean().item()
+        self.c.drawString(self.margin + 180, metrics_y, f"L1 Avg: {l1_avg:.4f}")
+        
+        # Row-wise L1 Avg of the tensor
+        l1_row_avg = tensor_orginal.abs().sum(dim=1).mean().item()
+        self.c.drawString(self.margin + 350, metrics_y, f"L1 Row Avg: {l1_row_avg:.4f}")
+        
         # First, draw highlights if any
         for idx, row_color, col_color in highlight:
             # Validate index is within bounds
@@ -261,10 +310,10 @@ class PDFFileWriter:
                 center_y = grid_y - (i + 0.5) * cell_size
 
                 # Draw the circle if the value is not too small
-                if radius > 0.1:  # Minimum size threshold for visibility
+                if radius > min_radius:  # Minimum size threshold for visibility
                     self.c.circle(center_x, center_y, radius, fill=1)
 
-        # Reset current y position
+        # Set y-position to the end of the page - forcing a new page
         self.current_y = self.margin
 
     def add_grid_environments(self, environments: list[Image.Image], title: str, envs_per_row: int = 5):

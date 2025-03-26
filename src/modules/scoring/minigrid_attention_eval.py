@@ -194,15 +194,6 @@ def create_sample_eval_pdf(
             reward_correct,
         )
 
-        # Softmax the attention map
-        # eta = torch.nn.functional.softmax(pred_eta[sample_idx], dim=1)
-
-        # Normalize the attention map
-        # eta = pred_eta[sample_idx] / pred_eta[sample_idx].max(dim=1, keepdim=True).values
-        row_max_values, _ = torch.max(pred_eta[sample_idx], dim=-1, keepdim=True)
-        safe_max_values = torch.clamp(row_max_values, min=1e-10)
-        eta = pred_eta[sample_idx] / safe_max_values
-
         # Highlight feature and target agent positions
         current_pos_idx = agent_x_obs_pos[0][0][0] * x_obs.shape[1] + agent_x_obs_pos[0][0][1]
         x_hightlight = (current_pos_idx, "green", "green")
@@ -213,7 +204,7 @@ def create_sample_eval_pdf(
         )
         forward_hightlight = (forward_pos_idx, "red", "red")
 
-        writer.add_tensor(eta, [x_hightlight, forward_hightlight])
+        writer.add_tensor(pred_eta[sample_idx], [x_hightlight, forward_hightlight])
         writer.add_page_break()
 
         progress_bar.update(1)
