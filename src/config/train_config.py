@@ -37,5 +37,5 @@ class TrainConfig:
 
     # Random Seeds Initialization
     seed: int = 42
-    trial_idx: int = 0  # Keep at 0 for normal runs
+    trial_idx: int = -1  # Keep at 0 for normal runs
     n_trials: int = 1

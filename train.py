@@ -51,13 +51,13 @@ def main(cfg: DictConfig) -> None:
     coloredlogs.install()
     
     # Check if the config is valid
-    if cfg.trial_idx >= cfg.n_trials == 1:
+    if cfg.trial_idx >= cfg.n_trials:
         raise ValueError("Trial index smaller than number of trials")
     
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
     # Check if Random Seeds Initialization is enabled
-    if cfg.trial_idx == 0 and cfg.n_trials > 1:
+    if cfg.trial_idx == -1 and cfg.n_trials > 1:
         run_trials(cfg, output_dir)
     else:
         run_train(cfg, output_dir)
