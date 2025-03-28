@@ -5,12 +5,8 @@ defaults:
 
   # Testing Models
   # - model: unet
-  - model: transformer
-  # - model: transformer_no_softmax
-  # - model: transformer_sigmoid
-  # - model: transformer_attention_sink
-  # - model: transformer_attention_sink_layer
-  # - model: transformer_attention_sink_layer_adamw
+  # - model: transformer
+  - model: transformer_sparse
   
   # Downloaded Models
   # - model_download/bumbling-sweep-23@model    # Transformer - best param before bugfixes
@@ -26,8 +22,8 @@ defaults:
 ###############
 #    CONF     #
 ###############
-# n_trials: 5
-# trial_idx: 0
+n_trials: 5
+trial_idx: 0
 
 cache_path: data/cache
 debug: false

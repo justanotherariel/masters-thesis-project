@@ -15,7 +15,7 @@ env_sys:
 
     - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
       train_envs: 5
-      train_keep_perc: 0.25
+      train_keep_perc: 0.10
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -44,11 +44,11 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          # _target_: src.modules.training.models.transformer.Transformer
+          _target_: src.modules.training.models.transformer.Transformer
           # _target_: src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax
           # _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
           # _target_: src.modules.training.models.transformer_attention_sink.TransformerAttentionSink
-          _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
+          # _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
         d_model: 128
         n_heads: 4
         n_layers: 3
@@ -73,14 +73,14 @@ train_sys:
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
 
-      early_stopping:
-        enable: true
-        start_epoch: 500
-        patience: 500
-        metric: ["VALIDATION", "Transition Accuracy"]
-        metric_mode: max
-        metric_min_delta: 0.02
-        revert_to_best_model: true
+      # early_stopping:
+      #   enable: true
+      #   start_epoch: 1500
+      #   patience: 500
+      #   metric: ["VALIDATION", "Transition Accuracy"]
+      #   metric_mode: max
+      #   metric_min_delta: 0.02
+      #   revert_to_best_model: true
 
       model_storage_conf:
         save_model_to_disk: true
@@ -100,13 +100,7 @@ train_sys:
         _partial_: true
         _target_: torch.optim.Adafactor
         # _target_: torch.optim.AdamW
-        lr: 0.02
-
-      scheduler:
-        _partial_: true
-        _target_: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 150
-        decay_rate: 0.9
+        lr: 0.01
 
 pred_sys:
   steps:
@@ -126,10 +120,10 @@ pred_sys:
     
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     
-    # - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-    #   eval_n_grids: 1
+    - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
+      eval_n_grids: 1
     #   only_errors: true
 
-    # - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
-    #   eval_n_correct: 50
-    #   eval_n_incorrect: 50
+    - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
+      eval_n_correct: 50
+      eval_n_incorrect: 50

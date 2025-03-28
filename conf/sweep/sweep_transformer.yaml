@@ -1,13 +1,13 @@
 command:
   - python3
   - ${program}
-  - model=transformer_attention_sink_layer
+  - model=transformer
   - ${args_no_hyphens}
 method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: TransformerAttentionSinkLayer | Adafactor | ETA HPO
+name: Transformer | Adafactor | ETA HPO (2)
 metric:
   name: Validation/Transition Accuracy
   goal: maximize
@@ -16,37 +16,29 @@ parameters:
   # n_trials:
   #   value: 5
 
+  model.train_sys.steps.0.model.model_cls._target_:
+    value: src.modules.training.models.transformer.Transformer
+
+  model.train_sys.steps.0.optimizer._target_:
+    value: torch.optim.Adafactor
+
 
   # Optimizer/Scheduler Parameters
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
-    min: 1e-5
-    max: 5e-3
+    min: 0.1e-2
+    max: 0.5
 
   model.train_sys.steps.0.scheduler.decay_rate:
     distribution: uniform
-    min: 0.2
-    max: 0.9
+    min: 0.75
+    max: 0.95
 
   model.train_sys.steps.0.scheduler.decay_t:
     distribution: int_uniform
-    min: 50
-    max: 300
+    min: 200
+    max: 350
 
-
-  # Loss Parameters
-  model.train_sys.steps.0.loss.eta_loss_fn._args_.0.path:
-    values:
-      - src.modules.training.loss.eta_l1_loss
-      - src.modules.training.loss.eta_l2_loss
-      - src.modules.training.loss.eta_l_ratio_loss
-      - src.modules.training.loss.eta_entropy_loss
-
-  model.train_sys.steps.0.loss.eta_loss_fn.weight:
-    distribution: uniform
-    min: 0.1e-5
-    max: 0.1e-1
-  
 
   # Model parameters
   # model.train_sys.steps.0.model.d_model:

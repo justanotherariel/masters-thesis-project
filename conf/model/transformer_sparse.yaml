@@ -15,7 +15,7 @@ env_sys:
 
     - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
       train_envs: 5
-      train_keep_perc: 0.25
+      train_keep_perc: 0.10
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -31,7 +31,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 3000
+      epochs: 5000
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -44,7 +44,11 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
+          # _target_: src.modules.training.models.transformer.Transformer
+          _target_: src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax
+          # _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
+          # _target_: src.modules.training.models.transformer_attention_sink.TransformerAttentionSink
+          # _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
         d_model: 128
         n_heads: 4
         n_layers: 3
@@ -57,32 +61,26 @@ train_sys:
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
         discrete_loss_fn:
-          _target_: src.utils.functools.partial
-          _args_:
-            - _target_: hydra.utils.get_method
-              # path: torch.nn.functional.cross_entropy
-              path: src.modules.training.loss.ce_focal_loss
+          # _target_: src.modules.training.loss.CELoss
+          _target_: src.modules.training.loss.CEFocalLoss
         eta_loss_fn:
-          _target_: src.utils.functools.partial
-          _args_:
-            - _target_: hydra.utils.get_method
-              path: src.modules.training.loss.eta_l1_loss
-              # path: src.modules.training.loss.eta_l2_loss
-              # path: src.modules.training.loss.eta_l_ratio_loss
-              # path: src.modules.training.loss.eta_entropy_loss
-          weight: 0.1e-3
+          _target_: src.modules.training.loss.EtaL1Loss
+          # _target_: src.modules.training.loss.EtaL2Loss
+          # _target_: src.modules.training.loss.EtaLRatioLoss
+          # _target_: src.modules.training.loss.EtaEntropyLoss
+          weight: 0.3e-3
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
 
-      early_stopping:
-        enable: true
-        start_epoch: 500
-        patience: 500
-        metric: ["VALIDATION", "Transition Accuracy"]
-        metric_mode: max
-        metric_min_delta: 0.02
-        revert_to_best_model: true
+      # early_stopping:
+      #   enable: true
+      #   start_epoch: 1500
+      #   patience: 500
+      #   metric: ["VALIDATION", "Transition Accuracy"]
+      #   metric_mode: max
+      #   metric_min_delta: 0.02
+      #   revert_to_best_model: true
 
       model_storage_conf:
         save_model_to_disk: true
@@ -101,13 +99,7 @@ train_sys:
       optimizer:
         _partial_: true
         _target_: torch.optim.Adafactor
-        lr: 0.02
-
-      scheduler:
-        _partial_: true
-        _target_: timm.scheduler.step_lr.StepLRScheduler
-        decay_t: 150
-        decay_rate: 0.9
+        lr: 0.01
 
 pred_sys:
   steps:
@@ -116,7 +108,7 @@ pred_sys:
     - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
       accuarcy_calc: ${model.train_sys.steps[0].accuracy}
     
-    # - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
+    - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
 
     # - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
     #   metric_calculators: 
@@ -129,7 +121,7 @@ pred_sys:
     
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
       eval_n_grids: 1
-      only_errors: true
+    #   only_errors: true
 
     - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
       eval_n_correct: 50
