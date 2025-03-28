@@ -9,6 +9,8 @@ import argparse
 from typing import List, Dict, Any
 import datetime
 
+BASE_COMMAND = ["python", "train.py", "n_trials=5", "trial_idx=-1"]
+
 def generate_permutations(sweep_config: Dict[str, List[str]]) -> List[Dict[str, str]]:
     """Generate all permutations of parameters from a sweep config."""
     keys = list(sweep_config.keys())
@@ -25,7 +27,7 @@ def generate_permutations(sweep_config: Dict[str, List[str]]) -> List[Dict[str, 
 
 def create_command(params: Dict[str, str]) -> List[str]:
     """Create the command list with the given parameters."""
-    base_command = ["python", "train.py", "n_trials=5", "trial_idx=0"]
+    base_command = BASE_COMMAND.copy()
     
     # Add each parameter to the command
     for key, value in params.items():
@@ -54,8 +56,9 @@ def run_parameter_sweep(sweep_configs: List[Dict[str, List[str]]], concurrent_ru
     
     print(f"Parameter sweep will run {total_runs} configurations:")
     for idx, params in enumerate(all_permutations):
+        base_cmd_str = " ".join(BASE_COMMAND)
         param_str = " ".join([f"{k}={v}" for k, v in params.items()])
-        print(f"  {idx+1}: python train.py n_trials=5 trial_idx=0 {param_str}")
+        print(f"  {idx+1}: {base_cmd_str} {param_str}")
     
     print(f"\nStarting parameter sweep with {concurrent_runs} concurrent runs")
     print(f"Note: Runs will be started at least 5 seconds apart to prevent Hydra output directory collisions")
