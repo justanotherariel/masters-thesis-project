@@ -9,7 +9,7 @@ import argparse
 from typing import List, Dict, Any
 import datetime
 
-BASE_COMMAND = ["python", "train.py", "n_trials=5", "trial_idx=-1"]
+BASE_COMMAND = ["python", "train.py"]
 
 def generate_permutations(sweep_config: Dict[str, List[str]]) -> List[Dict[str, str]]:
     """Generate all permutations of parameters from a sweep config."""
@@ -155,9 +155,14 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     
+    common_config = {
+        "n_trials": [5], 
+        "trial_idx": [-1],
+    }
+    
     # Default sweep configuration if no config file is provided
     default_sweep_configs = [
-        # {'model': ['transformer']},
+        {'model': ['transformer']},
         {
             'model': ['transformer_sparse'], 
             'model.train_sys.steps.0.model.model_cls._target_': [
@@ -168,6 +173,10 @@ if __name__ == "__main__":
             ]
         }
     ]
+    
+    # Merge common config with sweep configs
+    for config in default_sweep_configs:
+        config.update(common_config)
     
     if args.config:
         try:
