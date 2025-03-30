@@ -8,8 +8,10 @@ import json
 import argparse
 from typing import List, Dict, Any
 import datetime
+from pathlib import Path
 
 BASE_COMMAND = ["python", "train.py"]
+LOG_DIR = Path("data/logs")
 
 def generate_permutations(sweep_config: Dict[str, List[str]]) -> List[Dict[str, str]]:
     """Generate all permutations of parameters from a sweep config."""
@@ -52,7 +54,7 @@ def run_parameter_sweep(sweep_configs: List[Dict[str, List[str]]], concurrent_ru
     
     total_runs = len(all_permutations)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.makedirs("logs", exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     
     print(f"Parameter sweep will run {total_runs} configurations:")
     for idx, params in enumerate(all_permutations):
@@ -82,7 +84,8 @@ def run_parameter_sweep(sweep_configs: List[Dict[str, List[str]]], concurrent_ru
                 command = create_command(params)
                 
                 # Create a unique output file name
-                output_file = f"logs/run_{timestamp}_{next_idx+1}_of_{total_runs}.log"
+                output_file_name = f"run_{timestamp}_{next_idx+1}_of_{total_runs}.log"
+                output_file = LOG_DIR / output_file_name
                 
                 print(f"Starting run {next_idx+1}/{total_runs}: {' '.join(command)}")
                 
@@ -162,7 +165,7 @@ if __name__ == "__main__":
     
     # Default sweep configuration if no config file is provided
     default_sweep_configs = [
-        {'model': ['transformer']},
+        # {'model': ['transformer']},
         {
             'model': ['transformer_sparse'], 
             'model.train_sys.steps.0.model.model_cls._target_': [
