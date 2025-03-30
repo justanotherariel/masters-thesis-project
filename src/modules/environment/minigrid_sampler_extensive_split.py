@@ -7,12 +7,12 @@ from tqdm import tqdm
 from src.framework.logging import Logger
 from src.typing.pipeline_objects import DatasetGroup, PipelineData
 
-from .minigrid_sampler_extensive import MinigridSamplerExtensive
+from .minigrid_sampler_exhaustive import MinigridSamplerExhaustive
 
 logger = Logger()
 
 
-class MinigridSamplerExtensiveSplit(MinigridSamplerExtensive):
+class MinigridSamplerExtensiveSplit(MinigridSamplerExhaustive):
     envs: int
     perc_train: float
 

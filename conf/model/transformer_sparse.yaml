@@ -13,8 +13,8 @@ env_sys:
       # environment: MiniGrid-SimpleCrossingS11N5-v0
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
-    - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
-      train_envs: 5
+    - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
+      train_envs: 20
       train_keep_perc: 0.10
       validation_envs: 10
 
@@ -120,8 +120,8 @@ pred_sys:
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-      eval_n_grids: 1
-    #   only_errors: true
+      # eval_n_grids: 1
+      only_errors: true
 
     - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
       eval_n_correct: 50

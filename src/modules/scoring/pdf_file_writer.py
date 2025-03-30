@@ -341,6 +341,11 @@ class PDFFileWriter:
 
         # Process environments in chunks of envs_per_row
         for i in range(0, len(environments), envs_per_row):
+            # Check if we need a new page for the next row
+            if self.current_y - env_height < self.margin:
+                self.c.showPage()
+                self.current_y = self.page_height - self.margin
+            
             # Get the chunk of environments for this row
             row_envs = environments[i : i + envs_per_row]
 

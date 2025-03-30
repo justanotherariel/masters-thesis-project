@@ -13,8 +13,8 @@ from src.typing.pipeline_objects import DatasetGroup, PipelineData, PipelineInfo
 logger = Logger()
 
 
-class MinigridSamplerExtensive(TransformationBlock):
-    """Block to extensively sample a MiniGrid Environment by placing the agent at each valid position and executing
+class MinigridSamplerExhaustive(TransformationBlock):
+    """Block to exhaustively sample a MiniGrid Environment by placing the agent at each valid position and executing
     each possible action. Requires the environment to be a MiniGrid environment and that the last wrapper provides
     the function getObservation(), which returns the current observation without taking a step.
 
@@ -160,6 +160,10 @@ class MinigridSamplerExtensive(TransformationBlock):
         while current_env < total_envs:
             # Reset environment to get a new layout
             env.reset()
+            
+            if env.unwrapped.grid in train_grids + validation_grids:
+                logger.info("Grid already sampled, skipping")
+                continue
 
             # Get valid positions for this environment
             valid_positions = self._get_valid_positions(env)

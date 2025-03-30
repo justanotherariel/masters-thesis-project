@@ -13,8 +13,8 @@ env_sys:
       # environment: MiniGrid-SimpleCrossingS11N5-v0
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
-    - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
-      train_envs: 5
+    - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
+      train_envs: 20
       train_keep_perc: 0.10
       validation_envs: 10
 
