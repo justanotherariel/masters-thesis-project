@@ -23,7 +23,7 @@ env_sys:
     #   num_samples_per_env: 20
     #   perc_train: 0.8
 
-    # - _target_: src.modules.environment.minigrid_sampler_extensive_split.MinigridSamplerExtensiveSplit
+    # - _target_: src.modules.environment.minigrid_sampler_exhaustive_split.MinigridSamplerExhaustiveSplit
     #   envs: 10
     #   perc_train: 0.1
 

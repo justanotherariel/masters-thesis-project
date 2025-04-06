@@ -14,7 +14,7 @@ env_sys:
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
     - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
-      train_envs: 20
+      train_envs: 5
       train_keep_perc: 0.10
       validation_envs: 10
 
@@ -44,11 +44,8 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          _target_: src.modules.training.models.transformer.Transformer
-          # _target_: src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax
-          # _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
-          # _target_: src.modules.training.models.transformer_attention_sink.TransformerAttentionSink
-          # _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
+          # _target_: src.modules.training.models.transformer.Transformer
+          _target_: src.modules.training.models.transformer_zero_self.TransformerZeroSelf
         d_model: 128
         n_heads: 4
         n_layers: 3
@@ -63,6 +60,12 @@ train_sys:
         discrete_loss_fn:
           # _target_: src.modules.training.loss.CELoss
           _target_: src.modules.training.loss.CEFocalLoss
+        eta_loss_fn:
+          _target_: src.modules.training.loss.EtaL1Loss
+          # _target_: src.modules.training.loss.EtaLRatioLoss
+          # _target_: src.modules.training.loss.EtaEntropyLoss
+          exclude_diag: true
+          weight: 0.01
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
@@ -93,7 +96,6 @@ train_sys:
       optimizer:
         _partial_: true
         _target_: torch.optim.Adafactor
-        # _target_: torch.optim.AdamW
         lr: 0.01
 
 pred_sys:
@@ -103,7 +105,7 @@ pred_sys:
     - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
       accuarcy_calc: ${model.train_sys.steps[0].accuracy}
     
-    # - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
+    - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
 
     # - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
     #   metric_calculators: 
@@ -116,7 +118,7 @@ pred_sys:
     
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
       eval_n_grids: 1
-    #   only_errors: true
+      only_errors: true
 
     - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
       eval_n_correct: 50

@@ -12,7 +12,7 @@ from .minigrid_sampler_exhaustive import MinigridSamplerExhaustive
 logger = Logger()
 
 
-class MinigridSamplerExtensiveSplit(MinigridSamplerExhaustive):
+class MinigridSamplerExhaustiveSplit(MinigridSamplerExhaustive):
     envs: int
     perc_train: float
 
