@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import inspect
 
 from src.typing.pipeline_objects import PipelineInfo
 
@@ -33,7 +34,8 @@ class MinigridModel:
         **model_args,
     ):
         self.model_cls = model_cls
-        self.name = model_cls.func.__name__
+        self.name = inspect.getfile(model_cls.func).split('/')[-1].split('.')[0]
+        self.version = model_cls.func.__name__
 
         # Transformer parameters
         self._model_args = model_args
@@ -46,7 +48,7 @@ class MinigridModel:
 
             attrs.append(f"{attr}={attr_val}")
 
-        return f"{self.name}({', '.join(attrs)})"
+        return f"{self.name}/{self.version}({', '.join(attrs)})"
 
     def setup(self, info: PipelineInfo) -> PipelineInfo:
         self._info = info

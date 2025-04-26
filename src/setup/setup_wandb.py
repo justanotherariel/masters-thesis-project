@@ -34,8 +34,12 @@ def setup_wandb(
 
     # Get the model name
     model_target = OmegaConf.select(cfg, "model.train_sys.steps[0].model.model_cls._target_")
-    model_config_name = model_target.split(".")[-1] if model_target else "Unknown"
-    config["model"]["train_sys"]["steps"][0]["model"]["name"] = model_config_name
+    if model_target:
+        model_config_type = model_target.split(".")[-3]
+        model_config_name = model_target.split(".")[-2]
+        model_config_version = model_target.split(".")[-1]
+        config["model"]["train_sys"]["steps"][0]["model"]["name"] = f"{model_config_type}/{model_config_name}"
+        config["model"]["train_sys"]["steps"][0]["model"]["version"] = model_config_version
 
     run = wandb.init(
         config=replace_list_with_dict(config),
@@ -77,8 +81,7 @@ def setup_wandb(
         artifact.add_file(model_config_path)
 
         if cfg.wandb.sweep_param_path:
-            sweep_param_path = os.environ.get("WANDB_SWEEP_PARAM_PATH", None)
-            artifact.add_file(sweep_param_path, name="sweep_param.yaml")
+            artifact.add_file(cfg.wandb.sweep_param_path, name="sweep_param.yaml")
 
         wandb.log_artifact(artifact)
 
@@ -107,7 +110,7 @@ def reset_wandb_env():
     }
     for k, v in os.environ.items():
         if k.startswith("WANDB_") and k not in exclude:
-            logger.info(f"Removing {k}={v} from environment")
+            # logger.info(f"Removing {k}={v} from environment")
             del os.environ[k]
 
 
