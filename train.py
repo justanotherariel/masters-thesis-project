@@ -17,6 +17,7 @@ import wandb
 import coloredlogs
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig
+import numpy as np
 
 from src.typing.pipeline_objects import PipelineData
 from src.config.train_config import TrainConfig
@@ -87,6 +88,7 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
         cfg.wandb.group_id = wandb.util.generate_id()
         cfg.wandb.sweep_id = os.environ.get("WANDB_SWEEP_ID", None)
         cfg.wandb.sweep_param_path = os.environ.get("WANDB_SWEEP_PARAM_PATH", None)
+        logger.info("Group ID: %s", cfg.wandb.group_id)
         logger.info("Done Initializing W&B Average Run\n\n")
     
     # Create the processes and execute one process after another    
@@ -116,6 +118,13 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
                 accuracies[ds] = {}
             append_to_dict(accuracies[ds], acc)
     
+    logger.info("--- Results ---")
+    for ds in accuracies:
+        for key in accuracies[ds]:
+            logger.info(f"{ds.name.capitalize()}/{key}: {np.mean(accuracies[ds][key]):.4f} "
+                        f"(± {np.std(accuracies[ds][key]):.4f})")
+    logger.info("--- Results End ---")
+                
     # Average the results and log to sweep run
     for ds in accuracies.keys():
         accuracies[ds] = average_dict(accuracies[ds])
