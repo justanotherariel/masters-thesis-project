@@ -244,12 +244,12 @@ class MinigridLoss(BaseLoss):
 
     def __call__(
         self,
-        predictions: tuple[torch.Tensor, ...],
+        predictions: dict[str, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: tuple[torch.Tensor, torch.Tensor],
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute the combined loss for observation and reward predictions."""
-        predicted_next_obs, predicted_reward = predictions[:2]
+        predicted_next_obs, predicted_reward = predictions["pred_obs"], predictions["pred_reward"]
         target_next_obs, target_reward = targets
 
         # Compute observation loss using cross entropy for value ranges (logits)
@@ -275,8 +275,8 @@ class MinigridLoss(BaseLoss):
 
         # Compute auxiliary losses
         eta_loss = torch.tensor(0.0, device=predicted_next_obs.device)
-        if len(predictions) > 2 and self.eta_loss_fn is not None:
-            eta_loss = self.eta_loss_fn(predictions[2])
+        if "attention_sum" in predictions and self.eta_loss_fn is not None:
+            eta_loss = self.eta_loss_fn(predictions["attention_sum"])
 
         # Final loss combining original and consistency terms
         total_loss = self.obs_loss_weight * obs_loss.mean() + self.reward_loss_weight * reward_loss + eta_loss

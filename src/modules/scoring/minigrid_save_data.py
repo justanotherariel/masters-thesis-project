@@ -43,8 +43,8 @@ class MinigridSaveData(TransformationBlock):
 
             features, target = dataset_to_list(data, dg, discretize=False, info=self._info)
             pred_ti = self._info.model_ti
-            pred_obs = obs_argmax(data.predictions[dg][0], pred_ti)
-            predictions = (pred_obs, data.predictions[dg][1], data.predictions[dg][2])
+            pred_obs = obs_argmax(data.predictions[dg]["pred_obs"], pred_ti)
+            predictions = (pred_obs, *data.predictions[dg].values())
 
             pickle.dump((features, target, predictions), open(f"data/model-debug/data_{dg.name}.pkl", "wb"))
 

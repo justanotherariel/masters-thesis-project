@@ -200,23 +200,25 @@ class TorchTrainer(TransformationBlock):
         :return: The predictions.
         """
         self.model.module.eval()
-        predictions = []
+        predictions = None
 
         with torch.no_grad(), tqdm(loader, unit="batch", disable=False) as tepoch:
             for data in tepoch:
                 X_batch = moveTo(data[0], None, self.device)
-                y_pred = self.model.forward(X_batch)
-
-                if isinstance(y_pred, tuple):
-                    y_pred = tuple(y.to("cpu") for y in y_pred)
-                    if predictions == []:
-                        predictions = [[] for _ in range(len(y_pred))]
-                    for idx, pred in enumerate(y_pred):
-                        predictions[idx].extend(pred)
-                else:
-                    y_pred.to("cpu")
-                    predictions.extend(y_pred)
-        return [torch.stack(pred) for pred in predictions]
+                y_pred: dict[str, Tensor] = self.model.forward(X_batch)
+                
+                if predictions is None:
+                    predictions = {key: [] for key in y_pred}
+                
+                for key in y_pred:
+                    y_pred[key] = y_pred[key].to("cpu")
+                for key, val in y_pred.items():
+                    predictions[key].extend(val)
+                    
+            for key in predictions:
+                predictions[key] = torch.stack(predictions[key])
+                
+        return predictions
 
     def get_hash(self) -> str:
         """Get the hash of the block.

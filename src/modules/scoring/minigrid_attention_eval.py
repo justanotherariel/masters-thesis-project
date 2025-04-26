@@ -51,7 +51,7 @@ class MinigridAttentionEval(TransformationBlock):
             if dataset_group == DatasetGroup.ALL:
                 continue
 
-            if len(data.predictions[dataset_group]) < 3:
+            if "eta" not in data.predictions[dataset_group]:
                 logger.info(
                     f"Skipping sample evaluation (attention) because predictions "
                     f"attention maps are not available. ({dataset_group.name})"
@@ -75,7 +75,7 @@ class MinigridAttentionEval(TransformationBlock):
         target_data = dataset_to_list(data, dataset_group)
         x_obs, x_action = target_data[0]
         y_obs, y_reward = target_data[1]
-        pred_obs, pred_reward, pred_eta = data.predictions[dataset_group]
+        pred_obs, pred_reward, pred_eta = data.predictions[dataset_group]["pred_obs"], data.predictions[dataset_group]["pred_reward"], data.predictions[dataset_group]["eta"]
         pred_ti = self.info.model_ti
 
         # Argmax the predictions
@@ -133,8 +133,8 @@ def create_sample_eval_pdf(
             break
 
         # Only show samples with action 2 (forward)
-        # if x_action[sample_idx] != 2:
-        #     continue
+        if x_action[sample_idx] != 2:
+            continue
 
         # Get the reward
         y_reward_val = y_reward[sample_idx].item()

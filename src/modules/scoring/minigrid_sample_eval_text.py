@@ -64,7 +64,7 @@ def find_errors(
     x_obs, x_action = target_data[0]
     y_obs, y_reward = target_data[1]
     target_ti = SimpleDatasetDefault.create_ti(info, discrete=False)
-    pred_obs, pred_reward = data.predictions[dataset_group]
+    pred_obs, pred_reward = data.predictions[dataset_group]["pred_obs"], data.predictions[dataset_group]["pred_reward"]
     pred_ti = info.model_ti
 
     # Argmax the predictions

@@ -25,9 +25,9 @@ class ScaledDotProductAttention(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
-
+        
     def forward(
-        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
+        self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Computes attention scores and applies them to values.
@@ -46,24 +46,26 @@ class ScaledDotProductAttention(nn.Module):
         """
 
         batch_size, n_heads, seq_length, dim_per_head = key.size()
-
+        
         # 1. Compute attention scores
         key_transpose = key.transpose(2, 3)  # transpose
         attention_scores = (query @ key_transpose) / math.sqrt(dim_per_head)
 
-        # 2. Apply attention mask if provided
-        if attention_mask is not None:
-            attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
-
-        # 3. Convert scores to probabilities
+        # 2. Convert scores to probabilities
         attention_probs = self.softmax(attention_scores)
 
-        # 4. Apply attention dropout
-        attention_probs_drop = self.dropout(attention_probs)
+        # 3. Mask out diagonal
+        self_attention_mask = torch.eye(seq_length, dtype=torch.bool, device=query.device).expand(
+            batch_size, n_heads, -1, -1
+        )
+        attention_probs_model = attention_probs.masked_fill(self_attention_mask, 0.0)
+        
+        # 5. Apply attention dropout
+        attention_probs_model = self.dropout(attention_probs_model)
 
-        # 5. Compute weighted values
-        weighted_values = attention_probs_drop @ value
-
+        # 6. Compute weighted values
+        weighted_values = attention_probs_model @ value
+        
         return weighted_values, attention_probs
 
 
@@ -86,9 +88,7 @@ class MultiHeadedAttention(nn.Module):
         self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
 
-    def forward(
-        self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Applies multi-headed attention to the input tensor.
 
@@ -111,32 +111,18 @@ class MultiHeadedAttention(nn.Module):
         value_heads = self.split_heads(value)
 
         # 3. Apply scaled dot-product attention
-        attention_output, attention_weights = self.attention(
-            query_heads, key_heads, value_heads, attention_mask=attention_mask
+        attention_output, attention_probs = self.attention(
+            query_heads, key_heads, value_heads
         )
 
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
         output = self.output_projection(merged_attention)
-
-        # 5. Calculate new η values if requested
-        new_eta = None
-        if prev_eta is not None:
-            # Scale the attention weights by the magnitude of the corresponding values
-            value_magnitude = torch.norm(value_heads, dim=-1)
-            value_magnitude = value_magnitude.unsqueeze(2)
-            weighted_attention = attention_weights * value_magnitude
-
-            # Sum across heads to get the total influence
-            eta_layer = weighted_attention.sum(dim=1)
-
-            # Take previous η values into account
-            eta_layer = torch.bmm(eta_layer, prev_eta)
-
-            # Add the new layer's influence to account for the skip connection
-            new_eta = prev_eta + eta_layer
-
-        return output, new_eta
+        
+        # 5. Compute attention map: sum of attention probabilities across heads
+        attention_sum = attention_probs.sum(dim=1)
+        
+        return output, attention_sum
 
     def split_heads(self, x: torch.Tensor) -> torch.Tensor:
         """Splits the last dimension of the input tensor into n_heads."""
@@ -180,9 +166,7 @@ class TransformerLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout2 = nn.Dropout(p=drop_prob)
 
-    def forward(
-        self, x, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Performs a single transformer layer operation.
 
         Args:
@@ -195,19 +179,19 @@ class TransformerLayer(nn.Module):
         """
 
         # Self attention
-        delta_x, eta = self.attention(x, prev_eta=prev_eta, attention_mask=attention_mask)
+        delta_x, attention_sum = self.attention(x)
         delta_x = self.dropout1(delta_x)
         x = self.norm1(x + delta_x)
-
+        
         # Feed forward
         delta_x = self.ffn(x)
         delta_x = self.dropout2(delta_x)
         x = self.norm2(x + delta_x)
 
-        return x, eta
+        return x, attention_sum
 
 
-class Transformer(nn.Module):
+class SepAction(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
@@ -218,14 +202,11 @@ class Transformer(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
-        calculate_eta: bool = False,  # Whether to calculate η values
     ):
         super().__init__()
 
         if in_obs_shape[:2] != out_obs_shape[:2]:
             raise ValueError("Input and output observation shapes must have the same height and width.")
-
-        self.calculate_eta = calculate_eta
 
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
@@ -269,25 +250,27 @@ class Transformer(nn.Module):
         x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, -1, -1)], dim=1)
         x = x + self.pos_embedding
 
-        # Calculate η values if requested
-        eta = None
-        if self.calculate_eta:
-            eta = torch.eye(self.input_token_len, device=x.device).expand(
-                n_samples, self.input_token_len, self.input_token_len
-            )
+        # Calculate η values
+        attention_sum = torch.zeros(n_samples, self.input_token_len, self.input_token_len, device=x.device)
 
         # Apply transformer layers
         for layer in self.layers:
-            x, eta = layer(x, prev_eta=eta)
-
+            x, attention_sum_layer = layer(x)
+            
+            # Calculate attention sum for L1 regularization
+            attention_sum += attention_sum_layer
+                        
         # Project obs and reward to output size (discard action token)
         pred_obs = self.obs_out_proj(x[:, :-2]).view(-1, *self.out_obs_shape)
         pred_reward = self.reward_out_proj(x[:, -1])
 
-        return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
+        return {
+            "pred_obs": pred_obs,
+            "pred_reward": pred_reward,
+            "attention_sum": attention_sum,
+        }
 
-
-class TransformerCombAction(nn.Module):
+class CombAction(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
@@ -298,14 +281,11 @@ class TransformerCombAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
-        calculate_eta: bool = False,  # Whether to calculate η values
     ):
         super().__init__()
 
         if in_obs_shape[:2] != out_obs_shape[:2]:
             raise ValueError("Input and output observation shapes must have the same height and width.")
-
-        self.calculate_eta = calculate_eta
 
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
@@ -352,19 +332,25 @@ class TransformerCombAction(nn.Module):
         x = torch.cat([x, self.reward_token.expand(n_samples, -1, -1)], dim=1)
         x = x + self.pos_embedding
 
-        # Calculate η values if requested
-        eta = None
-        if self.calculate_eta:
-            eta = torch.eye(self.input_token_len, device=x.device).expand(
-                n_samples, self.input_token_len, self.input_token_len
-            )
+        # Calculate η values
+        attention_sum = torch.zeros(n_samples, self.input_token_len, self.input_token_len, device=x.device)
+        eta = torch.eye(self.input_token_len, device=x.device).repeat(
+            n_samples, 1, 1
+        )
 
         # Apply transformer layers
         for layer in self.layers:
-            x, eta = layer(x, prev_eta=eta)
+            x, attention_sum_layer = layer(x)
+            
+            # Calculate attention sum for L1 regularization
+            attention_sum += attention_sum_layer
 
         # Project obs and reward to output size
         pred_obs = self.obs_out_proj(x[:, :-1]).view(-1, *self.out_obs_shape)
         pred_reward = self.reward_out_proj(x[:, -1])
 
-        return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
+        return {
+            "pred_obs": pred_obs,
+            "pred_reward": pred_reward,
+            "attention_sum": attention_sum,
+        }

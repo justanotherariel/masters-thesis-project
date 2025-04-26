@@ -36,11 +36,11 @@ class MinigridAccuracy(BaseAccuracy):
 
     def __call__(
         self,
-        predictions: tuple[torch.Tensor, ...],
+        predictions: dict[str, torch.Tensor],
         targets: tuple[torch.Tensor, torch.Tensor],
         features: torch.Tensor,
     ) -> dict[str, float]:
-        pred_obs, pred_reward = predictions[:2]
+        pred_obs, pred_reward = predictions["pred_obs"], predictions["pred_reward"]
         target_obs, target_reward = targets
         feature_obs, feature_action = features
 
@@ -57,9 +57,7 @@ class MinigridAccuracy(BaseAccuracy):
         accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax))
         accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
 
-        if len(predictions) > 2:
-            eta = predictions[2]
-            accuracies.update(self._calc_eta_metrics(eta))
+        accuracies.update(self._calc_eta_metrics(predictions))
 
         return accuracies
 
@@ -161,22 +159,20 @@ class MinigridAccuracy(BaseAccuracy):
             "Reward-Neg Accuracy": reward_neg_correct,
         }
 
-    def _calc_eta_metrics(self, eta: torch.Tensor):
-        # L1 and L2 norm
-        eta_l1 = torch.abs(eta).mean(dim=(1, 2))
-        eta_l2 = torch.linalg.matrix_norm(eta, ord="fro", dim=(1, 2))
-        eta_l1l2 = eta_l1 / (eta_l2 + EPS)
+    def _calc_eta_metrics(self, predictions: dict[str, torch.Tensor]):
+        results = {}
+        
+        attention_sum = predictions.get("attention_sum", None)
+        eta = predictions.get("eta", None)
+        
+        if attention_sum is not None:
+            results.update({"Eta Prob Sum": torch.abs(attention_sum).sum(dim=[1, 2])})
 
-        # Entropy
-        eta_prob = F.softmax(eta, dim=2)
-        eta_entropy = -(eta_prob * eta_prob.log()).sum(dim=(1, 2))
+        if eta is not None:
+            results.update({"Eta Sum": torch.abs(eta).sum(dim=[1, 2])})
+            results.update({"Eta Mean": torch.abs(eta).mean(dim=[1, 2])})
 
-        return {
-            "Eta L1": eta_l1,
-            "Eta L2": eta_l2,
-            "Eta L1/L2": eta_l1l2,
-            "Eta Entropy": eta_entropy,
-        }
+        return results
 
 
 def obs_argmax(obs, ti, *, constrain_to_one_agent: bool = False):
