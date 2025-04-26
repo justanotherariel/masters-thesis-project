@@ -1,44 +1,39 @@
 command:
   - python3
   - ${program}
-  - model=transformer
+  - model=transformer_sparse
   - ${args_no_hyphens}
 method: bayes
 project: Thesis
 entity: a-ebersberger-tu-delft
 program: train.py
-name: Transformer | Adafactor | ETA HPO (2)
+name: Transformer Sparse
 metric:
   name: Validation/Transition Accuracy
   goal: maximize
 parameters:
 
-  # n_trials:
-  #   value: 5
+  n_trials:
+    value: 3
 
-  model.train_sys.steps.0.model.model_cls._target_:
-    value: src.modules.training.models.transformer.Transformer
+  # model.train_sys.steps.0.model.model_cls._target_:
+  #   value: src.modules.training.models.transformer.Transformer
 
-  model.train_sys.steps.0.optimizer._target_:
-    value: torch.optim.Adafactor
+  # model.train_sys.steps.0.optimizer._target_:
+  #   value: torch.optim.Adafactor
 
 
   # Optimizer/Scheduler Parameters
   model.train_sys.steps.0.optimizer.lr:
     distribution: log_uniform_values
-    min: 0.1e-2
+    min: 0.001
     max: 0.5
 
-  model.train_sys.steps.0.scheduler.decay_rate:
+  # Loss Parameters
+  model.train_sys.steps.0.loss.eta_loss_fn.weight:
     distribution: uniform
-    min: 0.75
-    max: 0.95
-
-  model.train_sys.steps.0.scheduler.decay_t:
-    distribution: int_uniform
-    min: 200
-    max: 350
-
+    min: 0.0001
+    max: 0.1
 
   # Model parameters
   # model.train_sys.steps.0.model.d_model:

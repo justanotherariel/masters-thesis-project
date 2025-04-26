@@ -14,8 +14,8 @@ env_sys:
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
     - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
-      train_envs: 20
-      train_keep_perc: 0.10
+      train_envs: 5
+      train_keep_perc: 0.25
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -31,7 +31,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 5000
+      epochs: 4_000
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -44,17 +44,12 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          # _target_: src.modules.training.models.transformer.Transformer
-          _target_: src.modules.training.models.transformer_no_softmax.TransformerNoSoftmax
-          # _target_: src.modules.training.models.transformer_sigmoid.TransformerSigmoid
-          # _target_: src.modules.training.models.transformer_attention_sink.TransformerAttentionSink
-          # _target_: src.modules.training.models.transformer_attention_sink_layer.TransformerAttentionSinkLayer
+          _target_: src.modules.training.models.transformer.sparse_zero_self.CombAction
         d_model: 128
         n_heads: 4
         n_layers: 3
         d_ff: 128
         drop_prob: 0.15
-        calculate_eta: true
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss
@@ -66,9 +61,7 @@ train_sys:
         eta_loss_fn:
           _target_: src.modules.training.loss.EtaL1Loss
           # _target_: src.modules.training.loss.EtaL2Loss
-          # _target_: src.modules.training.loss.EtaLRatioLoss
-          # _target_: src.modules.training.loss.EtaEntropyLoss
-          weight: 0.3e-3
+          weight: 0.01
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
@@ -120,7 +113,7 @@ pred_sys:
     # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
     
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
-      # eval_n_grids: 1
+      eval_n_grids: 5
       only_errors: true
 
     - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
