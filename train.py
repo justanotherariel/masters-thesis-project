@@ -57,6 +57,15 @@ def main(cfg: DictConfig) -> None:
     
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
     
+    # Print given parameters
+    logger.info("Running with the following parameters:")
+    for arg in sys.argv[1:]:
+        if arg.startswith("++"):
+            arg = arg[2:]
+        logger.info(arg)
+    logger.info("Output directory: %s", output_dir)
+    logger.info("End of parameters")
+    
     # Check if Random Seeds Initialization is enabled
     if cfg.trial_idx == -1 and cfg.n_trials > 1:
         run_trials(cfg, output_dir)
@@ -91,7 +100,7 @@ def run_trials(cfg: DictConfig, output_dir: Path) -> None:
         logger.info("Group ID: %s", cfg.wandb.group_id)
         logger.info("Done Initializing W&B Average Run\n\n")
     
-    # Create the processes and execute one process after another    
+    # Create the processes and execute one process after another
     accuracies = {}
     for trial_idx in range(cfg.n_trials):
         cfg.trial_idx = trial_idx
