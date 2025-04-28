@@ -67,6 +67,7 @@ class CERebalancedFocalLoss:
 @dataclass
 class EtaL1Loss:
     weight: float = 0.01
+    exclude_diag: bool = True
     
     def __call__(self, eta: torch.Tensor) -> torch.Tensor:
         """
@@ -75,6 +76,11 @@ class EtaL1Loss:
 
         Lower values = more sparsity
         """
+        # Exclude diagonal elements from the loss
+        if self.exclude_diag:
+            diag_mask = torch.eye(eta.shape[1], device=eta.device).unsqueeze(0)
+            eta = eta * (1 - diag_mask)
+        
         return self.weight * torch.abs(eta).mean()
 
 
@@ -115,7 +121,7 @@ class EtaEntropyLoss:
     def __call__(self, eta: torch.Tensor) -> torch.Tensor:
         """
         Encourages a uniform distribution of attention weights
-        Lower entropy = more focused attention
+        Lower entropy = more sparsity
         """
         eta_prob = F.softmax(eta, dim=2) + EPS
         entropy = -(eta_prob * eta_prob.log()).sum(dim=2).mean()
