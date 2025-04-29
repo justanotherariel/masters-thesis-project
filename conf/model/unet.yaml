@@ -13,7 +13,7 @@ env_sys:
       # environment: MiniGrid-SimpleCrossingS11N5-v0
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
-    - _target_: src.modules.environment.minigrid_sampler_extensive.MinigridSamplerExtensive
+    - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
       train_envs: 5
       train_keep_perc: 0.25
       validation_envs: 10
@@ -31,7 +31,7 @@ train_sys:
   steps:
     - _target_: src.modules.training.torch_trainer.TorchTrainer
 
-      epochs: 3000
+      epochs: 4_000
       batch_size: 2048
 
       n_folds: ${n_trials}
@@ -52,26 +52,20 @@ train_sys:
         obs_loss_weight: 0.8
         reward_loss_weight: 0.2
         discrete_loss_fn:
-          _target_: src.utils.functools.partial
-          _args_:
-            - _target_: hydra.utils.get_method
-              # path: torch.nn.functional.cross_entropy
-              # path: src.modules.training.loss.ce_focal_loss
-              # path: src.modules.training.loss.ce_adaptive_loss
-              # path: src.modules.training.loss.ce_rebalance_loss
-              path: src.modules.training.loss.ce_rebalanced_focal_loss
+          # _target_: src.modules.training.loss.CELoss
+          _target_: src.modules.training.loss.CEFocalLoss
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
 
-      early_stopping:
-        enable: true
-        start_epoch: 500
-        patience: 500
-        metric: ["VALIDATION", "Transition Accuracy"]
-        metric_mode: max
-        metric_min_delta: 0.02
-        revert_to_best_model: true
+      # early_stopping:
+      #   enable: true
+      #   start_epoch: 500
+      #   patience: 500
+      #   metric: ["VALIDATION", "Transition Accuracy"]
+      #   metric_mode: max
+      #   metric_min_delta: 0.02
+      #   revert_to_best_model: true
 
       model_storage_conf:
         save_model_to_disk: true

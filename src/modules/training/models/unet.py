@@ -153,4 +153,7 @@ class UNet(nn.Module):
         # Calculate Reward
         pred_reward = self.reward(pred_obs.reshape(pred_obs.size(0), -1))
 
-        return pred_obs, pred_reward
+        return {
+            "pred_obs": pred_obs,
+            "pred_reward": pred_reward,
+        }
