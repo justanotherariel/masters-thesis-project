@@ -10,7 +10,7 @@ from pathlib import Path
 # Configure which metrics to include in the output - empty list means include all metrics
 # Add specific metrics here if you want to filter, for example:
 # WHITELIST_METRICS = ["Train/Transition Accuracy", "Validation/Transition Accuracy"]
-WHITELIST_METRICS = ["Train/Transition Accuracy", "Validation/Transition Accuracy"]
+WHITELIST_METRICS = []
 
 def parse_log_file(log_file_path):
     """Parse a single log file and extract relevant information."""
@@ -147,6 +147,32 @@ def clean_log_file(log_file_path):
     
     print(f"Cleaned {log_file_path}")
 
+def is_log_file_clean(log_file_path):
+    """
+    Check if a log file has been cleaned by looking for multiple 'Epoch 0 Valid' lines 
+    in the first 100 lines.
+    
+    Args:
+        log_file_path (str): Path to the log file
+        
+    Returns:
+        bool: False if the log contains two or more 'Epoch 0 Valid' lines (uncleaned),
+              True otherwise (cleaned)
+    """
+    try:
+        with open(log_file_path, 'r') as file:
+            # Read first 100 lines
+            lines = [file.readline() for _ in range(100)]
+            
+            # Count 'Epoch 0 Valid' occurrences
+            epoch_0_valid_count = sum(1 for line in lines if 'Epoch 0 Valid' in line)
+            
+            # If there are 2 or more occurrences, the file is not cleaned
+            return epoch_0_valid_count < 2
+    except Exception as e:
+        print(f"Error processing file {log_file_path}: {e}")
+        return None
+
 def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Process log files and optionally clean them.')
@@ -160,7 +186,11 @@ def main():
     if args.clean:
         print("Cleaning log files...")
         for log_file in log_files:
-            clean_log_file(log_file)
+            if not is_log_file_clean(log_file):
+                print(f"Cleaning {log_file}...")
+                clean_log_file(log_file)
+            else:
+                print(f"{log_file} is already cleaned.")
         print("Cleaning complete.")
     
     # Group log files by run date and time
