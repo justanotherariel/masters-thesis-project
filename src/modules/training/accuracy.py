@@ -49,12 +49,9 @@ class MinigridAccuracy(BaseAccuracy):
         feature_obs_argmax = obs_argmax(feature_obs, self._ti)
 
         accuracies = {}
-        accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward))
-
-        accuracies.update(self._calc_object_acc(pred_obs_argmax, target_obs_argmax))
-        accuracies.update(self._calc_color_acc(pred_obs_argmax, target_obs_argmax))
-        accuracies.update(self._calc_state_acc(pred_obs_argmax, target_obs_argmax))
-        accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax))
+        accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward, feature_action))
+        accuracies.update(self._calc_cell_acc(pred_obs_argmax, target_obs_argmax))
+        accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax, feature_action))
         accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
 
         accuracies.update(self._calc_eta_metrics(predictions))
@@ -67,85 +64,85 @@ class MinigridAccuracy(BaseAccuracy):
         pred_reward: torch.Tensor,
         target_obs_argmax: torch.Tensor,
         target_reward: torch.Tensor,
+        feature_action: torch.Tensor,
     ):
         observation_correct = (pred_obs_argmax == target_obs_argmax).all(dim=[1, 2, 3])
         reward_correct = torch.isclose(pred_reward, target_reward, atol=0.2).squeeze()
         total_correct = observation_correct & reward_correct
+        
+        mask_forward = (feature_action[..., 2] == 1)
+        samples_forward = total_correct[mask_forward]
+        
+        mask_rotate = (feature_action[..., 0] == 1) | (feature_action[..., 1] == 1)
+        samples_rotate = total_correct[mask_rotate]
 
         return {
             "Transition Accuracy": total_correct,
+            "Transition Accuracy Forward": samples_forward,
+            "Transition Accuracy Rotate": samples_rotate,
         }
 
-    def _calc_object_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
+    def _calc_cell_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
         """
         Calculate the accuracy of the object component of the observation tensor. Each object class is weighted
         equally.
         """
-        correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).all(dim=[1, 2])
+        obj_correct = (pred_obs_argmax[..., 0] == target_obs_argmax[..., 0]).all(dim=[1, 2])
+        color_correct = (pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]).all(dim=[1, 2])
+        state_correct = (pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]).all(dim=[1, 2])
+        cell_correct = (obj_correct & color_correct & state_correct).float()
 
-        return {"Object Accuracy": correct}
-
-    def _calc_color_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
-        """
-        Calculate the accuracy of the color component of the observation tensor. Each state class is weighted
-        equally, but is only counted if the object component on that field was correctly predicted.
-        """
-        correct = (pred_obs_argmax[..., 1] == target_obs_argmax[..., 1]).all(dim=[1, 2])
-
-        return {"Color Accuracy": correct}
-
-    def _calc_state_acc(self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor):
-        """
-        Calculate the accuracy of the state component of the observation tensor. Each state class is weighted
-        equally, but is only counted if the object component on that field was correctly predicted.
-        """
-        correct = (pred_obs_argmax[..., 2] == target_obs_argmax[..., 2]).all(dim=[1, 2])
-
-        return {"State Accuracy": correct}
+        return {
+            "Cell Accuracy": cell_correct,
+            "Object Accuracy": obj_correct.float(),
+            "Color Accuracy": color_correct.float(),
+            "State Accuracy": state_correct.float(),
+        }
 
     def _calc_agent_acc(
-        self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor
+        self, pred_obs_argmax: torch.Tensor, target_obs_argmax: torch.Tensor, feature_obs_argmax: torch.Tensor, feature_action: torch.Tensor
     ):
         # How often was only one agent in the observation tensor?
         samples_one_agent = (
             pred_obs_argmax[..., 3].view(-1, pred_obs_argmax.shape[1] * pred_obs_argmax.shape[2]) != 0
         ).sum(dim=1) == 1
 
-        # For the samples with only one agent, how often was the agent correctly predicted?
+        # How often was the agent correctly predicted?
         samples_agent_correct = (pred_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
-
+        
+        # Action = left, right
+        mask_agent_rotate = (feature_action[..., 0] == 1) | (feature_action[..., 1] == 1)
+        samples_agent_rotate = (
+            pred_obs_argmax[mask_agent_rotate, :, :, 3] == target_obs_argmax[mask_agent_rotate, :, :, 3]
+        ).all(dim=[1, 2])
+        
+        # Action = forward
+        mask_agent_forward = (feature_action[..., 2] == 1)
+        samples_agent_forward = (
+            pred_obs_argmax[mask_agent_forward, :, :, 3] == target_obs_argmax[mask_agent_forward, :, :, 3]
+        ).all(dim=[1, 2])
+        
         # Find samples where the agent was supposed to stay
-        mask_agent_stay = (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
+        mask_agent_stay = mask_agent_forward & (feature_obs_argmax[..., 3] == target_obs_argmax[..., 3]).all(dim=[1, 2])
         samples_agent_stay = (
             pred_obs_argmax[mask_agent_stay, :, :, 3] == target_obs_argmax[mask_agent_stay, :, :, 3]
         ).all(dim=[1, 2])
 
-        # Find samples where the agent was supposed to rotate
-        mask_agent_rotate = ((feature_obs_argmax[..., 3] != 0) == (target_obs_argmax[..., 3] != 0)).all(
-            dim=[1, 2]
-        ) & ~mask_agent_stay
-        samples_agent_rotated = (
-            pred_obs_argmax[mask_agent_rotate, :, :, 3] == target_obs_argmax[mask_agent_rotate, :, :, 3]
-        ).all(dim=[1, 2])
-
         # Find samples where the agent was supposed to move
-        mask_agent_move = (
-            (((feature_obs_argmax[..., 3] != 0) != (target_obs_argmax[..., 3] != 0)).sum(dim=[1, 2]) == 2)
-            & ~mask_agent_stay
-            & ~mask_agent_rotate
-        )
-        samples_agent_moved = (
-            pred_obs_argmax[mask_agent_move, :, :, 3] == target_obs_argmax[mask_agent_move, :, :, 3]
+        mask_agent_forward = mask_agent_forward & (~mask_agent_stay & ~mask_agent_rotate)
+        samples_agent_move = (
+            pred_obs_argmax[mask_agent_forward, :, :, 3] == target_obs_argmax[mask_agent_forward, :, :, 3]
         ).all(dim=[1, 2])
 
         return {
             "One Agent Samples Accuracy": samples_one_agent,
             "Agent Accuracy": samples_agent_correct,
-            "Agent Stay Accuracy": samples_agent_stay,
-            "Agent Rotate Accuracy": samples_agent_rotated,
-            "Agent Move Accuracy": samples_agent_moved,
+            "Agent Rotate Accuracy": samples_agent_rotate,
+            "Agent Forward Accuracy": samples_agent_forward,
+            "Agent Forward Stay Accuracy": samples_agent_stay,
+            "Agent Forward Move Accuracy": samples_agent_move,
         }
-
+        
     def _calc_reward_acc(self, pred_reward: torch.Tensor, target_reward: torch.Tensor):
         reward_correct = torch.isclose(pred_reward, target_reward, atol=0.2)
 
