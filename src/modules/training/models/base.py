@@ -43,9 +43,6 @@ class MinigridModel:
     def __repr__(self):
         attrs = []
         for attr, attr_val in self._model_args.items():
-            if attr == "calculate_eta":
-                continue
-
             attrs.append(f"{attr}={attr_val}")
 
         return f"{self.name}/{self.version}({', '.join(attrs)})"
