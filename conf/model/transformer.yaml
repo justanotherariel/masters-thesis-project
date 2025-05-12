@@ -14,8 +14,8 @@ env_sys:
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
     - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
-      train_envs: 5
-      train_keep_perc: 0.25
+      train_envs: 4
+      train_keep_perc: 0.2
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -93,26 +93,11 @@ train_sys:
 
 pred_sys:
   steps:
-    # - _target_: src.modules.scoring.minigrid_save_data.MinigridSaveData
-
     - _target_: src.modules.scoring.minigrid_accuracy.MinigridAccuracy
       accuarcy_calc: ${model.train_sys.steps[0].accuracy}
     
-    - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
-
-    # - _target_: src.modules.scoring.minigrid_heatmap.MinigridHeatmap
-    #   metric_calculators: 
-    #       - AgentPovCertaintyCalc
-    #       - AgentPovAccuracyCalc
-    #       - FieldPovAccuracyCalc
-    #       - RewardAccuracyCalc
-    
-    # - _target_: src.modules.scoring.minigrid_sample_eval_text.MinigridSampleEvalText
+    # - _target_: src.modules.scoring.minigrid_environments.MinigridEnvironmentsPDF
     
     - _target_: src.modules.scoring.minigrid_sample_eval_image.MinigridSampleEvalImage
       eval_n_grids: 5
       only_errors: true
-
-    # - _target_: src.modules.scoring.minigrid_attention_eval.MinigridAttentionEval
-    #   eval_n_correct: 50
-    #   eval_n_incorrect: 50

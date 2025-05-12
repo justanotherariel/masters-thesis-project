@@ -14,8 +14,8 @@ env_sys:
       # environment: MiniGrid-MultiRoom-N4-S5-v0
 
     - _target_: src.modules.environment.minigrid_sampler_exhaustive.MinigridSamplerExhaustive
-      train_envs: 5
-      train_keep_perc: 0.25
+      train_envs: 4
+      train_keep_perc: 0.2
       validation_envs: 10
 
     # - _target_: src.modules.environment.minigrid_sampler_random.MinigridSamplerRandom
@@ -53,7 +53,8 @@ train_sys:
         reward_loss_weight: 0.2
         discrete_loss_fn:
           # _target_: src.modules.training.loss.CELoss
-          _target_: src.modules.training.loss.CEFocalLoss
+          # _target_: src.modules.training.loss.CEFocalLoss
+          _target_: src.modules.training.loss.CERebalancedFocalLoss
 
       accuracy:
         _target_: src.modules.training.accuracy.MinigridAccuracy
