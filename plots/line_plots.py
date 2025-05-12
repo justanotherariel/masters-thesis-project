@@ -10,7 +10,7 @@ from pathlib import Path
 ENTITY = "a-ebersberger-tu-delft"  # Your wandb username or team name
 PROJECT = "Thesis"  # Your project name
 
-CACHE_FILE = Path("cache.pkl")  # Path to the cache file
+CACHE_DIR = Path("data/plot-cache")  # Path to the cache file
 
 def get_group_metric_data(group_id, metric_name):
     """
@@ -144,32 +144,33 @@ def plot_group_metrics(group_data_dict, metric_name, save_path=None):
 
 # Example usage
 if __name__ == "__main__":
-    metric_name = "Validation/Transition Accuracy"
-    
-    # Download data for two groups
-    group1_id = "5k3jal0y"
-    group2_id = "wklveq3u"
+    # metric_name = "Train/Transition Accuracy"
+    # metric_name = "Validation/Agent Accuracy"
+    metric_name = "Validation/Object Accuracy"
+        
+    groups = {
+        "U-Net": "fqsojmrl",
+        "Transformer": "5k3jal0y",
+        "Sparse Transformer": "wklveq3u",
+    }
     
     cache = None
-    if CACHE_FILE.exists():
-        with open(CACHE_FILE, "rb") as f:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    metric_name_repl = metric_name.replace("/", "_").replace(" ", "_").lower()
+    cache_file = CACHE_DIR / f"{metric_name_repl}.pkl"
+    if cache_file.exists():
+        with open(cache_file, "rb") as f:
             cache = pickle.load(f)
     
-    if cache is None or group1_id not in cache:
-        data = get_group_metric_data(group1_id, metric_name)
-        cache = {} if cache is None else cache
-        cache[group1_id] = data
-        with open(CACHE_FILE, "wb") as f:
-            pickle.dump(cache, f)
-            
-    if group2_id not in cache:
-        data = get_group_metric_data(group2_id, metric_name)
-        cache[group2_id] = data
-        with open(CACHE_FILE, "wb") as f:
-            pickle.dump(cache, f)
-        
+    for group_name in groups:
+        group_id = groups[group_name]
+        if cache is None or group_id not in cache:
+            data = get_group_metric_data(group_id, metric_name)
+            cache = {} if cache is None else cache
+            cache[group_id] = data
+            with open(cache_file, "wb") as f:
+                pickle.dump(cache, f)
+        groups[group_name] = cache[group_id]
+
     # Plot the data
-    plot_group_metrics({
-        "Transformer": cache[group1_id],
-        "Sparse Transformer": cache[group2_id]
-    }, metric_name, save_path="group_metrics_plot.png")
+    plot_group_metrics(groups, metric_name, save_path=f"data/group_metrics_{metric_name_repl}.png")

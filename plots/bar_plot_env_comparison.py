@@ -76,19 +76,21 @@ def parse_run_file(file_path: Path) -> dict:
     
     return all_runs
 
-def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict, 
-                                  model1_name: str, model2_name: str, 
-                                  metric: str = "Validation/Transition Accuracy",
-                                  output_prefix: str = None) -> List[plt.Figure]:
+def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict, model3_data: Dict,
+                                        model1_name: str, model2_name: str, model3_name: str,
+                                        metric: str = "Validation/Transition Accuracy",
+                                        output_prefix: str = None) -> List[plt.Figure]:
     """
     Create three separate bar plots, one for each data percentage (0.2, 0.4, 0.6),
-    comparing two models across different environment counts.
+    comparing three models across different environment counts.
     
     Args:
         model1_data: Dictionary with data for the first model (from parse_run_file)
         model2_data: Dictionary with data for the second model (from parse_run_file)
+        model3_data: Dictionary with data for the third model (from parse_run_file)
         model1_name: Name of the first model for the legend
         model2_name: Name of the second model for the legend
+        model3_name: Name of the third model for the legend
         metric: Which metric to plot (default: "Validation/Transition Accuracy")
         output_prefix: Optional prefix for saving figures (will append percentage)
         
@@ -96,7 +98,11 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
         List of Matplotlib figures, one for each data percentage
     """
     # Extract and organize data for plotting
-    organized_data = organize_data_for_plot(model1_data, model2_data, model1_name, model2_name, metric)
+    organized_data = organize_data_for_plot(
+        model1_data, model2_data, model3_data,
+        model1_name, model2_name, model3_name, 
+        metric
+    )
     
     # Get unique environment counts and percentages
     env_counts = sorted(set(item['env_count'] for item in organized_data))
@@ -104,8 +110,9 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
     
     # Set colors for the models
     model_colors = {
-        model1_name: '#3366CC',
-        model2_name: '#DC3912'
+        model1_name: '#3366CC',  # Blue
+        model2_name: '#DC3912',  # Red
+        model3_name: '#109618'   # Green
     }
     
     # Create a list to store all figures
@@ -115,7 +122,7 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
     all_values = [item['value'] for item in organized_data]
     all_std_devs = [item['std_dev'] for item in organized_data]
     global_y_min = max(0, min(all_values) - max(all_std_devs) * 2) * 0.95
-    global_y_max = min(1.0, max(all_values) + max(all_std_devs) * 2) * 1.02
+    global_y_max = min(1.0, max(all_values) + max(all_std_devs) * 2) * 1.05  # Increased to make more room
     
     # Create a separate plot for each data percentage
     for perc in percentages:
@@ -123,14 +130,14 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
         perc_data = [item for item in organized_data if item['data_perc'] == perc]
         
         # Set up the figure and axes
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(12, 6))  # Wider figure to accommodate 3 bars
         
-        # Set bar width and positions
-        bar_width = 0.35
+        # Set bar width and positions - narrower for 3 bars
+        bar_width = 0.25  # Changed from 0.35 to accommodate 3 bars
         group_positions = np.arange(len(env_counts))
         
         # Plot the bars for each model
-        for i, model_name in enumerate([model1_name, model2_name]):
+        for i, model_name in enumerate([model1_name, model2_name, model3_name]):
             # Extract data points for this model
             model_points = [next((item for item in perc_data 
                                 if item['env_count'] == env_count 
@@ -146,18 +153,22 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
                 if point:
                     values.append(point['value'])
                     errors.append(point['std_dev'])
-                    positions.append(group_positions[j] - bar_width/2 + i*bar_width)
+                    positions.append(group_positions[j] - bar_width + i*bar_width)  # Adjusted position formula
             
-            # Plot the bars
+            # Plot the bars with error bars that have horizontal caps
             bars = ax.bar(positions, values, bar_width,
                          yerr=errors,
+                         error_kw={'capsize': 5},  # Add horizontal caps to error bars
                          color=model_colors[model_name],
                          label=model_name)
             
-            # Add value labels on top of bars
-            for pos, val in zip(positions, values):
-                ax.text(pos, val + 0.01, f"{val:.3f}", 
-                       ha='center', va='bottom', rotation=0, size=9)
+            # Add value labels ABOVE the error bars
+            for pos, val, err in zip(positions, values, errors):
+                # Position the label above the error bar (value + std_dev + padding)
+                label_height = val + err + 0.015
+                ax.text(pos, label_height, f"{val:.3f}", 
+                       ha='center', va='bottom', rotation=0, size=8,
+                       fontweight='bold')  # Made bold for better visibility
         
         # Set the x-axis labels and ticks
         ax.set_xticks(group_positions)
@@ -190,17 +201,19 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict,
     
     return figures
 
-def organize_data_for_plot(model1_data: Dict, model2_data: Dict, 
-                          model1_name: str, model2_name: str, 
-                          metric: str) -> List[Dict]:
+def organize_data_for_plot(model1_data: Dict, model2_data: Dict, model3_data: Dict,
+                           model1_name: str, model2_name: str, model3_name: str,
+                           metric: str) -> List[Dict]:
     """
-    Organize the data from both models into a format suitable for plotting.
+    Organize the data from three models into a format suitable for plotting.
     
     Args:
         model1_data: Dictionary with data for the first model
         model2_data: Dictionary with data for the second model
+        model3_data: Dictionary with data for the third model
         model1_name: Name of the first model
         model2_name: Name of the second model
+        model3_name: Name of the third model
         metric: Which metric to extract
         
     Returns:
@@ -248,25 +261,49 @@ def organize_data_for_plot(model1_data: Dict, model2_data: Dict,
                     'std_dev': std_dev
                 })
     
+    # Process third model data (new)
+    for run_key, run_info in model3_data.items():
+        if 'arguments' in run_info and 'results' in run_info:
+            if 'model.env_sys.steps.1.train_envs' in run_info['arguments'] and \
+               'model.env_sys.steps.1.train_keep_perc' in run_info['arguments'] and \
+               metric in run_info['results']:
+                
+                env_count = int(run_info['arguments']['model.env_sys.steps.1.train_envs'])
+                data_perc = float(run_info['arguments']['model.env_sys.steps.1.train_keep_perc'])
+                value = run_info['results'][metric]['value']
+                std_dev = run_info['results'][metric]['std_dev']
+                
+                organized_data.append({
+                    'model': model3_name,
+                    'env_count': env_count,
+                    'data_perc': data_perc,
+                    'value': value,
+                    'std_dev': std_dev
+                })
+    
     return organized_data
 
 # Example usage:
 if __name__ == "__main__":
-    # Load data from two different model runs
+    # Load data from three different model runs
     model1_file = Path("data/results_classic.md")
     model2_file = Path("data/results_sparse.md")
+    model3_file = Path("data/results_unet.md")  # New third model file
     
     model1_data = parse_run_file(model1_file)
     model2_data = parse_run_file(model2_file)
+    model3_data = parse_run_file(model3_file)  # Parse third model data
     
     # Create and save the separate plots for each data percentage
     figs = plot_model_comparison_by_percentage(
         model1_data, 
-        model2_data, 
+        model2_data,
+        model3_data,  # Add third model data
         "Transformer", 
         "Sparse Transformer",
+        "U-Net",  # Add third model name
         metric="Validation/Transition Accuracy",
-        output_prefix="sparse_comparison"
+        output_prefix="model_comparison"
     )
     
     # Display all figures
