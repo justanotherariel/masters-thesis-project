@@ -49,7 +49,7 @@ class MinigridAccuracy(BaseAccuracy):
         feature_obs_argmax = obs_argmax(feature_obs, self._ti)
 
         accuracies = {}
-        accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward, feature_action))
+        accuracies.update(self._calc_transition_acc(pred_obs_argmax, pred_reward, target_obs_argmax, target_reward, feature_obs_argmax, feature_action))
         accuracies.update(self._calc_cell_acc(pred_obs_argmax, target_obs_argmax))
         accuracies.update(self._calc_agent_acc(pred_obs_argmax, target_obs_argmax, feature_obs_argmax, feature_action))
         accuracies.update(self._calc_reward_acc(pred_reward, target_reward))
@@ -64,6 +64,7 @@ class MinigridAccuracy(BaseAccuracy):
         pred_reward: torch.Tensor,
         target_obs_argmax: torch.Tensor,
         target_reward: torch.Tensor,
+        feature_obs_argmax: torch.Tensor,
         feature_action: torch.Tensor,
     ):
         observation_correct = (pred_obs_argmax == target_obs_argmax).all(dim=[1, 2, 3])
@@ -75,10 +76,25 @@ class MinigridAccuracy(BaseAccuracy):
         
         mask_rotate = (feature_action[..., 0] == 1) | (feature_action[..., 1] == 1)
         samples_rotate = total_correct[mask_rotate]
+        
+        agent_location = (feature_obs_argmax[..., 3] != 0)
+        agent_coords = torch.nonzero(agent_location)
+        agent_dir = feature_obs_argmax[agent_coords[:, 0], agent_coords[:, 1], agent_coords[:, 2], 3]
+        mask_agent_facing_north_wall = (agent_coords[:, 1] == 1) & (agent_dir == 3)
+        mask_agent_facing_south_wall = (agent_coords[:, 1] == pred_obs_argmax.shape[1] - 2) & (agent_dir == 1)
+        mask_agent_facing_east_wall = (agent_coords[:, 2] == pred_obs_argmax.shape[2] - 2) & (agent_dir == 0)
+        mask_agent_facing_west_wall = (agent_coords[:, 2] == 1) & (agent_dir == 2)
+        mask_agent_facing_wall = mask_agent_facing_north_wall | mask_agent_facing_south_wall | mask_agent_facing_east_wall | mask_agent_facing_west_wall
+        mask_agent_forward_facing_wall = mask_forward & mask_agent_facing_wall
+        mask_agent_forward_not_facing_wall = mask_forward & ~mask_agent_facing_wall
+        samples_agent_forward_facing_wall = total_correct[mask_agent_forward_facing_wall]
+        samples_agent_forward_not_facing_wall = total_correct[mask_agent_forward_not_facing_wall]
 
         return {
             "Transition Accuracy": total_correct,
             "Transition Accuracy Forward": samples_forward,
+            "Transition Accuracy Forward Agent Facing Wall": samples_agent_forward_facing_wall,
+            "Transition Accuracy Forward Agent Not Facing Wall": samples_agent_forward_not_facing_wall,
             "Transition Accuracy Rotate": samples_rotate,
         }
 
