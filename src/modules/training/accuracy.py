@@ -182,9 +182,14 @@ class MinigridAccuracy(BaseAccuracy):
             results.update({"Eta Prob Sum": torch.abs(attention_sum).sum(dim=[1, 2])})
 
         if eta is not None:
-            results.update({"Eta Sum": torch.abs(eta).sum(dim=[1, 2])})
+            eta_sum = torch.abs(eta).sum(dim=[1, 2])
+            results.update({"Eta Sum": eta_sum})
             results.update({"Eta Mean": torch.abs(eta).mean(dim=[1, 2])})
-
+            
+            offset = 40
+            for i in range(eta.shape[1], eta.shape[1] + offset):
+                results.update({f"Eta {i}": (eta_sum == i).float().sum().expand(eta.shape[0])})
+            results.update({f"Eta {eta.shape[1] + offset + 1}+": (eta_sum > eta.shape[1]).float().sum().expand(eta.shape[0])})
         return results
 
 
