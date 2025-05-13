@@ -120,10 +120,13 @@ class ModelStorage:
 
         # Load model
         logger.info(f"Loading model from {model_path}")
-        
-        # Handle changed class names
-        replace_attention_class(model_path)
-        return torch.load(model_path, weights_only=False)
+        try:
+            return torch.load(model_path, weights_only=False)
+        except AttributeError as e:
+            # Handle changed class names
+            logger.info(f"Failed to load model, replacing class names.")
+            replace_attention_class(model_path)
+            return torch.load(model_path, weights_only=False)
 
     def get_model_checkpoint(self, epoch: int) -> Any:
         location = self.get_model_checkpoint_path(epoch)
