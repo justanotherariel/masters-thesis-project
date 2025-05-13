@@ -44,8 +44,8 @@ train_sys:
         _target_: src.modules.training.models.base.MinigridModel
         model_cls:
           _partial_: true
-          # _target_: src.modules.training.models.transformer.classic.CombAction
-          _target_: src.modules.training.models.transformer.classic_zero_self.CombAction
+          _target_: src.modules.training.models.transformer.classic.CombAction
+          # _target_: src.modules.training.models.transformer.classic_zero_self.CombAction
         d_model: 128
         n_heads: 4
         n_layers: 3
