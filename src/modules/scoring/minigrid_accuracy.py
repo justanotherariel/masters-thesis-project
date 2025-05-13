@@ -33,26 +33,14 @@ class MinigridAccuracy(TransformationBlock):
 
             data.accuracies[dg] = average_dict(accuracies)
 
-            logger.info(f"Accuracies for {dg_name} (%)")
+            logger.info(f"Metrics for {dg_name}")
             longest_key = max([len(key) for key in data.accuracies[dg]]) + 1
             for key, value in data.accuracies[dg].items():
-                value_percent = str(value * 100)[:5]
-                logger.info(f"{key:<{longest_key}}: {value_percent}")
+                logger.info(f"{key:<{longest_key}}: {value:.2f}")
             logger.info("")
 
             # Log to external logger
             log_dict(data.accuracies[dg], dg_name)
-
-        # Optimization Metric - takes transition accuracy and training time into account
-        if data.model_training_time_s > 0:
-            optimization_metric = data.accuracies[DatasetGroup.TRAIN]["Transition Accuracy"]
-
-            if optimization_metric > 0.95:
-                optimization_metric += 60 / data.model_training_time_s
-
-            logger.info(f"Optimization Metric: {optimization_metric:.4f}")
-            logger.log_to_external({"Optimization Metric": optimization_metric}, commit=False)
-            logger.info("")
 
         # Log Epoch and commit
         logger.log_to_external({"Epoch": data.model_last_epoch_recorded + 1})
