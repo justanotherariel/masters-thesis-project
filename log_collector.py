@@ -189,8 +189,6 @@ def main():
             if not is_log_file_clean(log_file):
                 print(f"Cleaning {log_file}...")
                 clean_log_file(log_file)
-            else:
-                print(f"{log_file} is already cleaned.")
         print("Cleaning complete.")
     
     # Group log files by run date and time
