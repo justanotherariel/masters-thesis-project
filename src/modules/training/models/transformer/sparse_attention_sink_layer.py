@@ -24,7 +24,7 @@ class ScaledDotProductAttention(nn.Module):
     def __init__(self, attention_dropout=0.1):
         super().__init__()
         self.dropout = nn.Dropout(p=attention_dropout)
-        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(dim=-1)
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
@@ -56,7 +56,7 @@ class ScaledDotProductAttention(nn.Module):
             attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
 
         # 3. Convert scores to probabilities
-        attention_probs = self.sigmoid(attention_scores)
+        attention_probs = self.softmax(attention_scores)
 
         # 4. Apply attention dropout
         attention_probs_drop = self.dropout(attention_probs)
@@ -67,7 +67,7 @@ class ScaledDotProductAttention(nn.Module):
         return weighted_values, attention_probs
 
 
-class MultiHeadedAttention(nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
@@ -86,6 +86,9 @@ class MultiHeadedAttention(nn.Module):
         self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
 
+        # Single learnable parameter for attention-sink token
+        self.attention_sink_token = nn.Parameter(torch.randn(1, 1, d_model))
+
     def forward(
         self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -95,15 +98,23 @@ class MultiHeadedAttention(nn.Module):
         Args:
             x: Tensor of shape [batch_size, seq_length, d_model]
             prev_eta: Optional previous eta values
-            attention_mask: Optional attention mask
+            attention_mask: Optional attention mask (currently not used)
 
         Returns:
             tuple: (output_tensor, new_eta)
         """
+        batch_size, seq_length, d_model = x.size()
+
+        # Add dummy token to input (for attention-catching)
+        x = torch.cat([x, self.attention_sink_token.expand(batch_size, -1, -1)], dim=1)
+
         # 1. Project input into query, key, and value
         query = self.query_projection(x)
         key = self.key_projection(x)
         value = self.value_projection(x)
+
+        # Zero out the dummy token's value to ensure it doesn't affect output
+        value[:, -1, :] = 0
 
         # 2. Split projections into multiple heads
         query_heads = self.split_heads(query)
@@ -111,12 +122,11 @@ class MultiHeadedAttention(nn.Module):
         value_heads = self.split_heads(value)
 
         # 3. Apply scaled dot-product attention
-        attention_output, attention_weights = self.attention(
-            query_heads, key_heads, value_heads, attention_mask=attention_mask
-        )
+        attention_output, attention_weights = self.attention(query_heads, key_heads, value_heads, attention_mask=None)
 
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
+        merged_attention = merged_attention[:, :-1, :]
         output = self.output_projection(merged_attention)
 
         # 5. Calculate new η values if requested
@@ -128,7 +138,7 @@ class MultiHeadedAttention(nn.Module):
             weighted_attention = attention_weights * value_magnitude
 
             # Sum across heads to get the total influence
-            eta_layer = weighted_attention.sum(dim=1)
+            eta_layer = weighted_attention[..., :-1, :-1].sum(dim=1)
 
             # Take previous η values into account
             eta_layer = torch.bmm(eta_layer, prev_eta)
@@ -172,7 +182,7 @@ class PositionwiseFeedForward(nn.Module):
 class TransformerLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -207,7 +217,7 @@ class TransformerLayer(nn.Module):
         return x, eta
 
 
-class TransformerSigmoid(nn.Module):
+class SepAction(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
@@ -218,14 +228,11 @@ class TransformerSigmoid(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
-        calculate_eta: bool = False,  # Whether to calculate η values
     ):
         super().__init__()
 
         if in_obs_shape[:2] != out_obs_shape[:2]:
             raise ValueError("Input and output observation shapes must have the same height and width.")
-
-        self.calculate_eta = calculate_eta
 
         self.in_obs_shape = in_obs_shape
         self.out_obs_shape = out_obs_shape
@@ -269,19 +276,120 @@ class TransformerSigmoid(nn.Module):
         x = torch.cat([x_obs, x_action, self.reward_token.expand(n_samples, -1, -1)], dim=1)
         x = x + self.pos_embedding
 
-        # Calculate η values if requested
-        eta = None
-        if self.calculate_eta:
-            eta = torch.eye(self.input_token_len, device=x.device).expand(
-                n_samples, self.input_token_len, self.input_token_len
-            )
+        # Calculate η values
+        attention_sum = torch.zeros(n_samples, self.input_token_len, self.input_token_len, device=x.device)
+        eta = torch.eye(self.input_token_len, device=x.device).repeat(
+            n_samples, 1, 1
+        )
 
         # Apply transformer layers
         for layer in self.layers:
-            x, eta = layer(x, prev_eta=eta)
-
+            x, attention_sum_layer, attention_mask_layer = layer(x)
+            
+            # Calculate attention sum for L1 regularization
+            attention_sum += attention_sum_layer
+            
+            # Calculate η values and convert to binary
+            eta += attention_mask_layer @ eta
+            eta = eta.masked_fill_(eta != 0, 1.0)
+            
         # Project obs and reward to output size (discard action token)
         pred_obs = self.obs_out_proj(x[:, :-2]).view(-1, *self.out_obs_shape)
         pred_reward = self.reward_out_proj(x[:, -1])
 
-        return (pred_obs, pred_reward) if eta is None else (pred_obs, pred_reward, eta)
+        return {
+            "pred_obs": pred_obs,
+            "pred_reward": pred_reward,
+            "eta": eta,
+            "attention_sum": attention_sum,
+        }
+
+class CombAction(nn.Module):
+    def __init__(
+        self,
+        in_obs_shape: tuple[int, int, int],
+        out_obs_shape: tuple[int, int, int],
+        action_dim: int,
+        d_model: int,  # Internal representation dimension
+        n_heads: int,  # Number of attention heads
+        n_layers: int,  # Number of transformer layers
+        d_ff: int,  # Feed-forward network hidden dimension
+        drop_prob: float = 0.1,  # Dropout probability
+    ):
+        super().__init__()
+
+        if in_obs_shape[:2] != out_obs_shape[:2]:
+            raise ValueError("Input and output observation shapes must have the same height and width.")
+
+        self.in_obs_shape = in_obs_shape
+        self.out_obs_shape = out_obs_shape
+        self.obs_token_len = in_obs_shape[0] * in_obs_shape[1]
+        self.input_token_len = self.obs_token_len + 1  # obs + reward
+        self.input_token_dim = in_obs_shape[-1] + action_dim
+
+        # Input Projection
+        self.in_proj = nn.Linear(self.input_token_dim, d_model)
+        self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
+
+        # Positional Encoding
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
+
+        # Transformer layers
+        self.layers = nn.ModuleList(
+            [
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
+                for _ in range(n_layers)
+            ]
+        )
+
+        # Output projection
+        self.obs_out_proj = nn.Linear(d_model, out_obs_shape[-1])
+        self.reward_out_proj = nn.Linear(d_model, 1)
+
+    def forward(self, x: tuple[torch.Tensor, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        # Unpack input
+        x_obs = x[0].float()
+        x_action = x[1].float()
+
+        # Vars
+        n_samples = x_obs.shape[0]
+
+        # Create input sequence
+        x = torch.zeros(n_samples, self.obs_token_len, self.input_token_dim, device=x_obs.device)
+        x[..., : x_obs.shape[-1]] = x_obs.view(n_samples, self.obs_token_len, x_obs.shape[-1])
+        x[..., x_obs.shape[-1] :] = x_action.unsqueeze(1).expand(n_samples, self.obs_token_len, x_action.shape[-1])
+
+        # Embed input sequence
+        x = self.in_proj(x)
+
+        # Append reward token and add positional encoding
+        x = torch.cat([x, self.reward_token.expand(n_samples, -1, -1)], dim=1)
+        x = x + self.pos_embedding
+
+        # Calculate η values
+        attention_sum = torch.zeros(n_samples, self.input_token_len, self.input_token_len, device=x.device)
+        eta = torch.eye(self.input_token_len, device=x.device).repeat(
+            n_samples, 1, 1
+        )
+
+        # Apply transformer layers
+        for layer in self.layers:
+            x, attention_sum_layer, attention_mask_layer = layer(x)
+            
+            # Calculate attention sum for L1 regularization
+            attention_sum += attention_sum_layer
+            
+            # Calculate η values and convert to binary
+            eta += attention_mask_layer @ eta
+            eta = eta.masked_fill_(eta != 0, 1.0)
+
+        # Project obs and reward to output size
+        pred_obs = self.obs_out_proj(x[:, :-1]).view(-1, *self.out_obs_shape)
+        pred_reward = self.reward_out_proj(x[:, -1])
+
+        return {
+            "pred_obs": pred_obs,
+            "pred_reward": pred_reward,
+            "eta": eta,
+            "attention_sum": attention_sum,
+        }

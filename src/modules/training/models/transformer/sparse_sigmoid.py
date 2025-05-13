@@ -24,7 +24,7 @@ class ScaledDotProductAttention(nn.Module):
     def __init__(self, attention_dropout=0.1):
         super().__init__()
         self.dropout = nn.Dropout(p=attention_dropout)
-        self.softmax = nn.Softmax(dim=-1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attention_mask: torch.Tensor | None = None
@@ -56,7 +56,7 @@ class ScaledDotProductAttention(nn.Module):
             attention_scores = attention_scores.masked_fill(attention_mask, float("-inf"))
 
         # 3. Convert scores to probabilities
-        attention_probs = self.softmax(attention_scores)
+        attention_probs = self.sigmoid(attention_scores)
 
         # 4. Apply attention dropout
         attention_probs_drop = self.dropout(attention_probs)
@@ -67,7 +67,7 @@ class ScaledDotProductAttention(nn.Module):
         return weighted_values, attention_probs
 
 
-class MultiHeadedAttention(nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
@@ -86,9 +86,6 @@ class MultiHeadedAttention(nn.Module):
         self.value_projection = nn.Linear(d_model, d_model, bias=use_bias)
         self.output_projection = nn.Linear(d_model, d_model, bias=use_bias)
 
-        # Single learnable parameter for attention-sink token
-        self.attention_sink_token = nn.Parameter(torch.randn(1, 1, d_model))
-
     def forward(
         self, x: torch.Tensor, prev_eta: torch.Tensor | None = None, attention_mask: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -98,23 +95,15 @@ class MultiHeadedAttention(nn.Module):
         Args:
             x: Tensor of shape [batch_size, seq_length, d_model]
             prev_eta: Optional previous eta values
-            attention_mask: Optional attention mask (currently not used)
+            attention_mask: Optional attention mask
 
         Returns:
             tuple: (output_tensor, new_eta)
         """
-        batch_size, seq_length, d_model = x.size()
-
-        # Add dummy token to input (for attention-catching)
-        x = torch.cat([x, self.attention_sink_token.expand(batch_size, -1, -1)], dim=1)
-
         # 1. Project input into query, key, and value
         query = self.query_projection(x)
         key = self.key_projection(x)
         value = self.value_projection(x)
-
-        # Zero out the dummy token's value to ensure it doesn't affect output
-        value[:, -1, :] = 0
 
         # 2. Split projections into multiple heads
         query_heads = self.split_heads(query)
@@ -122,11 +111,12 @@ class MultiHeadedAttention(nn.Module):
         value_heads = self.split_heads(value)
 
         # 3. Apply scaled dot-product attention
-        attention_output, attention_weights = self.attention(query_heads, key_heads, value_heads, attention_mask=None)
+        attention_output, attention_weights = self.attention(
+            query_heads, key_heads, value_heads, attention_mask=attention_mask
+        )
 
         # 4. Merge attention heads and project to output dimension
         merged_attention = self.merge_heads(attention_output)
-        merged_attention = merged_attention[:, :-1, :]
         output = self.output_projection(merged_attention)
 
         # 5. Calculate new η values if requested
@@ -138,7 +128,7 @@ class MultiHeadedAttention(nn.Module):
             weighted_attention = attention_weights * value_magnitude
 
             # Sum across heads to get the total influence
-            eta_layer = weighted_attention[..., :-1, :-1].sum(dim=1)
+            eta_layer = weighted_attention.sum(dim=1)
 
             # Take previous η values into account
             eta_layer = torch.bmm(eta_layer, prev_eta)
@@ -182,7 +172,7 @@ class PositionwiseFeedForward(nn.Module):
 class TransformerLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -217,7 +207,7 @@ class TransformerLayer(nn.Module):
         return x, eta
 
 
-class TransformerAttentionSinkLayer(nn.Module):
+class TransformerSigmoid(nn.Module):
     def __init__(
         self,
         in_obs_shape: tuple[int, int, int],
