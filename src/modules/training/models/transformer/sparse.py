@@ -21,10 +21,10 @@ class ScaledDotProductAttention(nn.Module):
     Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
-    def __init__(self, attention_dropout=0.1):
+    def __init__(self, threshold: float):
         super().__init__()
-        self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
+        self.threshold = threshold
         
     def forward(
         self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
@@ -55,20 +55,17 @@ class ScaledDotProductAttention(nn.Module):
         attention_probs = self.softmax(attention_scores)
         
         # 3. Mask out low attention scores
-        low_attention_mask = (attention_probs < 0.1)
+        low_attention_mask = (attention_probs < self.threshold)
         attention_probs_model = attention_probs.masked_fill(low_attention_mask, 0.0)
 
-        # 4. Apply attention dropout
-        attention_probs_model = self.dropout(attention_probs_model)
-
-        # 5. Compute weighted values
+        # 4. Compute weighted values
         weighted_values = attention_probs_model @ value
         
         return weighted_values, attention_probs, (~low_attention_mask).float()
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
+    def __init__(self, d_model: int, n_heads: int, threshold: float, use_bias: bool = True):
         super().__init__()
 
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
@@ -76,9 +73,8 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.d_model = d_model
         self.d_k = d_model // n_heads
-        self.idx = idx
 
-        self.attention = ScaledDotProductAttention(attention_dropout=drop_p)
+        self.attention = ScaledDotProductAttention(threshold=threshold)
 
         # Linear projections
         self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
@@ -155,9 +151,9 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class TransformerLayer(nn.Module):
-    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
+    def __init__(self, d_model: int, ffn_hidden: int, n_heads: int, drop_prob: float, threshold: float):
         super().__init__()
-        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, threshold=threshold)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -201,6 +197,7 @@ class SepAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
+        threshold: float = 0.1,  # Threshold for attention mask
     ):
         super().__init__()
 
@@ -223,8 +220,8 @@ class SepAction(nn.Module):
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob, idx=idx)
-                for idx in range(n_layers)
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob, threshold=threshold)
+                for _ in range(n_layers)
             ]
         )
 
@@ -261,7 +258,7 @@ class SepAction(nn.Module):
             
             # Calculate attention sum for L1 regularization
             attention_sum += attention_sum_layer
-            
+
             # Calculate η values and convert to binary
             eta += attention_mask_layer @ eta
             eta = eta.masked_fill_(eta != 0, 1.0)
@@ -288,6 +285,7 @@ class CombAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
+        threshold: float = 0.1,  # Threshold for attention mask
     ):
         super().__init__()
 
@@ -310,7 +308,7 @@ class CombAction(nn.Module):
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob, threshold=threshold)
                 for _ in range(n_layers)
             ]
         )

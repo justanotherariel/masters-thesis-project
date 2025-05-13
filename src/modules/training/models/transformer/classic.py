@@ -21,9 +21,8 @@ class ScaledDotProductAttention(nn.Module):
     Formula: Attention(Q, K, V) = softmax(QK^T/sqrt(d_k))V
     """
 
-    def __init__(self, attention_dropout=0.1):
+    def __init__(self):
         super().__init__()
-        self.dropout = nn.Dropout(p=attention_dropout)
         self.softmax = nn.Softmax(dim=-1)
         
     def forward(
@@ -53,18 +52,14 @@ class ScaledDotProductAttention(nn.Module):
 
         # 2. Convert scores to probabilities
         attention_probs = self.softmax(attention_scores)
-
-        # 4. Apply attention dropout
-        attention_probs_model = self.dropout(attention_probs)
-
-        # 5. Compute weighted values
-        weighted_values = attention_probs_model @ value
+        # 4. Compute weighted values
+        weighted_values = attention_probs @ value
 
         return weighted_values, attention_probs
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
+    def __init__(self, d_model: int, n_heads: int, use_bias: bool = True):
         super().__init__()
 
         assert d_model % n_heads == 0, f"d_model ({d_model}) must be divisible by n_heads ({n_heads})"
@@ -72,9 +67,8 @@ class MultiHeadAttention(nn.Module):
         self.n_heads = n_heads
         self.d_model = d_model
         self.d_k = d_model // n_heads
-        self.idx = idx
 
-        self.attention = ScaledDotProductAttention(attention_dropout=drop_p)
+        self.attention = ScaledDotProductAttention()
 
         # Linear projections
         self.query_projection = nn.Linear(d_model, d_model, bias=use_bias)
@@ -150,9 +144,9 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class TransformerLayer(nn.Module):
-    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
+    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob):
         super().__init__()
-        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 
@@ -218,8 +212,8 @@ class SepAction(nn.Module):
         # Transformer layers
         self.layers = nn.ModuleList(
             [
-                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob, idx=idx)
-                for idx in range(n_layers)
+                TransformerLayer(d_model=d_model, ffn_hidden=d_ff, n_heads=n_heads, drop_prob=drop_prob)
+                for _ in range(n_layers)
             ]
         )
 
@@ -253,7 +247,7 @@ class SepAction(nn.Module):
             
             # Calculate attention sum for L1 regularization
             attention_sum += attention_sum_layer
-                        
+
         # Project obs and reward to output size (discard action token)
         pred_obs = self.obs_out_proj(x[:, :-2]).view(-1, *self.out_obs_shape)
         pred_reward = self.reward_out_proj(x[:, -1])
