@@ -63,7 +63,7 @@ class ScaledDotProductAttention(nn.Module):
         return weighted_values, attention_probs
 
 
-class MultiHeadedAttention(nn.Module):
+class MultiHeadAttention(nn.Module):
     def __init__(self, d_model: int, n_heads: int, drop_p: float = 0.1, use_bias: bool = True, idx: int = 0):
         super().__init__()
 
@@ -152,7 +152,7 @@ class PositionwiseFeedForward(nn.Module):
 class TransformerLayer(nn.Module):
     def __init__(self, d_model, ffn_hidden, n_heads, drop_prob, idx: int = 0):
         super().__init__()
-        self.attention = MultiHeadedAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
+        self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads, drop_p=0.0, idx=idx)
         self.norm1 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(p=drop_prob)
 

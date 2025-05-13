@@ -1,5 +1,12 @@
+import os
 from pathlib import Path
+import pickle
+import shutil
+import tempfile
 from typing import Any
+import sys
+from types import ModuleType
+import zipfile
 
 import torch
 from torch import nn
@@ -113,6 +120,9 @@ class ModelStorage:
 
         # Load model
         logger.info(f"Loading model from {model_path}")
+        
+        # Handle changed class names
+        replace_attention_class(model_path)
         return torch.load(model_path, weights_only=False)
 
     def get_model_checkpoint(self, epoch: int) -> Any:
@@ -158,3 +168,55 @@ class ModelStorageDB:
                     lines_to_keep.append(line)
         with open(self.db_path, "w") as db:
             db.writelines(lines_to_keep)
+
+def replace_attention_class(pt_file_path):
+    """
+    Replaces 'any_top_level_module.MultiHeadedAttention' with 'any_top_level_module.MultiHeadAttention'
+    in a PyTorch pickle file (.pt).
+    
+    Args:
+        pt_file_path (str): Path to the PyTorch pickle file
+    
+    Returns:
+        None
+    """
+    # Create a temporary directory
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        # Extract the .pt file (which is a zip archive)
+        with zipfile.ZipFile(pt_file_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Check if data.pkl exists in the extracted files
+        archive_name = os.path.basename(pt_file_path).split('.')[0]
+        data_pkl_path = os.path.join(temp_dir, archive_name, 'data.pkl')
+        if not os.path.exists(data_pkl_path):
+            return  # data.pkl doesn't exist, so return
+        
+        # Read the binary data
+        with open(data_pkl_path, 'rb') as f:
+            data = f.read()
+        
+        # Check if 'MultiHeadedAttention' exists in the data
+        if b'MultiHeadedAttention' not in data:
+            return  # The class doesn't exist, so return
+        
+        # Replace 'MultiHeadedAttention' with 'MultiHeadAttention'
+        modified_data = data.replace(b'MultiHeadedAttention', b'MultiHeadAttention')
+        
+        # Save the modified data
+        with open(data_pkl_path, 'wb') as f:
+            f.write(modified_data)
+        
+        # Create a new zip archive with the modified content
+        with zipfile.ZipFile(pt_file_path, 'w') as new_zip:
+            for root, _, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    new_zip.write(file_path, arcname)
+        
+    finally:
+        # Clean up the temporary directory
+        shutil.rmtree(temp_dir)
