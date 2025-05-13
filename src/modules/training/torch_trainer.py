@@ -179,12 +179,16 @@ class TorchTrainer(TransformationBlock):
 
         # Evaluate the model
         if DatasetGroup.TRAIN in self.to_predict:
-            logger.info("Running inference on the training set")
+            n_train_samples = sum([n_samples.shape[0] for n_samples in data.indices[DatasetGroup.TRAIN]])
+            logger.info(f"Running inference on the training set. Samples: {n_train_samples}")
+            logger.log_to_external({"Train Samples": n_train_samples})
             loader = self.create_dataloader(data, DatasetGroup.TRAIN, shuffle=False)
             data.predictions.update({DatasetGroup.TRAIN: self.predict_on_loader(loader)})
 
         if DatasetGroup.VALIDATION in self.to_predict:
-            logger.info("Running inference on the validation set")
+            n_val_samples = sum([n_samples.shape[0] for n_samples in data.indices[DatasetGroup.VALIDATION]])
+            logger.info(f"Running inference on the validation set. Samples: {n_val_samples}")
+            logger.log_to_external({"Validation Samples": n_val_samples})
             loader = self.create_dataloader(data, DatasetGroup.VALIDATION, shuffle=False)
             data.predictions.update({DatasetGroup.VALIDATION: self.predict_on_loader(loader)})
 
