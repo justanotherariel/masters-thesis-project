@@ -1,8 +1,12 @@
 """U-Net model adapted to RL transition models.
 
 Heavily inspired by:
-  Author: milesial
-  Github: https://github.com/milesial/Pytorch-UNet/
+  Author  : milesial
+  Github  : https://github.com/milesial/Pytorch-UNet/
+  License : GNU GPLv3
+
+Functions `DoubleConv` and `OutConv` are copied from the above repository, while `Down`, `Up` are slightly modified.
+The `UNet` class is entirely new.
 """
 
 import torch

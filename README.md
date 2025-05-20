@@ -10,3 +10,10 @@ Our research contributes to the ongoing effort to develop more efficient and rob
 
 ## Project Structure
 `train.py` is the starting point. Executing this script will instantiate the pipeline define in `conf/train.yaml` which in turn looks into `conf/model/some-model.yaml`. The pipeline consists of modules defined in `src/modules/...`, with architecture implementations in `src/modules/training/models/`.
+
+# License
+This project is licensed under GNU GPLv3, including all original code written for this thesis. The project incorporates code from two external repositories, adapted for this use-case:
+- U-Net implementation under `src/modules/training/models/unet.py`, by [milesial](https://github.com/milesial/Pytorch-UNet/) licensed under GNU GPLv3
+- Transformer implementation under `src/modules/training/models/transformer/*.py`, by [Hyunwoong](https://github.com/hyunwoongko/transformer) licensed under Apache License 2.0
+
+Due to the inclusion of GPLv3-licensed code, the entire project must be distributed under GPLv3 terms. A copy of the GNU GPLv3 license is included in the file `LICENSE` in this repository. The original Apache 2.0 licensed code has been incorporated in compliance with its license terms. This does not change the overall GPLv3 licensing of this project.

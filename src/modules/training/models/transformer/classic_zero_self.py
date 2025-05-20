@@ -1,8 +1,11 @@
 """Transformer model adapted to RL transition models.
 
 Heavily inspired by
-    Author : Hyunwoong
-    Github : https://github.com/hyunwoongko/transformer
+    Author  : Hyunwoong
+    Github  : https://github.com/hyunwoongko/transformer
+    License : Apache License 2.0
+    
+All functions and classes have been modified to fit the RL transition model. SepAction and CombAction are entirely new classes.
 """
 
 import math
