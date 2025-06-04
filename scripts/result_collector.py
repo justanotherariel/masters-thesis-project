@@ -128,7 +128,7 @@ def generate_comparison_tables(metric_data):
     
     for metric, configs in sorted(metric_data.items()):
         # Skip metrics that don't have data or don't start with "Validation/"
-        if not configs or not metric.startswith("Validation/"):
+        if not configs or not metric.startswith("Validation/") or "Eta " in metric:
             continue
         
         table = f"## {metric}\n\n"
@@ -168,10 +168,10 @@ def generate_comparison_tables(metric_data):
 def main():
     # Define the result files (hardcoded as requested)
     result_files = {
-        # "Classic Comb": "results_comb_classic.md",
+        "Classic Comb": "results_comb_classic_.md",
         # "Classic Sep": "results_sep_classic.md",
-        "Sparse Comb": "results_comb_sparse.md",
-        "Sparse Sep": "results_sep_sparse.md",
+        "Sparse Comb": "results_comb_sparse_.md",
+        # "Sparse Sep": "results_sep_sparse.md",
     }
     config = {
         'envs': 'model.env_sys.steps.1.train_envs',
@@ -180,7 +180,7 @@ def main():
         # 'threshold': 'model.train_sys.steps.0.model.threshold',
     }
 
-    output_file_name = "comparison_sparse_sep_comb_test.md"
+    output_file_name = "comparison_classic_sparse_comb_val.md"
     
     # Check if files exist
     existing_files = {}

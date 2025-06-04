@@ -7,10 +7,7 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-# Configure which metrics to include in the output - empty list means include all metrics
-# Add specific metrics here if you want to filter, for example:
-# WHITELIST_METRICS = ["Train/Transition Accuracy", "Validation/Transition Accuracy"]
-WHITELIST_METRICS = []
+LOG_DIR = Path("data/logs")
 
 def parse_log_file(log_file_path):
     """Parse a single log file and extract relevant information."""
@@ -19,7 +16,7 @@ def parse_log_file(log_file_path):
     
     # Extract the lines we need
     first_100_lines = content[:100]
-    last_200_lines = content[-200:] if len(content) > 200 else content
+    last_1000_lines = content[-1000:] if len(content) > 1000 else content
     
     # Parse parameters
     params = {}
@@ -48,7 +45,7 @@ def parse_log_file(log_file_path):
     results = {}
     in_results_section = False
     
-    for line in last_200_lines:
+    for line in last_1000_lines:
         line = line.strip()
         
         if "INFO --- Results ---" in line:
@@ -97,13 +94,9 @@ def generate_markdown(parsed_data_list):
         
         # Add results
         md_content += "\n## Results\n"
-        # Filter metrics if whitelist is not empty
-        filtered_results = parsed_data['results']
-        if WHITELIST_METRICS:
-            filtered_results = {k: v for k, v in filtered_results.items() if k in WHITELIST_METRICS}
         
         # Sort metrics for consistent output
-        for metric, (value, std) in sorted(filtered_results.items()):
+        for metric, (value, std) in sorted(parsed_data['results'].items()):
             md_content += f"- {metric}: {value} (± {std})\n"
         
         # Add a blank line between runs, unless it's the last run
@@ -144,8 +137,6 @@ def clean_log_file(log_file_path):
     # Write cleaned content back to file
     with open(log_file_path, 'w') as f:
         f.writelines(cleaned_content)
-    
-    print(f"Cleaned {log_file_path}")
 
 def is_log_file_clean(log_file_path):
     """
@@ -180,11 +171,13 @@ def main():
     args = parser.parse_args()
     
     # Find all log files
-    log_files = glob.glob("data/logs/run_*.log")
+    log_files = glob.glob(f"{str(LOG_DIR)}/run_*.log")
     
     # Clean log files if requested
     if args.clean:
         print("Cleaning log files...")
+        
+        log_files.sort(key=lambda x: os.path.basename(x))
         for log_file in log_files:
             if not is_log_file_clean(log_file):
                 print(f"Cleaning {log_file}...")
@@ -204,7 +197,7 @@ def main():
     
     # Process each run
     for (run_date, run_time), log_files_info in runs.items():
-        results_file = Path(f"data/logs/run_{run_date}_{run_time}_results.md")
+        results_file = Path(LOG_DIR / f"run_{run_date}_{run_time}_results.md")
         
         if results_file.exists():
             print(f"Skipping {results_file} as it already exists.")
