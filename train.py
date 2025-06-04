@@ -52,7 +52,7 @@ def main(cfg: DictConfig) -> None:
     coloredlogs.install()
     
     # Check if the config is valid
-    if cfg.trial_idx >= cfg.n_trials:
+    if cfg.trial_idx is not None and cfg.trial_idx >= cfg.n_trials:
         raise ValueError("Trial index smaller than number of trials")
     
     output_dir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
@@ -67,7 +67,7 @@ def main(cfg: DictConfig) -> None:
     logger.info("End of parameters")
     
     # Check if Random Seeds Initialization is enabled
-    if cfg.trial_idx == -1 and cfg.n_trials > 1:
+    if cfg.trial_idx == None and cfg.n_trials > 1:
         run_trials(cfg, output_dir)
     else:
         run_train(cfg, output_dir)
@@ -152,7 +152,7 @@ def run_train(cfg: DictConfig, output_dir: Path) -> None:
     logger.log_section_separator("Thesis: Sparse Transformer")
         
     # Set seed
-    cfg.seed += cfg.trial_idx
+    cfg.seed += cfg.trial_idx if cfg.trial_idx is not None else 0
     set_torch_seed(cfg.seed)
     
     if cfg.debug:
@@ -181,7 +181,7 @@ def run_train(cfg: DictConfig, output_dir: Path) -> None:
         "storage_path": f"{cache_data_path}",
     }
 
-    transform_args = setup_transform_args(model_pipeline, cache_args, fold=cfg.trial_idx)
+    transform_args = setup_transform_args(model_pipeline, cache_args)
     data: PipelineData = model_pipeline.transform(**transform_args)
 
     wandb.finish()

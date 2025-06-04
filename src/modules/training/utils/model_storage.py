@@ -7,6 +7,9 @@ from typing import Any
 import sys
 from types import ModuleType
 import zipfile
+import time
+import fcntl
+import contextlib
 
 import torch
 from torch import nn
@@ -15,6 +18,56 @@ import wandb
 from src.framework.logging import Logger
 
 logger = Logger()
+
+
+@contextlib.contextmanager
+def file_lock(file_path, mode='w', timeout=10, check_interval=0.1):
+    """Context manager for file locking.
+    
+    Args:
+        file_path (str or Path): Path to the file to lock
+        mode (str): File open mode ('r', 'w', etc.)
+        timeout (float): Maximum time to wait for lock acquisition in seconds
+        check_interval (float): Time between lock acquisition attempts in seconds
+        
+    Yields:
+        file: The opened file object with an exclusive lock
+        
+    Raises:
+        TimeoutError: If the lock cannot be acquired within the timeout period
+    """
+    file_path = Path(file_path)
+    lock_path = file_path.with_suffix(file_path.suffix + '.lock')
+    
+    # Ensure the directory exists
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    start_time = time.time()
+    
+    # Try to acquire the lock file
+    while True:
+        try:
+            lock_file = open(lock_path, 'w+')
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except IOError:
+            # Another process has the lock
+            if time.time() - start_time > timeout:
+                raise TimeoutError(f"Could not acquire lock for {file_path} within {timeout} seconds")
+            time.sleep(check_interval)
+    
+    try:
+        # Open the actual file after acquiring the lock
+        with open(file_path, mode) as f:
+            yield f
+    finally:
+        # Release the lock
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
+        try:
+            os.unlink(lock_path)  # Remove the lock file
+        except OSError:
+            pass  # Lock file may have been removed by another process
 
 
 class ModelStorage:
@@ -148,29 +201,64 @@ class ModelStorageDB:
 
     def add(self, model_hash: str, run_name: str):
         self.gc()
-        with open(self.db_path, "a") as db:
-            db.write(f"{model_hash},{run_name}\n")
+        try:
+            with file_lock(self.db_path, mode='a') as db:
+                db.write(f"{model_hash},{run_name}\n")
+        except TimeoutError:
+            logger.warning(f"Could not acquire lock for {self.db_path} when adding entry")
 
     def get_name(self, model_hash: str | None = None) -> str:
         if model_hash is None:
             model_hash = self.current_hash
-        with open(self.db_path) as db:
-            for line in db:
-                model, name = line.strip().split(",")
-                if model == model_hash:
-                    return name
+        try:
+            with file_lock(self.db_path, mode='r') as db:
+                for line in db:
+                    model, name = line.strip().split(",")
+                    if model == model_hash:
+                        return name
+        except TimeoutError:
+            logger.warning(f"Could not acquire lock for {self.db_path} when getting name, trying without lock")
+            # Fallback - try without locking
+            try:
+                with open(self.db_path, 'r') as db:
+                    for line in db:
+                        model, name = line.strip().split(",")
+                        if model == model_hash:
+                            return name
+            except Exception as e:
+                logger.error(f"Error reading DB file: {e}")
         return None
 
     def gc(self):
-        models = [model.stem for model in self.model_dir.glob("*.pt")]
-        lines_to_keep = []
-        with open(self.db_path) as db:
-            for line in db:
-                model_hash, _ = line.strip().split(",")
-                if model_hash in models:
-                    lines_to_keep.append(line)
-        with open(self.db_path, "w") as db:
-            db.writelines(lines_to_keep)
+        try:
+            # Keep a single lock throughout the entire garbage collection process
+            with file_lock(self.db_path, mode='r+') as db:
+                # Read all lines from the database file
+                db.seek(0)
+                lines = db.readlines()
+                
+                # Get the list of model files that actually exist
+                models = [model.stem for model in self.model_dir.glob("*.pt")]
+                
+                # Filter lines to keep
+                lines_to_keep = []
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    model_hash, _ = line.strip().split(",")
+                    if model_hash in models:
+                        lines_to_keep.append(line)
+                
+                # Truncate the file and write back the filtered lines
+                db.seek(0)
+                db.truncate()
+                db.writelines(lines_to_keep)
+                
+        except TimeoutError:
+            logger.warning(f"Could not acquire lock for DB garbage collection, skipping")
+        except Exception as e:
+            logger.error(f"Error during DB garbage collection: {e}")
+
 
 def replace_attention_class(pt_file_path):
     """

@@ -20,7 +20,6 @@ train_sys:
     validate_every_x_epochs: 10
     to_predict: ALL
     discrete: true
-    n_folds: ${n_trials}
     model:
       _target_: src.modules.training.models.unet_wrapped_agent_only.UNetWrappedAgentOnly
       hidden_channels: ${sweep_data.model_sizes.8}

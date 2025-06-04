@@ -20,7 +20,6 @@ train_sys:
     validate_every_x_epochs: 10
     to_predict: ALL
     discrete: true
-    n_folds: ${n_trials}
     model:
       _target_: src.modules.training.models.transformer_wrapped.TransformerWrapped
       seperate_output_layers: false

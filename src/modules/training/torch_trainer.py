@@ -65,10 +65,7 @@ class TorchTrainer(TransformationBlock):
     discrete: bool = field(default=True)  # Discretize the data before training
 
     # Predction parameters
-    to_predict: DatasetGroup = field(default="VALIDATION", repr=False, compare=False)
-
-    # Parameters relevant for Hashing
-    n_folds: Annotated[int, Ge(1)] = field(default=1, init=True, repr=False, compare=False)
+    to_predict: DatasetGroup = field(default="ALL", repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Post init method for the TorchTrainer class."""
@@ -185,12 +182,19 @@ class TorchTrainer(TransformationBlock):
             loader = self.create_dataloader(data, DatasetGroup.TRAIN, shuffle=False)
             data.predictions.update({DatasetGroup.TRAIN: self.predict_on_loader(loader)})
 
-        if DatasetGroup.VALIDATION in self.to_predict:
+        if DatasetGroup.VALIDATION in self.to_predict and DatasetGroup.VALIDATION in data.indices:
             n_val_samples = sum([n_samples.shape[0] for n_samples in data.indices[DatasetGroup.VALIDATION]])
             logger.info(f"Running inference on the validation set. Samples: {n_val_samples}")
             logger.log_to_external({"Validation Samples": n_val_samples})
             loader = self.create_dataloader(data, DatasetGroup.VALIDATION, shuffle=False)
             data.predictions.update({DatasetGroup.VALIDATION: self.predict_on_loader(loader)})
+
+        if DatasetGroup.TEST in self.to_predict and DatasetGroup.TEST in data.indices:
+            n_test_samples = sum([n_samples.shape[0] for n_samples in data.indices[DatasetGroup.TEST]])
+            logger.info(f"Running inference on the test set. Samples: {n_test_samples}")
+            logger.log_to_external({"Test Samples": n_test_samples})
+            loader = self.create_dataloader(data, DatasetGroup.TEST, shuffle=False)
+            data.predictions.update({DatasetGroup.TEST: self.predict_on_loader(loader)})
 
         return data
 
@@ -231,7 +235,7 @@ class TorchTrainer(TransformationBlock):
 
         :return: The hash of the block.
         """
-        result = f"{self._hash}_{self.n_folds}"
+        result = f"{self._hash}"
         if hasattr(self, "current_fold") and self.current_fold != -1:
             result += f"_f{self.current_fold}"
         return result
@@ -274,7 +278,7 @@ class TorchTrainer(TransformationBlock):
 
         # Create dataloaders
         train_loader = self.create_dataloader(data, DatasetGroup.TRAIN)
-        validation_loader = self.create_dataloader(data, DatasetGroup.VALIDATION)
+        validation_loader = self.create_dataloader(data, DatasetGroup.TEST if DatasetGroup.TEST in data.indices else DatasetGroup.VALIDATION, shuffle=False)
 
         # Resume from checkpoint if enabled and checkpoint exists
         start_epoch = 0

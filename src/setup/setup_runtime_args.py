@@ -8,7 +8,6 @@ from src.framework.pipeline import ModelPipeline
 def setup_transform_args(
     pipeline: ModelPipeline,
     cache_args: dict[str, Any],
-    fold: int = -1,
     *,
     save_model: bool = False,
 ) -> dict[str, Any]:
@@ -32,9 +31,6 @@ def setup_transform_args(
     torch_trainer = {
         "save_model": save_model,
     }
-
-    if fold > -1:
-        torch_trainer["fold"] = fold
 
     train_sys = {
         "TorchTrainer": torch_trainer,

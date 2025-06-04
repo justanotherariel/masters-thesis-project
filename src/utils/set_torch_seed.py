@@ -37,3 +37,5 @@ def set_torch_seed(seed: int = 42, deterministic=True) -> None:
         torch.backends.cudnn.benchmark = False
     torch.set_deterministic_debug_mode(1 if deterministic else 0)
     # torch.use_deterministic_algorithms(deterministic)
+
+    logger.info(f"Set seed to {seed} with deterministic={deterministic}")

@@ -34,7 +34,6 @@ train_sys:
       epochs: 4_000
       batch_size: 2048
 
-      n_folds: ${n_trials}
       load_all_batches_to_gpu: true
       validate_every_x_epochs: 5
       to_predict: ALL # NONE | TRAIN | VALIDATION | TEST | ALL
