@@ -152,6 +152,8 @@ class MinigridSamplerExhaustive(TransformationBlock):
         train_grids: list[minigrid.core.grid.Grid] = []
         validation_indices: list[list[int]] = []
         validation_grids: list[minigrid.core.grid.Grid] = []
+        test_indices: list[list[int]] = []
+        test_grids: list[minigrid.core.grid.Grid] = []
 
         current_env = 0
 
@@ -161,7 +163,7 @@ class MinigridSamplerExhaustive(TransformationBlock):
             # Reset environment to get a new layout
             env.reset()
             
-            if env.unwrapped.grid in train_grids + validation_grids:
+            if env.unwrapped.grid in train_grids + test_grids:
                 logger.info("Grid already sampled, skipping")
                 continue
 
@@ -180,19 +182,33 @@ class MinigridSamplerExhaustive(TransformationBlock):
                     self._sample_pos(env, pos, env_indices, observations_list, actions_list, rewards_list)
                     pbar.update(1)
 
+            # If we are in the training phase and train_keep_perc < 1.0,
             if current_env < self.train_envs and self.train_keep_perc < 1.0:
+
+                # Split indices into train and validation
                 env_indices_discard_idx = np.random.choice(
                     len(env_indices), int(len(env_indices) * (1 - self.train_keep_perc)), replace=False
                 )
-                env_indices = [env_indices[i] for i in range(len(env_indices)) if i not in env_indices_discard_idx]
+                train_env_indices = [env_indices[i] for i in range(len(env_indices)) if i not in env_indices_discard_idx]
+                validation_env_indices = [env_indices[i] for i in env_indices_discard_idx]
+                
+                # Add train_keep_perc samples to training set
+                train_indices.append(train_env_indices)
+                train_grids.append(env.unwrapped.grid)
+                
+                # # Add remaining samples to validation set
+                validation_indices.append(validation_env_indices)
+                validation_grids.append(env.unwrapped.grid)
 
-            # Store indices in appropriate set
-            if current_env < self.train_envs:
+            # If we are in the training phase and train_keep_perc == 1.0,
+            elif current_env < self.train_envs:
                 train_indices.append(env_indices)
                 train_grids.append(env.unwrapped.grid)
+            
+            # If we are in the validation phase, store indices for validation
             else:
-                validation_indices.append(env_indices)
-                validation_grids.append(env.unwrapped.grid)
+                test_indices.append(env_indices)
+                test_grids.append(env.unwrapped.grid)
 
             current_env += 1
 
@@ -205,12 +221,14 @@ class MinigridSamplerExhaustive(TransformationBlock):
         data.indices = {
             DatasetGroup.TRAIN: [np.array(env_indices) for env_indices in train_indices],
             DatasetGroup.VALIDATION: [np.array(env_indices) for env_indices in validation_indices],
-            DatasetGroup.ALL: [np.array(env_indices) for env_indices in train_indices + validation_indices],
+            DatasetGroup.TEST: [np.array(env_indices) for env_indices in test_indices],
+            DatasetGroup.ALL: [np.array(env_indices) for env_indices in train_indices + validation_indices + test_indices],
         }
         data.grids = {
             DatasetGroup.TRAIN: train_grids,
             DatasetGroup.VALIDATION: validation_grids,
-            DatasetGroup.ALL: train_grids + validation_grids,
+            DatasetGroup.TEST: test_grids,
+            DatasetGroup.ALL: train_grids + validation_grids + test_grids,
         }
 
         len_indices = sum([ind.shape[0] for ind in data.indices[DatasetGroup.ALL]]) * 2
