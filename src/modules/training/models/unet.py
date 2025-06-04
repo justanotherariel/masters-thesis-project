@@ -15,7 +15,14 @@ import torch.nn.functional as F
 
 
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2"""
+    """Double convolution block.
+    Applies two consecutive convolutional layers with ReLU activation and batch normalization.
+
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        mid_channels (int, optional): Number of channels in the middle convolution. Defaults to out_channels.
+    """
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
@@ -37,7 +44,15 @@ class DoubleConv(nn.Module):
 
 
 class Down(nn.Module):
-    """Downscaling with maxpool then double conv"""
+    """Downscaling with maxpool then double conv.
+    Applies a max pooling layer followed by a double convolution block.
+    If `first` is True, it does not apply max pooling.
+
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        first (bool): If True, skips the max pooling layer for the first downscaling.
+    """
 
     def __init__(self, in_channels, out_channels, first=False):
         super().__init__()
@@ -52,7 +67,13 @@ class Down(nn.Module):
 
 
 class Up(nn.Module):
-    """Upscaling then double conv"""
+    """Upscaling then double conv.
+    Applies a transposed convolution for upscaling followed by a double convolution block.
+
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+    """
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -72,6 +93,14 @@ class Up(nn.Module):
 
 
 class OutConv(nn.Module):
+    """Output convolution layer.
+    Applies a 1x1 convolution to reduce the number of channels to the desired output channels.
+
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+    """
+
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
@@ -81,7 +110,15 @@ class OutConv(nn.Module):
 
 
 class UNet(nn.Module):
-    """A modified U-Net model for predicting next observation and reward given current observation and action."""
+    """U-Net model adapted to be used as a world model in reinforcement learning.
+    This model predicts the next observation and reward given the current observation and action.
+
+    Args:
+        in_obs_shape (tuple[int, int, int]): Shape of the input observation (height, width, channels).
+        out_obs_shape (tuple[int, int, int]): Shape of the output observation (height, width, channels).
+        action_dim (int): Dimension of the action space.
+        hidden_channels (list[int]): List of integers representing the number of channels in each hidden layer.
+    """
 
     def __init__(
         self,

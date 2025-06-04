@@ -50,12 +50,13 @@ class ScaledDotProductAttention(nn.Module):
         batch_size, n_heads, seq_length, dim_per_head = key.size()
         
         # 1. Compute attention scores
-        key_transpose = key.transpose(2, 3)  # transpose
+        key_transpose = key.transpose(2, 3)
         attention_scores = (query @ key_transpose) / math.sqrt(dim_per_head)
 
         # 2. Convert scores to probabilities
         attention_probs = self.softmax(attention_scores)
-        # 4. Compute weighted values
+
+        # 3. Compute weighted values
         weighted_values = attention_probs @ value
 
         return weighted_values, attention_probs
@@ -147,7 +148,7 @@ class PositionwiseFeedForward(nn.Module):
 
 
 class TransformerLayer(nn.Module):
-    def __init__(self, d_model, ffn_hidden, n_heads, drop_prob):
+    def __init__(self, d_model: int, ffn_hidden: int, n_heads: int, drop_prob: float):
         super().__init__()
         self.attention = MultiHeadAttention(d_model=d_model, n_heads=n_heads)
         self.norm1 = nn.LayerNorm(d_model)

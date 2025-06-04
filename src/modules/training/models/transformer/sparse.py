@@ -51,19 +51,19 @@ class ScaledDotProductAttention(nn.Module):
         batch_size, n_heads, seq_length, dim_per_head = key.size()
         
         # 1. Compute attention scores
-        key_transpose = key.transpose(2, 3)  # transpose
+        key_transpose = key.transpose(2, 3)
         attention_scores = (query @ key_transpose) / math.sqrt(dim_per_head)
 
         # 2. Convert scores to probabilities
         attention_probs = self.softmax(attention_scores)
-        
+
         # 3. Mask out low attention scores
         low_attention_mask = (attention_probs < self.threshold)
         attention_probs_model = attention_probs.masked_fill(low_attention_mask, 0.0)
 
         # 4. Compute weighted values
         weighted_values = attention_probs_model @ value
-        
+
         return weighted_values, attention_probs, (~low_attention_mask).float()
 
 
