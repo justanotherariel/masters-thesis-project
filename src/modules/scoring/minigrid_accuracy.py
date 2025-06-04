@@ -33,7 +33,7 @@ class MinigridAccuracy(TransformationBlock):
 
             data.accuracies[dg] = average_dict(accuracies)
 
-            logger.info(f"Metrics for {dg_name}")
+            logger.info(f"---- Metrics for {dg_name} ----")
             longest_key = max([len(key) for key in data.accuracies[dg]]) + 1
             for key, value in data.accuracies[dg].items():
                 logger.info(f"{key:<{longest_key}}: {value:.2f}")
