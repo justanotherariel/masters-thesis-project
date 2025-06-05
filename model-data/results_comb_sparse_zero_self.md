@@ -11,7 +11,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9919 (± 0.0040)
-- Validation/Transition Accuracy: 0.7731 (± 0.0218)
+- Test/Transition Accuracy: 0.7731 (± 0.0218)
 
 
 # Run 2
@@ -27,7 +27,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9921 (± 0.0027)
-- Validation/Transition Accuracy: 0.8220 (± 0.0522)
+- Test/Transition Accuracy: 0.8220 (± 0.0522)
 
 
 # Run 3
@@ -43,7 +43,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9882 (± 0.0053)
-- Validation/Transition Accuracy: 0.8750 (± 0.0240)
+- Test/Transition Accuracy: 0.8750 (± 0.0240)
 
 
 # Run 4
@@ -59,7 +59,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9918 (± 0.0068)
-- Validation/Transition Accuracy: 0.8419 (± 0.0148)
+- Test/Transition Accuracy: 0.8419 (± 0.0148)
 
 
 # Run 5
@@ -75,7 +75,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9884 (± 0.0068)
-- Validation/Transition Accuracy: 0.8948 (± 0.0112)
+- Test/Transition Accuracy: 0.8948 (± 0.0112)
 
 
 # Run 6
@@ -91,7 +91,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9875 (± 0.0046)
-- Validation/Transition Accuracy: 0.9110 (± 0.0290)
+- Test/Transition Accuracy: 0.9110 (± 0.0290)
 
 
 # Run 7
@@ -107,7 +107,7 @@ Group ID: [hehm0feg](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/hehm0
 
 ## Results
 - Train/Transition Accuracy: 0.9866 (± 0.0058)
-- Validation/Transition Accuracy: 0.8655 (± 0.0079)
+- Test/Transition Accuracy: 0.8655 (± 0.0079)
 
 
 # Run 8
@@ -123,7 +123,7 @@ Group ID: [hyotnngs](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/hyotn
 
 ## Results
 - Train/Transition Accuracy: 0.9841 (± 0.0042)
-- Validation/Transition Accuracy: 0.8948 (± 0.0420)
+- Test/Transition Accuracy: 0.8948 (± 0.0420)
 
 
 # Run 9
@@ -139,7 +139,7 @@ Group ID: [rj8xdwfb](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/rj8xd
 
 ## Results
 - Train/Transition Accuracy: 0.9869 (± 0.0067)
-- Validation/Transition Accuracy: 0.9199 (± 0.0399)
+- Test/Transition Accuracy: 0.9199 (± 0.0399)
 
 
 # Run 10
@@ -155,7 +155,7 @@ Group ID: [qiict1mq](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/qiict
 
 ## Results
 - Train/Transition Accuracy: 0.9875 (± 0.0062)
-- Validation/Transition Accuracy: 0.8783 (± 0.0132)
+- Test/Transition Accuracy: 0.8783 (± 0.0132)
 
 
 # Run 11
@@ -171,7 +171,7 @@ Group ID: [gr6fzage](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/gr6fz
 
 ## Results
 - Train/Transition Accuracy: 0.9853 (± 0.0058)
-- Validation/Transition Accuracy: 0.9350 (± 0.0102)
+- Test/Transition Accuracy: 0.9350 (± 0.0102)
 
 
 # Run 12
@@ -187,4 +187,4 @@ Group ID: [rwgdh3qx](https://wandb.ai/a-ebersberger-tu-delft/Thesis/groups/rwgdh
 
 ## Results
 - Train/Transition Accuracy: 0.9876 (± 0.0050)
-- Validation/Transition Accuracy: 0.9592 (± 0.0086)
+- Test/Transition Accuracy: 0.9592 (± 0.0086)

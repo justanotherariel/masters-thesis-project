@@ -11,7 +11,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.6880 (± 0.1054)
+- Test/Transition Accuracy: 0.6880 (± 0.1054)
 
 
 # Run 2
@@ -27,7 +27,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.7139 (± 0.1628)
+- Test/Transition Accuracy: 0.7139 (± 0.1628)
 
 
 # Run 3
@@ -43,7 +43,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.8208 (± 0.1186)
+- Test/Transition Accuracy: 0.8208 (± 0.1186)
 
 
 # Run 4
@@ -59,7 +59,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9994 (± 0.0014)
-- Validation/Transition Accuracy: 0.7748 (± 0.1043)
+- Test/Transition Accuracy: 0.7748 (± 0.1043)
 
 
 # Run 5
@@ -75,7 +75,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9999 (± 0.0002)
-- Validation/Transition Accuracy: 0.8317 (± 0.1184)
+- Test/Transition Accuracy: 0.8317 (± 0.1184)
 
 
 # Run 6
@@ -91,7 +91,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9998 (± 0.0005)
-- Validation/Transition Accuracy: 0.8637 (± 0.1223)
+- Test/Transition Accuracy: 0.8637 (± 0.1223)
 
 
 # Run 7
@@ -107,7 +107,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.7487 (± 0.1199)
+- Test/Transition Accuracy: 0.7487 (± 0.1199)
 
 
 # Run 8
@@ -123,7 +123,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9991 (± 0.0028)
-- Validation/Transition Accuracy: 0.8715 (± 0.1184)
+- Test/Transition Accuracy: 0.8715 (± 0.1184)
 
 
 # Run 9
@@ -139,7 +139,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9998 (± 0.0005)
-- Validation/Transition Accuracy: 0.8910 (± 0.1024)
+- Test/Transition Accuracy: 0.8910 (± 0.1024)
 
 
 # Run 10
@@ -155,7 +155,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 0.9999 (± 0.0002)
-- Validation/Transition Accuracy: 0.9175 (± 0.0104)
+- Test/Transition Accuracy: 0.9175 (± 0.0104)
 
 
 # Run 11
@@ -171,7 +171,7 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.9725 (± 0.0060)
+- Test/Transition Accuracy: 0.9725 (± 0.0060)
 
 
 # Run 12
@@ -187,4 +187,4 @@ trial_idx: -1
 
 ## Results
 - Train/Transition Accuracy: 1.0000 (± 0.0000)
-- Validation/Transition Accuracy: 0.9866 (± 0.0056)
+- Test/Transition Accuracy: 0.9866 (± 0.0056)
