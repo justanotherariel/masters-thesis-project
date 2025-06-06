@@ -23,7 +23,7 @@ defaults:
 #    CONF     #
 ###############
 # n_trials: 10
-# trial_idx: 0
+# trial_idx: null
 
 cache_path: data/cache
 debug: false
