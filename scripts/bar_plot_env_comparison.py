@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.colors as mcolors
 from typing import Dict, Tuple, List
 
+DATA_DIR = Path("data")
+
 def parse_run_file(file_path: Path) -> dict:
     """
     Parse a run summary file and extract structured data.
@@ -193,7 +195,7 @@ def plot_model_comparison_by_percentage(model1_data: Dict, model2_data: Dict, mo
         
         # Save if output path is provided
         if output_prefix:
-            output_path = f"{output_prefix}_{int(perc*100)}percent.png"
+            output_path = DATA_DIR / f"{output_prefix}_{int(perc*100)}percent.png"
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         # Add to list of figures
@@ -286,9 +288,13 @@ def organize_data_for_plot(model1_data: Dict, model2_data: Dict, model3_data: Di
 # Example usage:
 if __name__ == "__main__":
     # Load data from three different model runs
-    model1_file = Path("data/results_classic.md")
-    model2_file = Path("data/results_sparse.md")
-    model3_file = Path("data/results_unet.md")  # New third model file
+    # model1_file = Path("model-data/results_comb_classic.md")
+    # model2_file = Path("model-data/results_comb_sparse.md")
+    # model3_file = Path("model-data/results_unet.md")
+
+    model1_file = Path("model-data/results_sep_classic.md")
+    model2_file = Path("model-data/results_sep_sparse.md")
+    model3_file = Path("model-data/results_unet.md")
     
     model1_data = parse_run_file(model1_file)
     model2_data = parse_run_file(model2_file)
@@ -302,7 +308,7 @@ if __name__ == "__main__":
         "Transformer", 
         "Sparse Transformer",
         "U-Net",  # Add third model name
-        metric="Validation/Transition Accuracy",
+        metric="Test/Transition Accuracy",
         output_prefix="model_comparison"
     )
     

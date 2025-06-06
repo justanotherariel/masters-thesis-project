@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-DATA_PATH = Path("model-data")
+MODEL_DATA_PATH = Path("model-data")
+DATA_PATH = Path("data")
 
 def extract_eta_data(file_path, run_id, dataset):
     """
@@ -36,6 +37,44 @@ def extract_eta_data(file_path, run_id, dataset):
     # Extract Eta data for the specified dataset
     eta_pattern = rf"- {dataset}/Eta (\d+\+?): ([\d.]+) \(± ([\d.]+)\)"
     eta_matches = re.findall(eta_pattern, run_content)
+
+    # Find eta_loss_fn.weight
+    eta_loss_fn_pattern = rf"- model.train_sys.steps.0.loss.eta_loss_fn.weight: ([\d.]+)"
+    eta_loss_fn_match = re.search(eta_loss_fn_pattern, run_content)
+    if eta_loss_fn_match:
+        eta_loss_fn_weight = float(eta_loss_fn_match.group(1))
+        print(f"Eta loss function weight: {eta_loss_fn_weight}")
+    else:
+        print(f"No Eta loss function weight found for Run {run_id}")
+
+    # Find threshold value
+    threshold_pattern = rf"- model.train_sys.steps.0.model.threshold: ([\d.]+)"
+    threshold_match = re.search(threshold_pattern, run_content)
+    if threshold_match:
+        threshold_value = float(threshold_match.group(1))
+        print(f"Threshold: {threshold_value}")
+    else:
+        print(f"No threshold found for Run {run_id}")
+
+    # Find Eta Sum
+    eta_sum_pattern = rf"- {dataset}/Eta Sum: ([\d.]+) \(± ([\d.]+)\)"
+    eta_sum_match = re.search(eta_sum_pattern, run_content)
+    if eta_sum_match:
+        eta_sum_value = float(eta_sum_match.group(1))
+        eta_sum_stderr = float(eta_sum_match.group(2))
+        print(f"{dataset} Eta Sum: {eta_sum_value} ± {eta_sum_stderr}")
+    else:
+        print(f"No {dataset} Eta Sum found for Run {run_id}")
+
+    # Find Transition Accuracy
+    val_pattern = rf"- {dataset}/Transition Accuracy: ([\d.]+) \(± ([\d.]+)\)"
+    val_match = re.search(val_pattern, run_content)
+    if val_match:
+        val_accuracy = float(val_match.group(1))
+        val_stderr = float(val_match.group(2))
+        print(f"{dataset} Transition Accuracy: {val_accuracy} ± {val_stderr}")
+    else:
+        print(f"No {dataset} Transition Accuracy found for Run {run_id}")
     
     eta_data = {}
     for match in eta_matches:
@@ -107,21 +146,22 @@ def plot_eta_bars(eta_data, run_id, dataset):
 
 def main():
     # Configuration variables
-    file_path = DATA_PATH / "results_comb_sparse_.md"  # Change this to your file path
-    run_id = 1  # Change this to the desired run number
+    file_path = MODEL_DATA_PATH / "results_comb_sparse-sparsity_study.md"
     dataset = "Test"  # Options: "Test", "Train", "Validation"
     
     # Extract and plot data
-    try:
-        eta_data = extract_eta_data(file_path, run_id, dataset)
-        if eta_data:
-            plot_eta_bars(eta_data, run_id, dataset)
-            print(f"Successfully plotted Eta statistics for Run {run_id} - {dataset}")
-            print(f"Found {len(eta_data)} Eta values")
-        else:
-            print(f"No Eta data found for Run {run_id} - {dataset}")
-    except Exception as e:
-        print(f"Error: {e}")
+    for run_id in range(1, 17):
+        print(f"Processing Run {run_id}...")
+        try:
+            eta_data = extract_eta_data(file_path, run_id, dataset)
+            if eta_data:
+                plot_eta_bars(eta_data, run_id, dataset)
+                print(f"Found {len(eta_data)} Eta values")
+            else:
+                print(f"No Eta data found for Run {run_id} - {dataset}")
+        except Exception as e:
+            print(f"Error: {e}")
+        print("-" * 40)
 
 if __name__ == "__main__":
     main()
