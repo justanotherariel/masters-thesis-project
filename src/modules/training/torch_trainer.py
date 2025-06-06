@@ -360,7 +360,7 @@ class TorchTrainer(TransformationBlock):
             if len(validation_loader) > 0 and epoch % self.validate_every_x_epochs == 0:
                 validation_metrics = self.val_one_epoch(validation_loader, epoch)
                 logger.debug(f"Epoch {epoch} Valid Loss: {validation_metrics['Loss']}")
-                log_dict(validation_metrics, "Validation")
+                log_dict(validation_metrics, "Test")
 
             # Log Epoch and commit Wandb Logs
             logger.log_to_external({"Epoch": epoch})

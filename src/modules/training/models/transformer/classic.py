@@ -9,9 +9,12 @@ All functions and classes have been modified to fit the RL transition model. Sep
 """
 
 import math
+from typing import Literal
 
 import torch
 from torch import nn
+
+from .positional_encoding import PositionalEncoding
 
 
 class ScaledDotProductAttention(nn.Module):
@@ -273,6 +276,8 @@ class CombAction(nn.Module):
         n_layers: int,  # Number of transformer layers
         d_ff: int,  # Feed-forward network hidden dimension
         drop_prob: float = 0.1,  # Dropout probability
+        pos_encoding_type: Literal['learned', 'sinusoidal_1d', 'sinusoidal_2d'] = 'learned',
+        learnable_scale: bool = False,  # For sinusoidal encodings
     ):
         super().__init__()
 
@@ -290,8 +295,15 @@ class CombAction(nn.Module):
         self.reward_token = nn.Parameter(torch.randn(1, 1, d_model))
 
         # Positional Encoding
-        self.pos_embedding = nn.Parameter(torch.randn(1, self.input_token_len, d_model))
-
+        self.pos_encoding = PositionalEncoding(
+            encoding_type=pos_encoding_type,
+            d_model=d_model,
+            max_len=self.obs_token_len,  # For learned and 1D
+            height=in_obs_shape[0],  # For 2D
+            width=in_obs_shape[1],   # For 2D
+            learnable_scale=learnable_scale,
+        )
+        
         # Transformer layers
         self.layers = nn.ModuleList(
             [
@@ -320,9 +332,11 @@ class CombAction(nn.Module):
         # Embed input sequence
         x = self.in_proj(x)
 
-        # Append reward token and add positional encoding
+        # Append reward token
         x = torch.cat([x, self.reward_token.expand(n_samples, -1, -1)], dim=1)
-        x = x + self.pos_embedding
+
+        # Add positional encoding
+        x = x + self.pos_encoding(include_cls_token=True)
 
         # Calculate η values
         attention_sum = torch.zeros(n_samples, self.input_token_len, self.input_token_len, device=x.device)

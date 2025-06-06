@@ -50,6 +50,8 @@ train_sys:
         n_layers: 3
         d_ff: 128
         drop_prob: 0.15
+        pos_encoding_type: 'learned' # 'learned' | 'sinusoidal_1d' | 'sinusoidal_2d'
+        learnable_scale: false
 
       loss:
         _target_: src.modules.training.loss.MinigridLoss

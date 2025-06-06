@@ -27,14 +27,3 @@ defaults:
 
 cache_path: data/cache
 debug: false
-
-sweep_data:
-  model_sizes:
-    - [16, 32]
-    - [16, 32, 64]
-    - [16, 32, 64, 128]
-    - [32, 64]
-    - [32, 64, 128]
-    - [48, 96]
-    - [48, 96, 192]
-    - [64, 128]
