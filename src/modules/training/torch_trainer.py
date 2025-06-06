@@ -236,7 +236,7 @@ class TorchTrainer(TransformationBlock):
         :return: The hash of the block.
         """
         result = f"{self._hash}"
-        if hasattr(self, "current_fold") and self.current_fold != -1:
+        if hasattr(self, "current_fold"):
             result += f"_f{self.current_fold}"
         return result
 

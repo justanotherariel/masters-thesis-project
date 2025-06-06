@@ -150,9 +150,12 @@ def run_train_trial(sweep_q, worker_q):
 def run_train(cfg: DictConfig, output_dir: Path) -> None:
     """Run the model pipeline."""
     logger.log_section_separator("Thesis: Sparse Transformer")
-        
+    
+    # Set trial index if not provided
+    cfg.trial_idx = cfg.trial_idx if cfg.trial_idx is not None else 0
+    
     # Set seed
-    cfg.seed += cfg.trial_idx if cfg.trial_idx is not None else 0
+    cfg.seed += cfg.trial_idx
     set_torch_seed(cfg.seed)
     
     if cfg.debug:
