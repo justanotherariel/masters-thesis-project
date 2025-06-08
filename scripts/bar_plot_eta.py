@@ -125,9 +125,9 @@ def plot_eta_bars(eta_data, run_id, dataset):
     ax.set_ylim(bottom=0)
     
     # Customize the plot
-    ax.set_xlabel('Eta Number', fontsize=12)
-    ax.set_ylabel('Value', fontsize=12)
-    ax.set_title(f'Eta Statistics - Run {run_id} - {dataset}', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Eta Sum', fontsize=12)
+    ax.set_ylabel('Number of Samples', fontsize=12)
+    ax.set_title(f'Eta Sum Spread - 4 Train Envs, 20% Data', fontsize=14, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha='right')
     
