@@ -4,8 +4,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.colors as mcolors
 from typing import Dict, Tuple, List
+from scipy import stats
+import math
 
 DATA_DIR = Path("data")
+
+
+def test_statistical_significance(mean1, std1, mean2, std2, n1=10, n2=10, alpha=0.05):
+    """
+    Test statistical significance between two models using Welch's t-test.
+    
+    Returns:
+        tuple: (is_significant, p_value)
+    """
+    # Perform two-sample t-test using summary statistics
+    t_stat, p_value = stats.ttest_ind_from_stats(
+        mean1, std1, n1,
+        mean2, std2, n2,
+        equal_var=False  # Welch's t-test
+    )
+    
+    return p_value < alpha, p_value
 
 
 def parse_run_file(file_path: Path) -> dict:
@@ -79,10 +98,13 @@ def parse_run_file(file_path: Path) -> dict:
     
     return all_runs
 
+
 def plot_model_comparison_by_grid_count(model1_data: Dict, model2_data: Dict, model3_data: Dict,
                                       model1_name: str, model2_name: str, model3_name: str,
                                       metric: str = "Validation/Transition Accuracy",
-                                      output_prefix: str = None) -> List[plt.Figure]:
+                                      output_prefix: str = None,
+                                      show_significance: bool = True,
+                                      alpha: float = 0.05) -> List[plt.Figure]:
     """
     Create separate bar plots, one for each environment grid count,
     comparing three models across different data percentages.
@@ -93,9 +115,11 @@ def plot_model_comparison_by_grid_count(model1_data: Dict, model2_data: Dict, mo
         model3_data: Dictionary with data for the third model (from parse_run_file)
         model1_name: Name of the first model for the legend
         model2_name: Name of the second model for the legend
-        model3_name: Name of the third model for the legend
+        model3_name: Name of the third model for the legend (reference model for significance testing)
         metric: Which metric to plot (default: "Validation/Transition Accuracy")
         output_prefix: Optional prefix for saving figures (will append env_count)
+        show_significance: Whether to show statistical significance indicators (default: True)
+        alpha: Significance level for statistical tests (default: 0.05)
         
     Returns:
         List of Matplotlib figures, one for each environment grid count
@@ -125,7 +149,7 @@ def plot_model_comparison_by_grid_count(model1_data: Dict, model2_data: Dict, mo
     all_values = [item['value'] for item in organized_data]
     all_std_devs = [item['std_dev'] for item in organized_data]
     global_y_min = max(0, min(all_values) - max(all_std_devs) * 2) * 0.95
-    global_y_max = min(1.0, max(all_values) + max(all_std_devs) * 2) * 1.05
+    global_y_max = min(1.1, max(all_values) + max(all_std_devs) * 2) * 1.05
     
     # Increase default font size for all plot elements
     plt.rcParams.update({'font.size': 14})
@@ -172,27 +196,65 @@ def plot_model_comparison_by_grid_count(model1_data: Dict, model2_data: Dict, mo
             for pos, val, err in zip(positions, values, errors):
                 label_height = val + err + 0.015
                 ax.text(pos, label_height, f"{val:.3f}", 
-                       ha='center', va='bottom', rotation=0, size=14,  # Increased from 8 to 12
+                       ha='center', va='bottom', rotation=0, size=14,
                        fontweight='bold')
+                
+                # Add significance indicators if enabled and not the reference model
+                if show_significance and model_name != model3_name:
+                    # Find corresponding sparse transformer (model3) data
+                    perc_idx = positions.index(pos) if pos in positions else None
+                    if perc_idx is not None:
+                        sparse_point = next((item for item in env_data 
+                                           if item['data_perc'] == percentages[perc_idx] 
+                                           and item['model'] == model3_name), None)
+                        
+                        if sparse_point:
+                            # Test statistical significance
+                            is_significant, p_value = test_statistical_significance(
+                                val, err, 
+                                sparse_point['value'], sparse_point['std_dev'],
+                                n1=10, n2=10, alpha=alpha
+                            )
+                            
+                            if is_significant:
+                                # Add asterisk above the value label
+                                asterisk_height = label_height + 0.04
+                                significance_marker = '*'
+                                if p_value < 0.001:
+                                    significance_marker = '***'
+                                elif p_value < 0.01:
+                                    significance_marker = '**'
+                                
+                                ax.text(pos, asterisk_height, significance_marker, 
+                                       ha='center', va='bottom', size=16,
+                                       fontweight='bold', color='black' if val < sparse_point['value'] else 'red')
         
         # Set the x-axis labels and ticks
         ax.set_xticks(group_positions)
-        ax.set_xticklabels([f"{int(perc*100)}%" for perc in percentages], fontsize=14)  # Explicit fontsize
+        ax.set_xticklabels([f"{int(perc*100)}%" for perc in percentages], fontsize=14)
         
         # Set consistent y-axis range across all plots
         ax.set_ylim(global_y_min, global_y_max)
-        ax.tick_params(axis='y', labelsize=14)  # Increase y-tick label size
+        ax.tick_params(axis='y', labelsize=14)
         
         # Add grid lines for readability
         ax.grid(True, linestyle='--', alpha=0.7)
         
         # Set labels and title with increased font sizes
-        ax.set_xlabel('Training Data Percentage', fontsize=16)  # Increased from 12 to 16
-        ax.set_ylabel(metric, fontsize=16)  # Increased from 12 to 16
-        # ax.set_title(f'Model Comparison with {env_count} Environment Grids', fontsize=18)  # Increased from 14 to 18
+        ax.set_xlabel('Training Data Percentage', fontsize=16)
+        ax.set_ylabel(metric, fontsize=16)
+        # ax.set_title(f'Model Comparison with {env_count} Environment Grids', fontsize=18)
         
         # Add legend with larger font
-        ax.legend(loc='lower right', fontsize=14)
+        legend = ax.legend(loc='lower right', fontsize=14)
+        
+        # Add significance notation to legend if enabled
+        if show_significance:
+            # Create a text box for significance notation
+            sig_text = "* p < 0.05, ** p < 0.01, *** p < 0.001"
+            ax.text(0.02, 0.95, sig_text, transform=ax.transAxes,
+                   fontsize=12, verticalalignment='top',
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
         
         # Adjust layout
         plt.tight_layout()
@@ -206,6 +268,7 @@ def plot_model_comparison_by_grid_count(model1_data: Dict, model2_data: Dict, mo
         figures.append(fig)
     
     return figures
+
 
 def organize_data_for_plot(model1_data: Dict, model2_data: Dict, model3_data: Dict,
                            model1_name: str, model2_name: str, model3_name: str,
@@ -289,22 +352,23 @@ def organize_data_for_plot(model1_data: Dict, model2_data: Dict, model3_data: Di
     
     return organized_data
 
+
 # Example usage:
 if __name__ == "__main__":
     # Load data from three different model runs
     model1_file = Path("model-data/results_unet.md")
     model2_file = Path("model-data/results_comb_classic.md")
     model3_file = Path("model-data/results_comb_sparse.md")
-
+    
     # model1_file = Path("model-data/results_unet.md")
-    # model2_file = Path("model-data/results_sep_classic.md")
-    # model3_file = Path("model-data/results_sep_sparse.md")
+    # model2_file = Path("model-data/results_comb_classic_sin1d.md")
+    # model3_file = Path("model-data/results_comb_sparse_sin1d.md")
 
     model1_data = parse_run_file(model1_file)
     model2_data = parse_run_file(model2_file)
     model3_data = parse_run_file(model3_file)
     
-    # Create and save the separate plots for each data percentage
+    # Create and save the separate plots for each data percentage with significance indicators
     figs = plot_model_comparison_by_grid_count(
         model1_data,
         model2_data, 
@@ -312,9 +376,8 @@ if __name__ == "__main__":
         "U-Net",
         "Transformer",
         "Sparse Transformer",
-        metric="Test/Transition Accuracy",
-        output_prefix="model_comparison"
+        metric="Validation/Transition Accuracy",
+        output_prefix="model_comparison",
+        show_significance=True,  # Enable significance testing
+        alpha=0.05  # Significance level
     )
-    
-    # Display all figures
-    plt.show()
